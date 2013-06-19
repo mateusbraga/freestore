@@ -26,6 +26,9 @@ func handleStuff() {
 	} else {
 		// find tradeoff for operation, user and data.
 		// Should it run? You got availability and need to restore consistency
+		// Should it the operation be modified to run?
 		// Should it refuse to run? You will keep consistent
+
+		// Add stuff to help on partition recovery
 	}
 }
