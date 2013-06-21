@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/rpc"
 
-    "github.com/ha/doozer"
+    "mateusbraga/gotf"
 )
 
-var currentView interface{}
 
+var currentView gotf.View
 var register int
 
 func newRequest() {
@@ -24,6 +25,13 @@ func handleConnection(conn net.Conn) {
 
 }
 
+type Request int
+
+func (r *Request) GetCurrentView(anything *int, reply *gotf.View) error {
+    *reply = currentView // May need locking
+    return nil
+}
+
 func main() {
 	//var port int
 
@@ -35,52 +43,23 @@ func main() {
 	//log.Fatal("Invalid port: ", err)
 	//}
 
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", 0))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Println("Using address:", ln.Addr())
-	publishAddr(ln.Addr().String())
-
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			log.Println("Failed to accept connection: ", err)
-			continue
-		}
-		go handleConnection(conn)
-	}
-}
-
-func publishAddr(addr string) {
-	doozerConn, err := doozer.Dial("localhost:8046")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-    rev, err := doozerConn.Rev()
+    ln, err := net.Listen("tcp", fmt.Sprintf(":%d", 0))
     if err != nil {
         log.Fatal(err)
     }
 
-    files, err := doozerConn.Getdir("/goft/servers/", rev, 0, -1)
-	if err != nil {
-        if err.Error() != "NOENT" {
-            log.Fatal(err)
-        }
-	}
+    log.Println("Listening on address:", ln.Addr())
 
-    id := len(files)
-    _, err = doozerConn.Set(fmt.Sprintf("/goft/servers/%d", id), 0,  []byte(addr)) 
-    for err != nil && err.Error() == "REV_MISMATCH" {
-        id++
-        _, err = doozerConn.Set(fmt.Sprintf("/goft/servers/%d", id), 0,  []byte(addr)) 
-    }
+    err = gotf.PublishAddr(ln.Addr().String())
     if err != nil {
         log.Fatal(err)
     }
 
-    //log.Println(id)
-    //log.Println(newRev)
+    currentView = gotf.NewView()
+    currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{ln.Addr().String()}})
+
+    request := new(Request)
+    rpc.Register(request)
+    rpc.Accept(ln)
 }
+
