@@ -54,3 +54,8 @@ func (v View) AddUpdate(u Update) {
         delete(v.Members, u.Process)
     }
 }
+
+func (v View) QuorunSize() int {
+    n := len(v.Members) + 1
+    return n/2 + n%2
+}

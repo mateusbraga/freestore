@@ -1,65 +1,64 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/rpc"
 
-    "mateusbraga/gotf"
+	"mateusbraga/gotf"
 )
 
-
 var currentView gotf.View
-var register int
 
-func newRequest() {
+var register Value
 
+type Value struct {
+	Value  int
+	Timestamp int
 }
 
-func read() {
-
-}
-
-func handleConnection(conn net.Conn) {
-
-}
+var port uint
 
 type Request int
 
 func (r *Request) GetCurrentView(anything *int, reply *gotf.View) error {
-    *reply = currentView // May need locking
-    return nil
+	*reply = currentView // May need locking
+	return nil
+}
+
+func (r *Request) Read(anything *int, reply *Value) error {
+	*reply = register // May need locking
+	return nil
+}
+
+func init() {
+	flag.UintVar(&port, "port", 0, "Set port to listen to. Default is a random port")
+	flag.UintVar(&port, "p", 0, "Set port to listen to. Default is a random port")
 }
 
 func main() {
-	//var port int
+	flag.Parse()
 
-	//if len(os.Args) != 2 {
-	//log.Fatal("USAGE: server port")
-	//}
-	//port, err := strconv.Atoi(os.Args[1])
-	//if err != nil {
-	//log.Fatal("Invalid port: ", err)
-	//}
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    ln, err := net.Listen("tcp", fmt.Sprintf(":%d", 0))
-    if err != nil {
-        log.Fatal(err)
-    }
+	log.Println("Listening on address:", ln.Addr())
 
-    log.Println("Listening on address:", ln.Addr())
+	err = gotf.PublishAddr(ln.Addr().String())
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    err = gotf.PublishAddr(ln.Addr().String())
-    if err != nil {
-        log.Fatal(err)
-    }
+	currentView = gotf.NewView()
+	currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{ln.Addr().String()}})
 
-    currentView = gotf.NewView()
-    currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{ln.Addr().String()}})
+	register = Value{3, 1}
 
-    request := new(Request)
-    rpc.Register(request)
-    rpc.Accept(ln)
+	request := new(Request)
+	rpc.Register(request)
+	rpc.Accept(ln)
 }
-
