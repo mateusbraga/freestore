@@ -2,11 +2,36 @@ package gotf
 
 import (
 	//"log"
-	//"fmt"
+    "fmt"
+    "encoding/gob"
+	//"errors"
 )
 
 type Process struct {
 	Addr string
+}
+
+type OldViewError struct {
+    OldView View
+    NewView View
+}
+
+func (e OldViewError) Error() string {
+    return fmt.Sprint("OLD_VIEW")
+}
+
+type WriteOlderError struct {
+    WriteTimestamp int
+    ServerTimestamp int
+}
+
+func (e WriteOlderError) Error() string {
+    return fmt.Sprintf("error: write request has timestamp %v but server has more updated timestamp %v", e.WriteTimestamp, e.ServerTimestamp)
+}
+
+func init() {
+    gob.Register(new(OldViewError))
+    gob.Register(new(WriteOlderError))
 }
 
 type updateType string
@@ -29,7 +54,6 @@ type View struct {
 func NewView() View {
     return View{make(map[Update]bool), make(map[Process]bool)}
 }
-
 
 func (v View) Contains(v2 View) bool {
     for k2, _ := range v2.Entries {

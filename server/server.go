@@ -6,27 +6,27 @@ import (
 	"log"
 	"net"
 	"net/rpc"
-	"errors"
 
 	"mateusbraga/gotf"
 )
 
 var currentView gotf.View
-
+var port uint
 var register Value
 
-var (
-    OldViewErr = errors.New("OLD_VIEW")
-)
 
 type Value struct {
+    // Read
 	Value  int
 	Timestamp int
-	View *gotf.View
+
+    // Write
+    Result bool
+
+	View gotf.View
+
+	Err error
 }
-
-
-var port uint
 
 type Request int
 
@@ -36,21 +36,32 @@ func (r *Request) GetCurrentView(anything *int, reply *gotf.View) error {
 }
 
 func (r *Request) Read(view gotf.View, reply *Value) error {
+    *reply = register // May need locking
+
     if !view.Equal(currentView) {
-        return OldViewErr
+        reply.Err = gotf.OldViewError{view, currentView}
     }
 
-    *reply = register // May need locking
 	return nil
 }
 
-func (r *Request) Write(value Value, reply *bool) error {
+func (r *Request) Write(value Value, reply *Value) error {
     if !value.View.Equal(currentView) {
-        return OldViewErr
+        reply = new(Value)
+        reply.Err = gotf.OldViewError{value.View, currentView}
+        return nil
     }
 
-    register = value // May need locking
-    *reply = true // TODO
+    if value.Timestamp > register.Timestamp {
+        register = value // May need locking
+    } else {
+        reply = new(Value)
+        reply.Err = gotf.WriteOlderError{value.Timestamp, register.Timestamp}
+        return nil
+    }
+
+    reply.Result = true
+
     return nil
 }
 
@@ -74,10 +85,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	currentView = gotf.NewView()
-	currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{ln.Addr().String()}})
+    currentView = gotf.NewView()
+    currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5000"}})
+    currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5001"}})
+    currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5002"}})
 
-	register = Value{3, 1, nil}
+	//currentView = gotf.NewView()
+	//currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{ln.Addr().String()}})
+
+	register = *new(Value)
+	register.Value = 3
+	register.Timestamp = 1
 
 	request := new(Request)
 	rpc.Register(request)
