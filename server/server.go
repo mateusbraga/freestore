@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/rpc"
+	"errors"
 
 	"mateusbraga/gotf"
 )
@@ -14,10 +15,16 @@ var currentView gotf.View
 
 var register Value
 
+var (
+    OldViewErr = errors.New("OLD_VIEW")
+)
+
 type Value struct {
 	Value  int
 	Timestamp int
+	View *gotf.View
 }
+
 
 var port uint
 
@@ -28,9 +35,23 @@ func (r *Request) GetCurrentView(anything *int, reply *gotf.View) error {
 	return nil
 }
 
-func (r *Request) Read(anything *int, reply *Value) error {
-	*reply = register // May need locking
+func (r *Request) Read(view gotf.View, reply *Value) error {
+    if !view.Equal(currentView) {
+        return OldViewErr
+    }
+
+    *reply = register // May need locking
 	return nil
+}
+
+func (r *Request) Write(value Value, reply *bool) error {
+    if !value.View.Equal(currentView) {
+        return OldViewErr
+    }
+
+    register = value // May need locking
+    *reply = true // TODO
+    return nil
 }
 
 func init() {
@@ -56,7 +77,7 @@ func main() {
 	currentView = gotf.NewView()
 	currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{ln.Addr().String()}})
 
-	register = Value{3, 1}
+	register = Value{3, 1, nil}
 
 	request := new(Request)
 	rpc.Register(request)

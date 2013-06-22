@@ -59,3 +59,7 @@ func (v View) QuorunSize() int {
     n := len(v.Members) + 1
     return n/2 + n%2
 }
+
+func (v View) N() int {
+    return len(v.Members)
+}
