@@ -6,22 +6,25 @@ import (
 	"log"
 	"net"
 	"net/rpc"
+	"sync"
 
 	"mateusbraga/gotf"
 )
 
 var currentView gotf.View
-var port uint
-var register Value
 
+var register Value
+var mu sync.RWMutex
+
+var port uint
 
 type Value struct {
-    // Read
-	Value  int
+	// Read
+	Value     int
 	Timestamp int
 
-    // Write
-    Result bool
+	// Write
+	Result bool
 
 	View gotf.View
 
@@ -31,38 +34,47 @@ type Value struct {
 type Request int
 
 func (r *Request) GetCurrentView(anything *int, reply *gotf.View) error {
-	*reply = currentView // May need locking
+	reply.Set(currentView)
 	return nil
 }
 
 func (r *Request) Read(view gotf.View, reply *Value) error {
-    *reply = register // May need locking
+	mu.RLock()
+	defer mu.RUnlock()
 
-    if !view.Equal(currentView) {
-        reply.Err = gotf.OldViewError{view, currentView}
-    }
+	*reply = register
+
+	if !view.Equal(currentView) {
+		err := gotf.OldViewError{}
+		err.OldView.Set(view)
+		err.NewView.Set(currentView)
+		reply.Err = err
+	}
 
 	return nil
 }
 
 func (r *Request) Write(value Value, reply *Value) error {
-    if !value.View.Equal(currentView) {
-        reply = new(Value)
-        reply.Err = gotf.OldViewError{value.View, currentView}
-        return nil
-    }
+	mu.Lock()
+	defer mu.Unlock()
 
-    if value.Timestamp > register.Timestamp {
-        register = value // May need locking
-    } else {
-        reply = new(Value)
-        reply.Err = gotf.WriteOlderError{value.Timestamp, register.Timestamp}
-        return nil
-    }
+	if !value.View.Equal(currentView) {
+		err := gotf.OldViewError{}
+		err.OldView.Set(value.View)
+		err.NewView.Set(currentView)
 
-    reply.Result = true
+		reply = new(Value)
+		reply.Err = err
+		return nil
+	}
 
-    return nil
+	if value.Timestamp > register.Timestamp {
+		register = value
+	}
+
+	reply.Result = true
+
+	return nil
 }
 
 func init() {
@@ -85,10 +97,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-    currentView = gotf.NewView()
-    currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5000"}})
-    currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5001"}})
-    currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5002"}})
+	currentView = gotf.NewView()
+	currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5000"}})
+	currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5001"}})
+	currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5002"}})
 
 	//currentView = gotf.NewView()
 	//currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{ln.Addr().String()}})

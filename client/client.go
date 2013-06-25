@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"expvar"
 	"fmt"
 	"log"
 	"net/rpc"
@@ -43,13 +44,13 @@ func WriteQuorum(value Value) {
 // basicWriteQuorum writes value to all processes on the currentView and return as soon as it gets the confirmation from a quorum
 // It updates the currentView if necessary.
 func basicWriteQuorum(v Value) {
-	resultChan := make(chan Value, len(currentView.Members))
-	errChan := make(chan error, len(currentView.Members))
+	resultChan := make(chan Value, currentView.N())
+	errChan := make(chan error, currentView.N())
 
-	v.View = currentView
+	v.View.Set(currentView)
 
 	// Send write request to all
-	for process, _ := range currentView.Members {
+	for _, process := range currentView.GetMembers() {
 		go basicWrite(process, v, resultChan, errChan)
 	}
 
@@ -64,7 +65,7 @@ func basicWriteQuorum(v Value) {
 					log.Fatal("Results value returned error of type: %T", err)
 				case *gotf.OldViewError:
 					log.Println("VIEW UPDATED")
-					currentView = err.NewView
+					currentView.Set(err.NewView)
 					go basicWriteQuorum(v)
 					return
 				}
@@ -124,11 +125,11 @@ func ReadQuorum() Value {
 // It returns the error DiffResultsErr if any process is not updated
 // It updates the currentView if necessary.
 func basicReadQuorum() (Value, error) {
-	resultChan := make(chan Value, len(currentView.Members))
-	errChan := make(chan error, len(currentView.Members))
+	resultChan := make(chan Value, currentView.N())
+	errChan := make(chan error, currentView.N())
 
 	// Send read request to all
-	for process, _ := range currentView.Members {
+	for _, process := range currentView.GetMembers() {
 		go basicRead(process, resultChan, errChan)
 	}
 
@@ -145,7 +146,7 @@ func basicReadQuorum() (Value, error) {
 					log.Fatal("Results value returned error of type: %T", err)
 				case *gotf.OldViewError:
 					log.Println("VIEW UPDATED")
-					currentView = err.NewView
+					currentView.Set(err.NewView)
 					return basicReadQuorum()
 				}
 			}
@@ -182,6 +183,7 @@ func basicRead(process gotf.Process, resultChan chan Value, errChan chan error) 
 	//fmt.Println("Connected to", process.Addr)
 
 	var value Value
+
 	err = client.Call("Request.Read", currentView, &value)
 	if err != nil {
 		errChan <- err
@@ -203,22 +205,24 @@ func GetCurrentView(process gotf.Process) {
 
 	//fmt.Println("Connected to", process.Addr)
 
-	client.Call("Request.GetCurrentView", 0, &currentView)
+	var newView gotf.View
+	client.Call("Request.GetCurrentView", 0, &newView)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	currentView.Set(newView)
 	fmt.Println("New CurrentView:", currentView)
 }
 
 func main() {
-    fmt.Println(" ---- Start ---- ")
-    finalValue := ReadQuorum()
-    fmt.Println("Final Read value:", finalValue)
+	fmt.Println(" ---- Start ---- ")
+	finalValue := ReadQuorum()
+	fmt.Println("Final Read value:", finalValue)
 
 	fmt.Println(" ---- Start 2 ---- ")
-    finalValue = Value{}
-    finalValue.Value = 5
+	finalValue = Value{}
+	finalValue.Value = 5
 	WriteQuorum(finalValue)
 
 	fmt.Println(" ---- Start 3 ---- ")
@@ -238,4 +242,6 @@ func init() {
 	currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5000"}})
 	currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5001"}})
 	//currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5002"}})
+
+	expvar.Publish("CurrentView", currentView)
 }
