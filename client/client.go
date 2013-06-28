@@ -1,3 +1,7 @@
+/*
+This is a Quorum client
+
+*/
 package main
 
 import (
@@ -13,7 +17,8 @@ import (
 var currentView gotf.View
 
 var (
-	DiffResultsErr = errors.New("DIFFERENT_RESULTS")
+	DiffResultsErr = errors.New("DIFFERENT RESULTS")
+	ViewUpdatedErr = errors.New("View Updated")
 )
 
 type Value struct {
@@ -29,21 +34,37 @@ type Value struct {
 	Err error
 }
 
-// WriteQuorum implements the quorum write protocol.
-func WriteQuorum(value Value) {
+// Write implements the quorum write protocol.
+func Write(value Value) {
 	readValue, err := basicReadQuorum()
-	if err != nil && err != DiffResultsErr {
-		log.Fatal(err)
+	if err != nil {
+		switch err {
+		case ViewUpdatedErr:
+			Write(value)
+		case DiffResultsErr:
+			// Ignore - we will write a new value
+		default:
+			log.Fatal(err)
+		}
 	}
 
 	value.Timestamp = readValue.Timestamp + 1
 
-	basicWriteQuorum(value)
+	err = basicWriteQuorum(value)
+	if err != nil {
+		switch err {
+		case ViewUpdatedErr:
+			Write(value)
+		default:
+			log.Fatal(err)
+		}
+	}
 }
 
-// basicWriteQuorum writes value to all processes on the currentView and return as soon as it gets the confirmation from a quorum
-// It updates the currentView if necessary.
-func basicWriteQuorum(v Value) {
+// basicWriteQuorum writes v to all processes on the currentView and return as soon as it gets the confirmation from a quorum
+//
+// If the view needs to be updated, it will update the view and return ViewUpdatedErr. Otherwise, returns nil
+func basicWriteQuorum(v Value) error {
 	resultChan := make(chan Value, currentView.N())
 	errChan := make(chan error, currentView.N())
 
@@ -51,7 +72,7 @@ func basicWriteQuorum(v Value) {
 
 	// Send write request to all
 	for _, process := range currentView.GetMembers() {
-		go basicWrite(process, v, resultChan, errChan)
+		go writeProcess(process, v, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -62,19 +83,18 @@ func basicWriteQuorum(v Value) {
 			if resultValue.Err != nil {
 				switch err := resultValue.Err.(type) {
 				default:
-					log.Fatal("Results value returned error of type: %T", err)
+					log.Fatal("resultValue returned error of type: %T", err)
 				case *gotf.OldViewError:
 					log.Println("VIEW UPDATED")
 					currentView.Set(err.NewView)
-					go basicWriteQuorum(v)
-					return
+					return ViewUpdatedErr
 				}
 			}
 
 			if resultValue.Result {
 				n++
 				if n >= currentView.QuorunSize() {
-					return
+					return nil
 				}
 			}
 		case err := <-errChan:
@@ -83,16 +103,14 @@ func basicWriteQuorum(v Value) {
 	}
 }
 
-// basicWrite writes value to process and return the result through resultChan or an error through errChan
-func basicWrite(process gotf.Process, value Value, resultChan chan Value, errChan chan error) {
+// writeProcess writes value to process and return the result through resultChan or an error through errChan
+func writeProcess(process gotf.Process, value Value, resultChan chan Value, errChan chan error) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		errChan <- err
 		return
 	}
 	defer client.Close()
-
-	//fmt.Println("Connected to", process.Addr)
 
 	var result Value
 	err = client.Call("Request.Write", value, &result)
@@ -101,36 +119,49 @@ func basicWrite(process gotf.Process, value Value, resultChan chan Value, errCha
 		return
 	}
 
-	//fmt.Println("Result", result)
-
 	resultChan <- result
 }
 
-// ReadQuorum executes the quorum read protocol.
-func ReadQuorum() Value {
+// Read executes the quorum read protocol.
+func Read() Value {
 	value, err := basicReadQuorum()
-
 	if err != nil {
-		if err == DiffResultsErr {
+		switch err {
+		case DiffResultsErr:
 			fmt.Println("Going to 2nd phase - read")
-			basicWriteQuorum(value)
-		} else {
+
+			err := basicWriteQuorum(value)
+			if err != nil {
+				switch err {
+				case ViewUpdatedErr:
+					return Read()
+				default:
+					log.Fatal(err)
+				}
+			}
+
+		case ViewUpdatedErr:
+			return Read()
+		default:
 			log.Fatal(err)
 		}
 	}
+
 	return value
 }
 
 // basicReadQuorum reads a Value from all members of the most updated currentView returning the most recent one. It decides which is the most recent one as soon as it gets a quorum
-// It returns the error DiffResultsErr if any process is not updated
-// It updates the currentView if necessary.
+//
+// Value is only valid if err == nil
+// If the view needs to be updated, it will update the view and return ViewUpdatedErr.
+// If any value returned by a process differ, it will return DiffResultsErr
 func basicReadQuorum() (Value, error) {
 	resultChan := make(chan Value, currentView.N())
 	errChan := make(chan error, currentView.N())
 
 	// Send read request to all
 	for _, process := range currentView.GetMembers() {
-		go basicRead(process, resultChan, errChan)
+		go readProcess(process, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -147,7 +178,7 @@ func basicReadQuorum() (Value, error) {
 				case *gotf.OldViewError:
 					log.Println("VIEW UPDATED")
 					currentView.Set(err.NewView)
-					return basicReadQuorum()
+					return Value{}, ViewUpdatedErr
 				}
 			}
 
@@ -171,16 +202,14 @@ func basicReadQuorum() (Value, error) {
 	}
 }
 
-// basicRead reads the value on process and return an err through errChan or a result through resultChan
-func basicRead(process gotf.Process, resultChan chan Value, errChan chan error) {
+// readProcess reads the value on process and return an err through errChan or a result through resultChan
+func readProcess(process gotf.Process, resultChan chan Value, errChan chan error) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		errChan <- err
 		return
 	}
 	defer client.Close()
-
-	//fmt.Println("Connected to", process.Addr)
 
 	var value Value
 
@@ -189,8 +218,6 @@ func basicRead(process gotf.Process, resultChan chan Value, errChan chan error) 
 		errChan <- err
 		return
 	}
-
-	//fmt.Println("Read value:", value)
 
 	resultChan <- value
 }
@@ -203,8 +230,6 @@ func GetCurrentView(process gotf.Process) {
 	}
 	defer client.Close()
 
-	//fmt.Println("Connected to", process.Addr)
-
 	var newView gotf.View
 	client.Call("Request.GetCurrentView", 0, &newView)
 	if err != nil {
@@ -212,21 +237,21 @@ func GetCurrentView(process gotf.Process) {
 	}
 
 	currentView.Set(newView)
-	fmt.Println("New CurrentView:", currentView)
+	fmt.Println("New Current View:", currentView)
 }
 
 func main() {
 	fmt.Println(" ---- Start ---- ")
-	finalValue := ReadQuorum()
+	finalValue := Read()
 	fmt.Println("Final Read value:", finalValue)
 
 	fmt.Println(" ---- Start 2 ---- ")
 	finalValue = Value{}
 	finalValue.Value = 5
-	WriteQuorum(finalValue)
+	Write(finalValue)
 
 	fmt.Println(" ---- Start 3 ---- ")
-	finalValue = ReadQuorum()
+	finalValue = Read()
 	fmt.Println("Final Read value:", finalValue)
 }
 
