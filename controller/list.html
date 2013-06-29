@@ -1,0 +1,46 @@
+<html>
+    <head>
+        <link rel="stylesheet" href="/styles.css">
+    </head>
+    <body>
+        <table>
+            <tr>
+                <td>
+                    <a href="start">Start All</a>
+                </td>
+                <td>
+                    <a href="terminate">Terminate All</a>
+                </td>
+            </tr>
+        </table>
+        <table>
+            {{range .ProcessStatus}}
+                <tr>
+                    <td><a href="{{printf "http://localhost%v" .Process.Addr}}">{{.Process}}</a></td>
+                    {{if .Running}}
+                        <td><div class="running">Running</div></td>
+                        <td><a href="{{printf "terminate/%v" .Process.Addr}}">Terminate</a></td>
+                    {{else}}
+                        <td><div class="notRunning">Not Running</div></td>
+                        <td><a href="{{printf "start/%v" .Process.Addr}}">Start</a></td>
+                    {{end}}
+                </tr>
+            {{else}}
+                No process running
+            {{end}}
+        </table>
+
+        <table>
+            <tr>
+                <td>Doozerd</td>
+                {{if .Doozerd}}
+                    <td><div class="running">Running</div></td>
+                    <td><a href="terminateDoozerd">Terminate</a></td>
+                {{else}}
+                    <td><div class="notRunning">Not Running</div></td>
+                    <td><a href="startDoozerd">Start</a></td>
+                {{end}}
+            </tr>
+        </table>
+    </body>
+</html>

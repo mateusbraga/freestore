@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/rpc"
 	"sync"
+	"time"
 
 	"mateusbraga/gotf"
 )
@@ -16,6 +17,7 @@ var currentView gotf.View
 var register Value
 var mu sync.RWMutex
 
+var ln net.Listener
 var port uint
 
 type Value struct {
@@ -31,14 +33,14 @@ type Value struct {
 	Err error
 }
 
-type Request int
+type ClientRequest int
 
-func (r *Request) GetCurrentView(anything *int, reply *gotf.View) error {
+func (r *ClientRequest) GetCurrentView(anything *int, reply *gotf.View) error {
 	reply.Set(currentView)
 	return nil
 }
 
-func (r *Request) Read(view gotf.View, reply *Value) error {
+func (r *ClientRequest) Read(view gotf.View, reply *Value) error {
 	mu.RLock()
 	defer mu.RUnlock()
 
@@ -54,7 +56,7 @@ func (r *Request) Read(view gotf.View, reply *Value) error {
 	return nil
 }
 
-func (r *Request) Write(value Value, reply *Value) error {
+func (r *ClientRequest) Write(value Value, reply *Value) error {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -77,6 +79,21 @@ func (r *Request) Write(value Value, reply *Value) error {
 	return nil
 }
 
+type ControllerRequest int
+
+func (r *ControllerRequest) Terminate(anything bool, reply *bool) error {
+	log.Println("Terminating...")
+	err := ln.Close()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *ControllerRequest) Ping(anything bool, reply *bool) error {
+	return nil
+}
+
 func init() {
 	flag.UintVar(&port, "port", 0, "Set port to listen to. Default is a random port")
 	flag.UintVar(&port, "p", 0, "Set port to listen to. Default is a random port")
@@ -85,7 +102,9 @@ func init() {
 func main() {
 	flag.Parse()
 
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	var err error
+
+	ln, err = net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -109,7 +128,11 @@ func main() {
 	register.Value = 3
 	register.Timestamp = 1
 
-	request := new(Request)
-	rpc.Register(request)
+	clientRequest := new(ClientRequest)
+	controllerRequest := new(ControllerRequest)
+	rpc.Register(clientRequest)
+	rpc.Register(controllerRequest)
 	rpc.Accept(ln)
+
+	time.Sleep(2 * time.Second)
 }

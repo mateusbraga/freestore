@@ -1,0 +1,8 @@
+.running {
+    color:green;
+    font-weight:bold;
+}
+.notRunning {
+    color:red;
+    font-weight:bold;
+}

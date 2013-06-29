@@ -113,7 +113,7 @@ func writeProcess(process gotf.Process, value Value, resultChan chan Value, errC
 	defer client.Close()
 
 	var result Value
-	err = client.Call("Request.Write", value, &result)
+	err = client.Call("ClientRequest.Write", value, &result)
 	if err != nil {
 		errChan <- err
 		return
@@ -213,7 +213,7 @@ func readProcess(process gotf.Process, resultChan chan Value, errChan chan error
 
 	var value Value
 
-	err = client.Call("Request.Read", currentView, &value)
+	err = client.Call("ClientRequest.Read", currentView, &value)
 	if err != nil {
 		errChan <- err
 		return
@@ -231,7 +231,7 @@ func GetCurrentView(process gotf.Process) {
 	defer client.Close()
 
 	var newView gotf.View
-	client.Call("Request.GetCurrentView", 0, &newView)
+	client.Call("ClientRequest.GetCurrentView", 0, &newView)
 	if err != nil {
 		log.Fatal(err)
 	}
