@@ -1,19 +1,29 @@
 <html>
     <head>
-        <link rel="stylesheet" href="/styles.css">
+        <link rel="stylesheet" href="css/styles.css">
+
+        <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.0.6/angular.min.js"></script>
     </head>
     <body>
+
         <table>
             <tr>
-                <td>
-                    <a href="start">Start All</a>
-                </td>
-                <td>
-                    <a href="terminate">Terminate All</a>
-                </td>
+                <td>Doozerd</td>
+                {{if .Doozerd}}
+                    <td><div class="running">Running</div></td>
+                    <td><a href="terminateDoozerd">Terminate</a></td>
+                {{else}}
+                    <td><div class="notRunning">Not Running</div></td>
+                    <td><a href="startDoozerd">Start</a></td>
+                {{end}}
             </tr>
         </table>
         <table>
+            <tr>
+                <th>Process</td>
+                <th>Status</td>
+                <th>Action</td>
+            </tr>
             {{range .ProcessStatus}}
                 <tr>
                     <td><a href="{{printf "http://localhost%v" .Process.Addr}}">{{.Process}}</a></td>
@@ -29,17 +39,14 @@
                 No process running
             {{end}}
         </table>
-
         <table>
             <tr>
-                <td>Doozerd</td>
-                {{if .Doozerd}}
-                    <td><div class="running">Running</div></td>
-                    <td><a href="terminateDoozerd">Terminate</a></td>
-                {{else}}
-                    <td><div class="notRunning">Not Running</div></td>
-                    <td><a href="startDoozerd">Start</a></td>
-                {{end}}
+                <td>
+                    <a href="start">Start All</a>
+                </td>
+                <td>
+                    <a href="terminate">Terminate All</a>
+                </td>
             </tr>
         </table>
     </body>
