@@ -9,10 +9,6 @@ import (
 	//"errors"
 )
 
-type Process struct {
-	Addr string
-}
-
 type OldViewError struct {
 	OldView View
 	NewView View
@@ -42,6 +38,10 @@ const (
 	Join  updateType = "+"
 	Leave updateType = "-"
 )
+
+type Process struct {
+	Addr string
+}
 
 type Update struct {
 	Type    updateType
@@ -159,4 +159,12 @@ func (v View) N() int {
 	defer v.mu.RUnlock()
 
 	return len(v.Members)
+}
+
+func (v View) F() int {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
+	n := len(v.Members) + 1
+	return (n - 1) - (n/2 + n%2)
 }
