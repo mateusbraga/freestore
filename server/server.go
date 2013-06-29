@@ -15,22 +15,20 @@ import (
 var currentView gotf.View
 
 var register Value
-var mu sync.RWMutex
 
-var ln net.Listener
 var port uint
+var ln net.Listener
 
 type Value struct {
 	// Read
 	Value     int
 	Timestamp int
 
-	// Write
-	Result bool
-
 	View gotf.View
 
 	Err error
+
+	mu sync.RWMutex
 }
 
 type ClientRequest int
@@ -41,10 +39,8 @@ func (r *ClientRequest) GetCurrentView(anything *int, reply *gotf.View) error {
 }
 
 func (r *ClientRequest) Read(view gotf.View, reply *Value) error {
-	mu.RLock()
-	defer mu.RUnlock()
-
-	*reply = register
+	register.mu.RLock()
+	defer register.mu.RUnlock()
 
 	if !view.Equal(currentView) {
 		err := gotf.OldViewError{}
@@ -53,19 +49,20 @@ func (r *ClientRequest) Read(view gotf.View, reply *Value) error {
 		reply.Err = err
 	}
 
+	*reply = register
+
 	return nil
 }
 
 func (r *ClientRequest) Write(value Value, reply *Value) error {
-	mu.Lock()
-	defer mu.Unlock()
+	register.mu.Lock()
+	defer register.mu.Unlock()
 
 	if !value.View.Equal(currentView) {
 		err := gotf.OldViewError{}
 		err.OldView.Set(value.View)
 		err.NewView.Set(currentView)
 
-		reply = new(Value)
 		reply.Err = err
 		return nil
 	}
@@ -73,8 +70,6 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 	if value.Timestamp > register.Timestamp {
 		register = value
 	}
-
-	reply.Result = true
 
 	return nil
 }
@@ -134,5 +129,5 @@ func main() {
 	rpc.Register(controllerRequest)
 	rpc.Accept(ln)
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 }

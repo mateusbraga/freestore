@@ -5,15 +5,16 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"net/http"
-	//"html"
 	"html/template"
+	"log"
 	"mateusbraga/gotf"
 	"net"
+	"net/http"
 	"net/rpc"
+	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"time"
 )
 
@@ -86,6 +87,10 @@ func checkDoozerdStatus() {
 }
 
 func start(w http.ResponseWriter, r *http.Request) {
+	if !status.Doozerd {
+		startDoozerd()
+	}
+
 	if ok, err := path.Match("/start/", r.URL.Path); err == nil && ok {
 		for _, status := range status.ProcessStatus {
 			if !status.Running {
@@ -105,37 +110,44 @@ func terminate(w http.ResponseWriter, r *http.Request) {
 				terminateProcess(status.Process)
 			}
 		}
+
+		stopDoozerd()
 	} else if ok, err := path.Match("/terminate/*", r.URL.Path); err == nil && ok {
 		terminateProcess(gotf.Process{r.URL.Path[11:]})
 	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
-func startDoozerd(w http.ResponseWriter, r *http.Request) {
+func startDoozerd() {
 	server := exec.Command("doozerd")
 	if err := server.Start(); err != nil {
 		log.Fatal(err)
 	}
 
 	status.Doozerd = true
-
-	http.Redirect(w, r, "/", http.StatusFound)
 }
 
-func terminateDoozerd(w http.ResponseWriter, r *http.Request) {
+func stopDoozerd() {
 	server := exec.Command("pkill", "-9", "doozerd")
 	if err := server.Start(); err != nil {
 		log.Fatal(err)
 	}
 
 	status.Doozerd = false
+}
 
+func startDoozerdHandler(w http.ResponseWriter, r *http.Request) {
+	startDoozerd()
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func terminateDoozerdHandler(w http.ResponseWriter, r *http.Request) {
+	stopDoozerd()
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 func list(w http.ResponseWriter, r *http.Request) {
-
-	t, err := template.ParseFiles("list.html")
+	t, err := template.ParseFiles("page/list.html")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -165,11 +177,18 @@ func checkStatus(status *ProcessStatus) {
 }
 
 func main() {
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	http.HandleFunc("/", list)
 	http.HandleFunc("/terminate/", terminate)
 	http.HandleFunc("/start/", start)
-	http.HandleFunc("/startDoozerd/", startDoozerd)
-	http.HandleFunc("/terminateDoozerd/", terminateDoozerd)
+	http.HandleFunc("/startDoozerd/", startDoozerdHandler)
+	http.HandleFunc("/terminateDoozerd/", terminateDoozerdHandler)
+	http.Handle("/css/", http.StripPrefix("/css/", http.FileServer(http.Dir(filepath.Join(cwd, "page/css")))))
+	http.Handle("/js/", http.StripPrefix("/js/", http.FileServer(http.Dir(filepath.Join(cwd, "page/js")))))
 
 	go failureDetector()
 

@@ -1,6 +1,7 @@
 /*
 This is a Quorum client
 
+TODO:
 */
 package main
 
@@ -17,7 +18,7 @@ import (
 var currentView gotf.View
 
 var (
-	DiffResultsErr = errors.New("DIFFERENT RESULTS")
+	DiffResultsErr = errors.New("Read divergence")
 	ViewUpdatedErr = errors.New("View Updated")
 )
 
@@ -25,9 +26,6 @@ type Value struct {
 	// Read
 	Value     int
 	Timestamp int
-
-	// Write
-	Result bool
 
 	View gotf.View
 
@@ -42,7 +40,7 @@ func Write(value Value) {
 		case ViewUpdatedErr:
 			Write(value)
 		case DiffResultsErr:
-			// Ignore - we will write a new value
+			// Ignore - we will write a new value anyway
 		default:
 			log.Fatal(err)
 		}
@@ -76,29 +74,33 @@ func basicWriteQuorum(v Value) error {
 	}
 
 	// Get quorum
-	var n int
+	var success int
+	var failed int
 	for {
 		select {
 		case resultValue := <-resultChan:
 			if resultValue.Err != nil {
 				switch err := resultValue.Err.(type) {
 				default:
-					log.Fatal("resultValue returned error of type: %T", err)
+					log.Fatal("resultValue from writeProcess returned unexpected error of type: %T", err)
 				case *gotf.OldViewError:
-					log.Println("VIEW UPDATED")
+					log.Println("View updated during basic write quorum")
 					currentView.Set(err.NewView)
 					return ViewUpdatedErr
 				}
 			}
 
-			if resultValue.Result {
-				n++
-				if n >= currentView.QuorunSize() {
-					return nil
-				}
+			success++
+			if success >= currentView.QuorunSize() {
+				return nil
 			}
+
 		case err := <-errChan:
-			log.Fatal(err)
+			log.Println("+1 failure to write:", err)
+			failed++
+			if failed > currentView.F() {
+				return errors.New("Failed to get write quorun")
+			}
 		}
 	}
 }
@@ -128,7 +130,7 @@ func Read() Value {
 	if err != nil {
 		switch err {
 		case DiffResultsErr:
-			fmt.Println("Going to 2nd phase - read")
+			fmt.Println("Found divergence: Going to 2nd phase of read protocol")
 
 			err := basicWriteQuorum(value)
 			if err != nil {
@@ -165,27 +167,28 @@ func basicReadQuorum() (Value, error) {
 	}
 
 	// Get quorum
+	var failed int
+	var resultArray []Value
 	var finalValue Value
 	finalValue.Timestamp = -1 // Make it negative to force value.Timestamp > finalValue.Timestamp
-	resultArray := make([]Value, 0)
 	for {
 		select {
-		case value := <-resultChan:
-			if value.Err != nil {
-				switch err := value.Err.(type) {
+		case resultValue := <-resultChan:
+			if resultValue.Err != nil {
+				switch err := resultValue.Err.(type) {
 				default:
-					log.Fatal("Results value returned error of type: %T", err)
+					log.Fatal("resultValue from writeProcess returned unexpected error of type: %T", err)
 				case *gotf.OldViewError:
-					log.Println("VIEW UPDATED")
+					log.Println("View updated during basic read quorum")
 					currentView.Set(err.NewView)
 					return Value{}, ViewUpdatedErr
 				}
 			}
 
-			resultArray = append(resultArray, value)
+			resultArray = append(resultArray, resultValue)
 
-			if value.Timestamp > finalValue.Timestamp {
-				finalValue = value
+			if resultValue.Timestamp > finalValue.Timestamp {
+				finalValue = resultValue
 			}
 
 			if len(resultArray) >= currentView.QuorunSize() {
@@ -197,7 +200,11 @@ func basicReadQuorum() (Value, error) {
 				return finalValue, nil
 			}
 		case err := <-errChan:
-			log.Fatal(err)
+			log.Println("+1 failure to read:", err)
+			failed++
+			if failed > currentView.F() {
+				return Value{}, errors.New("Failed to get read quorun")
+			}
 		}
 	}
 }
@@ -237,12 +244,14 @@ func GetCurrentView(process gotf.Process) {
 	}
 
 	currentView.Set(newView)
-	fmt.Println("New Current View:", currentView)
+	fmt.Println("Got new current view:", currentView)
 }
 
 func main() {
+	var finalValue Value
+
 	fmt.Println(" ---- Start ---- ")
-	finalValue := Read()
+	finalValue = Read()
 	fmt.Println("Final Read value:", finalValue)
 
 	fmt.Println(" ---- Start 2 ---- ")
