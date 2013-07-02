@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/rpc"
+	"runtime"
 	"sync"
 	"time"
 
@@ -82,6 +83,7 @@ func (r *ControllerRequest) Terminate(anything bool, reply *bool) error {
 	if err != nil {
 		return err
 	}
+	runtime.Gosched() // Just to reduce the chance of showing errors because it terminated too early
 	return nil
 }
 
