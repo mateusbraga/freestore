@@ -1,12 +1,12 @@
-package gotf
+package view
 
 import (
 	"testing"
 )
 
 func TestViewEqual(t *testing.T) {
-	v1 := NewView()
-	v2 := NewView()
+	v1 := New()
+	v2 := New()
 
 	if !v1.Equal(v2) {
 		t.Fatalf("Empty views v1 and v2 should be equal")
@@ -38,8 +38,8 @@ func TestViewEqual(t *testing.T) {
 }
 
 func TestViewSet(t *testing.T) {
-	v1 := NewView()
-	v2 := NewView()
+	v1 := New()
+	v2 := New()
 
 	v1.AddUpdate(Update{Join, Process{"1"}})
 	v1.AddUpdate(Update{Join, Process{"2"}})
@@ -58,7 +58,7 @@ func TestViewSet(t *testing.T) {
 }
 
 func TestViewGetMembers(t *testing.T) {
-	v1 := NewView()
+	v1 := New()
 
 	v1.AddUpdate(Update{Join, Process{"1"}})
 	v1.AddUpdate(Update{Join, Process{"2"}})
@@ -76,7 +76,7 @@ func TestViewGetMembers(t *testing.T) {
 }
 
 func TestViewSize(t *testing.T) {
-	v1 := NewView()
+	v1 := New()
 
 	v1.AddUpdate(Update{Join, Process{"1"}})
 	v1.AddUpdate(Update{Join, Process{"2"}})

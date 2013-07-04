@@ -11,11 +11,12 @@ import (
 	"fmt"
 	"log"
 	"net/rpc"
+	"time"
 
-	"mateusbraga/gotf"
+	"mateusbraga/gotf/view"
 )
 
-var currentView gotf.View
+var currentView view.View
 
 var (
 	DiffResultsErr = errors.New("Read divergence")
@@ -27,7 +28,7 @@ type Value struct {
 	Value     int
 	Timestamp int
 
-	View gotf.View
+	View view.View
 
 	Err error
 }
@@ -83,7 +84,7 @@ func basicWriteQuorum(v Value) error {
 				switch err := resultValue.Err.(type) {
 				default:
 					log.Fatal("resultValue from writeProcess returned unexpected error of type: %T", err)
-				case *gotf.OldViewError:
+				case *view.OldViewError:
 					log.Println("View updated during basic write quorum")
 					currentView.Set(err.NewView)
 					return ViewUpdatedErr
@@ -106,7 +107,7 @@ func basicWriteQuorum(v Value) error {
 }
 
 // writeProcess writes value to process and return the result through resultChan or an error through errChan
-func writeProcess(process gotf.Process, value Value, resultChan chan Value, errChan chan error) {
+func writeProcess(process view.Process, value Value, resultChan chan Value, errChan chan error) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		errChan <- err
@@ -178,7 +179,7 @@ func basicReadQuorum() (Value, error) {
 				switch err := resultValue.Err.(type) {
 				default:
 					log.Fatal("resultValue from writeProcess returned unexpected error of type: %T", err)
-				case *gotf.OldViewError:
+				case *view.OldViewError:
 					log.Println("View updated during basic read quorum")
 					currentView.Set(err.NewView)
 					return Value{}, ViewUpdatedErr
@@ -210,7 +211,7 @@ func basicReadQuorum() (Value, error) {
 }
 
 // readProcess reads the value on process and return an err through errChan or a result through resultChan
-func readProcess(process gotf.Process, resultChan chan Value, errChan chan error) {
+func readProcess(process view.Process, resultChan chan Value, errChan chan error) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		errChan <- err
@@ -230,14 +231,14 @@ func readProcess(process gotf.Process, resultChan chan Value, errChan chan error
 }
 
 // GetCurrentViewClient asks process for the currentView
-func GetCurrentView(process gotf.Process) {
+func GetCurrentView(process view.Process) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer client.Close()
 
-	var newView gotf.View
+	var newView view.View
 	client.Call("ClientRequest.GetCurrentView", 0, &newView)
 	if err != nil {
 		log.Fatal(err)
@@ -262,20 +263,22 @@ func main() {
 	fmt.Println(" ---- Start 3 ---- ")
 	finalValue = Read()
 	fmt.Println("Final Read value:", finalValue)
+
+	time.Sleep(1 * time.Second)
 }
 
 func init() {
-	//addr, err := gotf.GetRunningServer()
+	//addr, err := view.GetRunningServer()
 	//if err != nil {
 	//log.Fatal(err)
 	//}
 
-	//GetCurrentView(gotf.Process{addr})
+	//GetCurrentView(view.Process{addr})
 
-	currentView = gotf.NewView()
-	currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5000"}})
-	currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5001"}})
-	//currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5002"}})
+	currentView = view.New()
+	currentView.AddUpdate(view.Update{view.Join, view.Process{":5000"}})
+	currentView.AddUpdate(view.Update{view.Join, view.Process{":5001"}})
+	//currentView.AddUpdate(view.Update{view.Join, view.Process{":5002"}})
 
 	expvar.Publish("CurrentView", currentView)
 }

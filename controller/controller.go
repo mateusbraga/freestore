@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"mateusbraga/gotf"
+	"mateusbraga/gotf/view"
 	"net"
 	"net/http"
 	"net/rpc"
@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	currentView gotf.View
+	currentView view.View
 	status      Status = Status{}
 )
 
@@ -29,11 +29,11 @@ type Status struct {
 }
 
 type ProcessStatus struct {
-	Process gotf.Process
+	Process view.Process
 	Running bool
 }
 
-func terminateProcess(process gotf.Process) {
+func terminateProcess(process view.Process) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		log.Println(err)
@@ -50,7 +50,7 @@ func terminateProcess(process gotf.Process) {
 	}
 }
 
-func pingProcess(process gotf.Process) bool {
+func pingProcess(process view.Process) bool {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		return false
@@ -66,7 +66,7 @@ func pingProcess(process gotf.Process) bool {
 	return true
 }
 
-func startProcess(process gotf.Process) {
+func startProcess(process view.Process) {
 	_, port, err := net.SplitHostPort(process.Addr)
 	if err != nil {
 		log.Fatal(err)
@@ -98,7 +98,7 @@ func start(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else if ok, err := path.Match("/start/*", r.URL.Path); err == nil && ok {
-		startProcess(gotf.Process{r.URL.Path[7:]})
+		startProcess(view.Process{r.URL.Path[7:]})
 	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }
@@ -113,7 +113,7 @@ func terminate(w http.ResponseWriter, r *http.Request) {
 
 		stopDoozerd()
 	} else if ok, err := path.Match("/terminate/*", r.URL.Path); err == nil && ok {
-		terminateProcess(gotf.Process{r.URL.Path[11:]})
+		terminateProcess(view.Process{r.URL.Path[11:]})
 	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }
@@ -196,17 +196,17 @@ func main() {
 }
 
 func init() {
-	//addr, err := gotf.GetRunningServer()
+	//addr, err := view.GetRunningServer()
 	//if err != nil {
 	//log.Fatal(err)
 	//}
 
-	//GetCurrentView(gotf.Process{addr})
+	//GetCurrentView(view.Process{addr})
 
-	currentView = gotf.NewView()
-	currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5000"}})
-	currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5001"}})
-	currentView.AddUpdate(gotf.Update{gotf.Join, gotf.Process{":5002"}})
+	currentView = view.New()
+	currentView.AddUpdate(view.Update{view.Join, view.Process{":5000"}})
+	currentView.AddUpdate(view.Update{view.Join, view.Process{":5001"}})
+	currentView.AddUpdate(view.Update{view.Join, view.Process{":5002"}})
 
 	for _, proc := range currentView.GetMembers() {
 		status.ProcessStatus = append(status.ProcessStatus, &ProcessStatus{proc, false})
@@ -216,14 +216,14 @@ func init() {
 }
 
 // GetCurrentViewClient asks process for the currentView
-func GetCurrentView(process gotf.Process) {
+func GetCurrentView(process view.Process) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer client.Close()
 
-	var newView gotf.View
+	var newView view.View
 	client.Call("ClientRequest.GetCurrentView", 0, &newView)
 	if err != nil {
 		log.Fatal(err)

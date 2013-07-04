@@ -1,4 +1,4 @@
-package gotf
+package view
 
 import (
 	//"log"
@@ -54,7 +54,7 @@ type View struct {
 	mu      sync.RWMutex
 }
 
-func NewView() View {
+func New() View {
 	v := View{}
 	v.Entries = make(map[Update]bool)
 	v.Members = make(map[Process]bool)
