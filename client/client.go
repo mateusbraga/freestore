@@ -2,6 +2,7 @@
 This is a Quorum client
 
 TODO:
+    An old view can make read/write fail with no necessity
 */
 package main
 
@@ -11,7 +12,7 @@ import (
 	"fmt"
 	"log"
 	"net/rpc"
-	"time"
+	"runtime"
 
 	"mateusbraga/gotf/view"
 )
@@ -99,8 +100,16 @@ func basicWriteQuorum(v Value) error {
 		case err := <-errChan:
 			log.Println("+1 failure to write:", err)
 			failed++
-			if failed > currentView.F() {
-				return errors.New("Failed to get write quorun")
+
+			// currentView.F() needs an updated View, and we know we have an updated view when success > 0
+			if success > 0 {
+				if failed > currentView.F() {
+					return errors.New("Failed to get write quorun")
+				}
+			} else {
+				if failed == currentView.N() {
+					return errors.New("Failed to get write quorun")
+				}
 			}
 		}
 	}
@@ -203,8 +212,16 @@ func basicReadQuorum() (Value, error) {
 		case err := <-errChan:
 			log.Println("+1 failure to read:", err)
 			failed++
-			if failed > currentView.F() {
-				return Value{}, errors.New("Failed to get read quorun")
+
+			// currentView.F() needs an updated View, and we know we have an updated view when len(resultArray) > 0
+			if len(resultArray) > 0 {
+				if failed > currentView.F() {
+					return Value{}, errors.New("Failed to get read quorun")
+				}
+			} else {
+				if failed == currentView.N() {
+					return Value{}, errors.New("Failed to get read quorun")
+				}
 			}
 		}
 	}
@@ -264,7 +281,7 @@ func main() {
 	finalValue = Read()
 	fmt.Println("Final Read value:", finalValue)
 
-	time.Sleep(1 * time.Second)
+	runtime.Gosched()
 }
 
 func init() {
