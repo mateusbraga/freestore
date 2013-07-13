@@ -104,7 +104,7 @@ func start(w http.ResponseWriter, r *http.Request) {
 }
 
 func terminate(w http.ResponseWriter, r *http.Request) {
-	if ok, err := path.Match("/terminate/", r.URL.Path); err == nil && ok {
+	if ok, err := path.Match("/terminate/", r.URL.Path); err == nil && ok { // Terminate all
 		for _, status := range status.ProcessStatus {
 			if status.Running {
 				terminateProcess(status.Process)
@@ -192,6 +192,8 @@ func main() {
 
 	go failureDetector()
 
+	log.Println("Listening at http://localhost:9182")
+
 	log.Fatal(http.ListenAndServe(":9182", nil))
 }
 
@@ -203,15 +205,16 @@ func init() {
 
 	//GetCurrentView(view.Process{addr})
 
+	// Init current view
 	currentView = view.New()
 	currentView.AddUpdate(view.Update{view.Join, view.Process{":5000"}})
 	currentView.AddUpdate(view.Update{view.Join, view.Process{":5001"}})
 	currentView.AddUpdate(view.Update{view.Join, view.Process{":5002"}})
 
+	// Init status
 	for _, proc := range currentView.GetMembers() {
 		status.ProcessStatus = append(status.ProcessStatus, &ProcessStatus{proc, false})
 	}
-
 	checkDoozerdStatus()
 }
 
