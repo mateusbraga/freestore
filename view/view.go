@@ -1,36 +1,11 @@
 package view
 
 import (
-	//"log"
 	"bytes"
 	"encoding/gob"
 	"fmt"
 	"sync"
-	//"errors"
 )
-
-type OldViewError struct {
-	OldView View
-	NewView View
-}
-
-func (e OldViewError) Error() string {
-	return fmt.Sprint("OLD_VIEW")
-}
-
-type WriteOlderError struct {
-	WriteTimestamp  int
-	ServerTimestamp int
-}
-
-func (e WriteOlderError) Error() string {
-	return fmt.Sprintf("error: write request has timestamp %v but server has more updated timestamp %v", e.WriteTimestamp, e.ServerTimestamp)
-}
-
-func init() {
-	gob.Register(new(OldViewError))
-	gob.Register(new(WriteOlderError))
-}
 
 type updateType string
 
@@ -167,4 +142,29 @@ func (v View) F() int {
 
 	n := len(v.Members) + 1
 	return (n - 1) - (n/2 + n%2)
+}
+
+// ----- ERRORS -----
+
+type OldViewError struct {
+	OldView View
+	NewView View
+}
+
+func (e OldViewError) Error() string {
+	return fmt.Sprint("OLD_VIEW")
+}
+
+type WriteOlderError struct {
+	WriteTimestamp  int
+	ServerTimestamp int
+}
+
+func (e WriteOlderError) Error() string {
+	return fmt.Sprintf("error: write request has timestamp %v but server has more updated timestamp %v", e.WriteTimestamp, e.ServerTimestamp)
+}
+
+func init() {
+	gob.Register(new(OldViewError))
+	gob.Register(new(WriteOlderError))
 }
