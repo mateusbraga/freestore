@@ -17,9 +17,8 @@ import (
 	"mateusbraga/gotf/view"
 )
 
-var currentView view.View
-
 var (
+	currentView    view.View
 	DiffResultsErr = errors.New("Read divergence")
 	ViewUpdatedErr = errors.New("View Updated")
 )
@@ -35,12 +34,12 @@ type Value struct {
 }
 
 // Write implements the quorum write protocol.
-func Write(value Value) {
+func Write(v int) {
 	readValue, err := basicReadQuorum()
 	if err != nil {
 		switch err {
 		case ViewUpdatedErr:
-			Write(value)
+			Write(v)
 		case DiffResultsErr:
 			// Ignore - we will write a new value anyway
 		default:
@@ -48,13 +47,15 @@ func Write(value Value) {
 		}
 	}
 
-	value.Timestamp = readValue.Timestamp + 1
+	writeValue := Value{}
+	writeValue.Value = v
+	writeValue.Timestamp = readValue.Timestamp + 1
 
-	err = basicWriteQuorum(value)
+	err = basicWriteQuorum(writeValue)
 	if err != nil {
 		switch err {
 		case ViewUpdatedErr:
-			Write(value)
+			Write(v)
 		default:
 			log.Fatal(err)
 		}
@@ -135,7 +136,7 @@ func writeProcess(process view.Process, value Value, resultChan chan Value, errC
 }
 
 // Read executes the quorum read protocol.
-func Read() Value {
+func Read() int {
 	value, err := basicReadQuorum()
 	if err != nil {
 		switch err {
@@ -159,7 +160,7 @@ func Read() Value {
 		}
 	}
 
-	return value
+	return value.Value
 }
 
 // basicReadQuorum reads a Value from all members of the most updated currentView returning the most recent one. It decides which is the most recent one as soon as it gets a quorum
@@ -266,16 +267,14 @@ func GetCurrentView(process view.Process) {
 }
 
 func main() {
-	var finalValue Value
+	var finalValue int
 
 	fmt.Println(" ---- Start ---- ")
 	finalValue = Read()
 	fmt.Println("Final Read value:", finalValue)
 
 	fmt.Println(" ---- Start 2 ---- ")
-	finalValue = Value{}
-	finalValue.Value = 5
-	Write(finalValue)
+	Write(5)
 
 	fmt.Println(" ---- Start 3 ---- ")
 	finalValue = Read()
