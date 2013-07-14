@@ -122,7 +122,7 @@ func main() {
 	//currentView = view.New()
 	//currentView.AddUpdate(view.Update{view.Join, view.Process{ln.Addr().String()}})
 
-	register = *new(Value)
+	register = Value{}
 	register.Value = 3
 	register.Timestamp = 1
 
