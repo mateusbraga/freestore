@@ -11,3 +11,10 @@ group.go
 group/communication.go
     - view-synchrony: Necessário para primary-backup
 
+---
+
+Requirements:
+    Stable storage: Atomic write operation and failure tolerance to
+    implement permanent storage.
+        Required by: Consensus
+    Reliable communication: Like TCP.
