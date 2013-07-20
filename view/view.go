@@ -141,6 +141,7 @@ func (v View) F() int {
 	defer v.mu.RUnlock()
 
 	n := len(v.Members) + 1
+	// N() - QuorunSize()
 	return (n - 1) - (n/2 + n%2)
 }
 
