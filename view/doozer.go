@@ -11,7 +11,7 @@ import (
 func PublishAddr(addr string) error {
 	doozerConn, err := doozer.Dial("localhost:8046")
 	if err != nil {
-		return err
+		return errors.New(fmt.Sprint("Failed to connect to Doozer: ", err))
 	}
 	defer doozerConn.Close()
 
