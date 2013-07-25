@@ -15,7 +15,6 @@ import (
 	"log"
 	"net/rpc"
 
-	"mateusbraga/gotf/client/frontend/group"
 	"mateusbraga/gotf/view"
 )
 
@@ -63,17 +62,17 @@ func Write(v int) {
 	}
 }
 
-// basicWriteQuorum writes v to all processes on the group.CurrentView and return as soon as it gets the confirmation from a quorum
+// basicWriteQuorum writes v to all processes on the currentView and return as soon as it gets the confirmation from a quorum
 //
 // If the view needs to be updated, it will update the view and return ViewUpdatedErr. Otherwise, returns nil
 func basicWriteQuorum(v Value) error {
-	resultChan := make(chan Value, group.CurrentView.N())
-	errChan := make(chan error, group.CurrentView.N())
+	resultChan := make(chan Value, currentView.N())
+	errChan := make(chan error, currentView.N())
 
-	v.View.Set(group.CurrentView)
+	v.View.Set(currentView)
 
 	// Send write request to all
-	for _, process := range group.CurrentView.GetMembers() {
+	for _, process := range currentView.GetMembers() {
 		go writeProcess(process, v, resultChan, errChan)
 	}
 
@@ -89,13 +88,13 @@ func basicWriteQuorum(v Value) error {
 					log.Fatal("resultValue from writeProcess returned unexpected error of type: %T", err)
 				case *view.OldViewError:
 					log.Println("View updated during basic write quorum")
-					group.CurrentView.Set(err.NewView)
+					currentView.Set(err.NewView)
 					return ViewUpdatedErr
 				}
 			}
 
 			success++
-			if success >= group.CurrentView.QuorunSize() {
+			if success >= currentView.QuorunSize() {
 				return nil
 			}
 
@@ -103,13 +102,13 @@ func basicWriteQuorum(v Value) error {
 			log.Println("+1 failure to write:", err)
 			failed++
 
-			// group.CurrentView.F() needs an updated View, and we know we have an updated view when success > 0
+			// currentView.F() needs an updated View, and we know we have an updated view when success > 0
 			if success > 0 {
-				if failed > group.CurrentView.F() {
+				if failed > currentView.F() {
 					return errors.New("Failed to get write quorun")
 				}
 			} else {
-				if failed == group.CurrentView.N() {
+				if failed == currentView.N() {
 					return errors.New("Failed to get write quorun")
 				}
 			}
@@ -164,17 +163,17 @@ func Read() int {
 	return value.Value
 }
 
-// basicReadQuorum reads a Value from all members of the most updated group.CurrentView returning the most recent one. It decides which is the most recent one as soon as it gets a quorum
+// basicReadQuorum reads a Value from all members of the most updated currentView returning the most recent one. It decides which is the most recent one as soon as it gets a quorum
 //
 // Value is only valid if err == nil
 // If the view needs to be updated, it will update the view and return ViewUpdatedErr.
 // If any value returned by a process differ, it will return DiffResultsErr
 func basicReadQuorum() (Value, error) {
-	resultChan := make(chan Value, group.CurrentView.N())
-	errChan := make(chan error, group.CurrentView.N())
+	resultChan := make(chan Value, currentView.N())
+	errChan := make(chan error, currentView.N())
 
 	// Send read request to all
-	for _, process := range group.CurrentView.GetMembers() {
+	for _, process := range currentView.GetMembers() {
 		go readProcess(process, resultChan, errChan)
 	}
 
@@ -192,7 +191,7 @@ func basicReadQuorum() (Value, error) {
 					log.Fatal("resultValue from writeProcess returned unexpected error of type: %T", err)
 				case *view.OldViewError:
 					log.Println("View updated during basic read quorum")
-					group.CurrentView.Set(err.NewView)
+					currentView.Set(err.NewView)
 					return Value{}, ViewUpdatedErr
 				}
 			}
@@ -203,7 +202,7 @@ func basicReadQuorum() (Value, error) {
 				finalValue = resultValue
 			}
 
-			if len(resultArray) >= group.CurrentView.QuorunSize() {
+			if len(resultArray) >= currentView.QuorunSize() {
 				for _, val := range resultArray {
 					if finalValue.Timestamp != val.Timestamp { // There are divergence on the processes
 						return finalValue, DiffResultsErr
@@ -215,13 +214,13 @@ func basicReadQuorum() (Value, error) {
 			log.Println("+1 failure to read:", err)
 			failed++
 
-			// group.CurrentView.F() needs an updated View, and we know we have an updated view when len(resultArray) > 0
+			// currentView.F() needs an updated View, and we know we have an updated view when len(resultArray) > 0
 			if len(resultArray) > 0 {
-				if failed > group.CurrentView.F() {
+				if failed > currentView.F() {
 					return Value{}, errors.New("Failed to get read quorun")
 				}
 			} else {
-				if failed == group.CurrentView.N() {
+				if failed == currentView.N() {
 					return Value{}, errors.New("Failed to get read quorun")
 				}
 			}
@@ -240,7 +239,7 @@ func readProcess(process view.Process, resultChan chan Value, errChan chan error
 
 	var value Value
 
-	err = client.Call("ClientRequest.Read", group.CurrentView, &value)
+	err = client.Call("ClientRequest.Read", currentView, &value)
 	if err != nil {
 		errChan <- err
 		return
