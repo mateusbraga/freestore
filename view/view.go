@@ -25,8 +25,10 @@ type Update struct {
 
 type View struct {
 	Entries map[Update]bool
-	Members map[Process]bool
 	mu      sync.RWMutex
+
+	// Cache
+	Members map[Process]bool
 }
 
 func New() View {
@@ -104,7 +106,9 @@ func (v *View) AddUpdate(u Update) {
 
 	switch u.Type {
 	case Join:
-		v.Members[u.Process] = true
+		if !v.Entries[Update{Leave, u.Process}] {
+			v.Members[u.Process] = true
+		}
 	case Leave:
 		delete(v.Members, u.Process)
 	}
@@ -119,6 +123,19 @@ func (v View) GetMembers() []Process {
 		l = append(l, k)
 	}
 	return l
+}
+
+func (v View) GetProcessPosition(process Process) int {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
+	i := 0
+	for k, _ := range v.Members {
+		if k.Addr < process.Addr {
+			i++
+		}
+	}
+	return i
 }
 
 func (v View) QuorunSize() int {
