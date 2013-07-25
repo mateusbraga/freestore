@@ -33,6 +33,23 @@ type ProcessStatus struct {
 	Running bool
 }
 
+func testConsensusProcess(process view.Process) {
+	client, err := rpc.Dial("tcp", process.Addr)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer client.Close()
+
+	var value int
+
+	err = client.Call("ControllerRequest.Consensus", 6, &value)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+}
+
 func terminateProcess(process view.Process) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
@@ -99,6 +116,13 @@ func start(w http.ResponseWriter, r *http.Request) {
 		}
 	} else if ok, err := path.Match("/start/*", r.URL.Path); err == nil && ok {
 		startProcess(view.Process{r.URL.Path[7:]})
+	}
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func testConsensus(w http.ResponseWriter, r *http.Request) {
+	if ok, err := path.Match("/testConsensus/", r.URL.Path); err == nil && !ok { // Terminate all
+		testConsensusProcess(view.Process{r.URL.Path[15:]})
 	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }
@@ -189,6 +213,7 @@ func main() {
 	http.HandleFunc("/terminateDoozerd/", terminateDoozerdHandler)
 	http.Handle("/css/", http.StripPrefix("/css/", http.FileServer(http.Dir(filepath.Join(cwd, "page/css")))))
 	http.Handle("/js/", http.StripPrefix("/js/", http.FileServer(http.Dir(filepath.Join(cwd, "page/js")))))
+	http.HandleFunc("/testConsensus/", testConsensus)
 
 	go failureDetector()
 

@@ -23,6 +23,7 @@
                 <th>Process</td>
                 <th>Status</td>
                 <th>Action</td>
+                <th>Test</td>
             </tr>
             {{range .ProcessStatus}}
                 <tr>
@@ -30,9 +31,11 @@
                     {{if .Running}}
                         <td><div class="running">Running</div></td>
                         <td><a href="{{printf "terminate/%v" .Process.Addr}}">Terminate</a></td>
+                        <td><a href="{{printf "testConsensus/%v" .Process.Addr}}">TestConsensus</a></td>
                     {{else}}
                         <td><div class="notRunning">Not Running</div></td>
                         <td><a href="{{printf "start/%v" .Process.Addr}}">Start</a></td>
+                        <td></td>
                     {{end}}
                 </tr>
             {{else}}
