@@ -3,3 +3,4 @@ client/client
 controller/controller
 
 *.test
+*.db
