@@ -28,36 +28,29 @@ type ConsensusTable struct {
 	mu    sync.RWMutex
 }
 
-// BUG If a process starts late it will not know about any previous consensus and will mess up
-// BUG We need to set ourserves the ID because otherwise the proposer will always decide with no problem (because it's a consensus that nobody else will try to propose
-func NewConsensus(callbackLearnChan chan interface{}) *Consensus {
+func GetConsensusOrCreate(id int, callbackLearnChan chan interface{}) *Consensus {
 	consensusTable.mu.Lock()
 	defer consensusTable.mu.Unlock()
 
-	id := len(consensusTable.Table)
-	for {
-		_, ok := consensusTable.Table[id]
-		if ok {
-			id--
-		} else {
-			break
-		}
+	if consensus, ok := consensusTable.Table[id]; ok {
+		return consensus
+	} else {
+		log.Println("Creating consensus with id", id)
+		consensus := &Consensus{Id: id, CallbackLearnChan: callbackLearnChan}
+		consensusTable.Table[consensus.Id] = consensus
+		return consensus
 	}
-	consensus := &Consensus{Id: id, CallbackLearnChan: callbackLearnChan}
-	consensusTable.Table[consensus.Id] = consensus
-	return consensus
 }
 
 func (consensusTable *ConsensusTable) GetConsensus(id int) *Consensus {
 	consensusTable.mu.Lock()
 	defer consensusTable.mu.Unlock()
 
-	consensus, ok := consensusTable.Table[id]
-	if ok {
+	if consensus, ok := consensusTable.Table[id]; ok {
 		return consensus
 	} else {
 		log.Println("Creating consensus with id", id)
-		consensus := &Consensus{Id: id}
+		consensus := &Consensus{Id: id, CallbackLearnChan: make(chan interface{}, 1)}
 		consensusTable.Table[consensus.Id] = consensus
 		return consensus
 	}
@@ -175,6 +168,7 @@ func (consensus *Consensus) Prepare(proposalNumber int) (interface{}, error) {
 		case receivedProposal := <-resultChan:
 			if receivedProposal.Err != nil {
 				errChan <- receivedProposal.Err
+				break
 			}
 
 			success++
@@ -215,6 +209,7 @@ func (consensus *Consensus) Accept(proposal Proposal) error {
 		case receivedProposal := <-resultChan:
 			if receivedProposal.Err != nil {
 				errChan <- receivedProposal.Err
+				break
 			}
 
 			success++
@@ -293,18 +288,19 @@ func (consensus Consensus) getLastProposalNumber() (int, error) {
 }
 
 func (consensus Consensus) saveAcceptedProposal(proposal *Proposal) {
-	tx, err := db.Begin()
-	if err != nil {
-		log.Fatal(err)
-	}
-	_, err = tx.Exec("insert into accepted_proposal(consensus_id, accepted_proposal) values (?, ?)", consensus.Id, proposal.Value)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = tx.Commit()
-	if err != nil {
-		log.Fatal(err)
-	}
+	// TODO make this work with slices
+	//tx, err := db.Begin()
+	//if err != nil {
+	//log.Fatal(err)
+	//}
+	//_, err = tx.Exec("insert into accepted_proposal(consensus_id, accepted_proposal) values (?, ?)", consensus.Id, proposal.Value)
+	//if err != nil {
+	//log.Fatal(err)
+	//}
+	//err = tx.Commit()
+	//if err != nil {
+	//log.Fatal(err)
+	//}
 }
 
 func (consensus Consensus) savePrepareRequest(proposal *Proposal) {

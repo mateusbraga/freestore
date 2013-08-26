@@ -21,17 +21,14 @@ type Value struct {
 
 type ClientRequest int
 
-func (r *ClientRequest) GetCurrentView(anything *int, reply *view.View) error {
-	reply.Set(currentView)
-	return nil
-}
-
 func (r *ClientRequest) Read(clientView view.View, reply *Value) error {
 	register.mu.RLock()
 	defer register.mu.RUnlock()
 
 	if !clientView.Equal(currentView) {
 		err := view.OldViewError{}
+		err.OldView = view.New()
+		err.NewView = view.New()
 		err.OldView.Set(clientView)
 		err.NewView.Set(currentView)
 		reply.Err = err
@@ -49,6 +46,8 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 
 	if !value.View.Equal(currentView) {
 		err := view.OldViewError{}
+		err.OldView = view.New()
+		err.NewView = view.New()
 		err.OldView.Set(value.View)
 		err.NewView.Set(currentView)
 
@@ -64,7 +63,14 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 	return nil
 }
 
+func (r *ClientRequest) GetCurrentView(value int, reply *view.View) error {
+	*reply = view.New()
+	reply.Set(currentView)
+	return nil
+}
+
 func init() {
+	register.mu.Lock()
 	register.Value = 3
 	register.Timestamp = 1
 

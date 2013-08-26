@@ -75,8 +75,12 @@ func (v *View) Set(v2 View) {
 	v2.mu.RLock()
 	defer v2.mu.RUnlock()
 
-	v.Entries = v2.Entries
-	v.Members = v2.Members
+	for update, _ := range v2.Entries {
+		v.Entries[update] = true
+	}
+	for process, _ := range v2.Members {
+		v.Members[process] = true
+	}
 }
 
 func (v View) Contains(v2 View) bool {
@@ -114,14 +118,52 @@ func (v *View) AddUpdate(u Update) {
 	}
 }
 
+func (v *View) Merge(v2 View) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	v2.mu.RLock()
+	defer v2.mu.RUnlock()
+
+	for u, _ := range v2.Entries {
+		v.Entries[u] = true
+
+		switch u.Type {
+		case Join:
+			if !v.Entries[Update{Leave, u.Process}] {
+				v.Members[u.Process] = true
+			}
+		case Leave:
+			delete(v.Members, u.Process)
+		}
+	}
+}
+
 func (v View) GetMembers() []Process {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	l := make([]Process, 0)
+	var l []Process
 	for k, _ := range v.Members {
 		l = append(l, k)
 	}
+	return l
+}
+
+func (v *View) GetMembersNotIn(v2 View) []Process {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	v2.mu.RLock()
+	defer v2.mu.RUnlock()
+
+	var l []Process
+	for k, _ := range v.Members {
+		if !v2.Members[k] {
+			l = append(l, k)
+		}
+	}
+
 	return l
 }
 
@@ -136,6 +178,13 @@ func (v View) GetProcessPosition(process Process) int {
 		}
 	}
 	return i
+}
+
+func (v View) NumberOfEntries() int {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
+	return len(v.Entries)
 }
 
 func (v View) QuorunSize() int {
@@ -185,4 +234,5 @@ func (e WriteOlderError) Error() string {
 func init() {
 	gob.Register(new(OldViewError))
 	gob.Register(new(WriteOlderError))
+	gob.Register(new([]View))
 }

@@ -34,6 +34,13 @@ func Run(port uint) {
 		log.Fatal(err)
 	}
 
+	InitCurrentView()
+
+	// Join currentview
+	if !currentView.Members[thisProcess] {
+		Join()
+	}
+
 	dbName := fmt.Sprintf("./gotf.%v.db", port)
 	os.Remove(dbName)
 	db, err = sql.Open("sqlite3", dbName)

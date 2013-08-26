@@ -23,17 +23,18 @@ func (r *ControllerRequest) Ping(anything bool, reply *bool) error {
 }
 
 func (r *ControllerRequest) Consensus(arg int, reply *int) error {
-	callbackChan := make(chan interface{})
-	consensus := NewConsensus(callbackChan)
+	log.Fatalln("fix new consensus!")
+	//callbackChan := make(chan interface{})
+	//consensus := NewConsensus(callbackChan)
 
-	consensus.Propose(arg)
-	value := <-callbackChan
-	log.Printf("consensus got %T %v\n", value, value)
+	//consensus.Propose(arg)
+	//value := <-callbackChan
+	//log.Printf("consensus got %T %v\n", value, value)
 
-	result, ok := value.(int)
-	if ok {
-		*reply = result
-	}
+	//result, ok := value.(int)
+	//if ok {
+	//*reply = result
+	//}
 
 	return nil
 }
