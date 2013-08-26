@@ -69,6 +69,7 @@ func basicWriteQuorum(v Value) error {
 	resultChan := make(chan Value, currentView.N())
 	errChan := make(chan error, currentView.N())
 
+	v.View = view.New()
 	v.View.Set(currentView)
 
 	// Send write request to all
