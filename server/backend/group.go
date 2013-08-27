@@ -12,14 +12,14 @@ func init() {
 	currentView = view.New()
 }
 
-func InitCurrentView() {
+func InitCurrentView(master string) {
 	if thisProcess.Addr == "[::]:5000" || thisProcess.Addr == "[::]:5001" || thisProcess.Addr == "[::]:5002" {
 		currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5000"}})
 		currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5001"}})
 		currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5002"}})
 		register.mu.Unlock() // Enable operations
 	} else {
-		GetCurrentView(view.Process{"[::]:5000"})
+		GetCurrentView(view.Process{master})
 	}
 	log.Println("Init current view:", currentView)
 }

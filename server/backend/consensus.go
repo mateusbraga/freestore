@@ -116,13 +116,13 @@ func (consensus *Consensus) NewLearnRequest(proposal Proposal) {
 	consensus.mu.Lock()
 	defer consensus.mu.Unlock()
 
-	log.Println("learn", proposal)
+	//log.Println("learn", proposal)
 	consensus.learnCounter++
 
 	if consensus.learnCounter >= currentView.QuorunSize() {
 		select { // Send just the size of the channel/Do not block
 		case consensus.CallbackLearnChan <- proposal.Value:
-			log.Println("sent to callback")
+			//log.Println("sent to callback")
 		default:
 		}
 	}

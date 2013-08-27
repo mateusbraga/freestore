@@ -20,7 +20,7 @@ var (
 	db          *sql.DB
 )
 
-func Run(port uint) {
+func Run(port uint, join bool, master string) {
 	var err error
 
 	listener, err = net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -34,10 +34,10 @@ func Run(port uint) {
 	//log.Fatal(err)
 	//}
 
-	InitCurrentView()
+	InitCurrentView(master)
 
 	// Join currentview
-	if !currentView.Members[thisProcess] {
+	if !currentView.Members[thisProcess] && join {
 		Join()
 	}
 
@@ -50,9 +50,11 @@ func Run(port uint) {
 }
 
 func initStorage(port uint) {
+	var err error
+
 	dbName := fmt.Sprintf("./gotf.%v.db", port)
 	os.Remove(dbName)
-	db, err := sql.Open("sqlite3", dbName)
+	db, err = sql.Open("sqlite3", dbName)
 	if err != nil {
 		log.Panic(err)
 	}
