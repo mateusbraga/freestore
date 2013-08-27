@@ -30,9 +30,9 @@ func Run(port uint) {
 	log.Println("Listening on address:", listener.Addr())
 
 	thisProcess = view.Process{listener.Addr().String()}
-	if err := view.PublishAddr(thisProcess.Addr); err != nil {
-		log.Fatal(err)
-	}
+	//if err := view.PublishAddr(thisProcess.Addr); err != nil {
+	//log.Fatal(err)
+	//}
 
 	InitCurrentView()
 
@@ -41,9 +41,18 @@ func Run(port uint) {
 		Join()
 	}
 
+	initStorage(port)
+
+	rpc.Accept(listener)
+
+	// Sleep a little to give time to finish pending gorotines (from rpc)
+	time.Sleep(3 * time.Second)
+}
+
+func initStorage(port uint) {
 	dbName := fmt.Sprintf("./gotf.%v.db", port)
 	os.Remove(dbName)
-	db, err = sql.Open("sqlite3", dbName)
+	db, err := sql.Open("sqlite3", dbName)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -60,8 +69,4 @@ func Run(port uint) {
 			log.Panicf("%q: %s\n", err, sql)
 		}
 	}
-
-	rpc.Accept(listener)
-	// Sleep a little to give time to finish pending gorotines (from rpc)
-	time.Sleep(3 * time.Second)
 }

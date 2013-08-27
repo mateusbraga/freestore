@@ -176,6 +176,7 @@ func syncState(installSeq InstallSeqMsg) {
 	var finalValue Value
 	finalValue.Timestamp = -1
 
+	//TODO insert a timeout
 	for {
 		stateUpdate := <-newStateUpdateChan
 
@@ -286,6 +287,7 @@ func gotInstallSeqQuorum(installSeq InstallSeqMsg) {
 		} else { // If thisProcess is NOT on the new view
 			log.Println("start gotInstallSeqQuorum 8")
 			var counter int
+			//TODO insert a timeout
 			for {
 				viewInstalled := <-newViewInstalledChan
 
@@ -378,6 +380,7 @@ func Join() error {
 	// Get quorum
 	var failed int
 	var success int
+	//TODO insert a timeout
 	for {
 		select {
 		case result := <-resultChan:
@@ -417,6 +420,7 @@ func Leave() error {
 	// Get quorum
 	var failed int
 	var success int
+	//TODO insert a timeout
 	for {
 		select {
 		case result := <-resultChan:
@@ -522,6 +526,7 @@ func (r *ReconfigurationRequest) Reconfig(arg ReconfigMsg, reply *error) error {
 
 	if arg.CurrentView.Equal(currentView) {
 		recv[arg.Update] = true
+		log.Printf("%v added to recv\n")
 	} else {
 		err := view.OldViewError{}
 		err.OldView.Set(arg.CurrentView)
