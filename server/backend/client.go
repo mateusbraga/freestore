@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"log"
 	"net/rpc"
 	"sync"
 
@@ -37,6 +38,7 @@ func (r *ClientRequest) Read(clientView view.View, reply *Value) error {
 	reply.Value = register.Value
 	reply.Timestamp = register.Timestamp
 
+	log.Println("Done read request")
 	return nil
 }
 
@@ -52,6 +54,7 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 		err.NewView.Set(currentView)
 
 		reply.Err = err
+		log.Println("Done write request")
 		return nil
 	}
 
@@ -66,6 +69,7 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 func (r *ClientRequest) GetCurrentView(value int, reply *view.View) error {
 	*reply = view.New()
 	reply.Set(currentView)
+	log.Println("Done GetCurrentView request")
 	return nil
 }
 
