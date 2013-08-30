@@ -75,6 +75,9 @@ func (v *View) Set(v2 View) {
 	v2.mu.RLock()
 	defer v2.mu.RUnlock()
 
+	v.Entries = make(map[Update]bool, len(v2.Entries))
+	v.Members = make(map[Process]bool, len(v2.Members))
+
 	for update, _ := range v2.Entries {
 		v.Entries[update] = true
 	}
@@ -139,6 +142,31 @@ func (v *View) Merge(v2 View) {
 	}
 }
 
+func (v View) HasUpdate(u Update) bool {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
+	return v.Entries[u]
+}
+
+func (v View) HasMember(p Process) bool {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
+	return v.Members[p]
+}
+
+func (v View) GetEntries() []Update {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
+	var l []Update
+	for k, _ := range v.Entries {
+		l = append(l, k)
+	}
+	return l
+}
+
 func (v View) GetMembers() []Process {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
@@ -147,6 +175,26 @@ func (v View) GetMembers() []Process {
 	for k, _ := range v.Members {
 		l = append(l, k)
 	}
+	return l
+}
+
+func (v *View) GetMembersAlsoIn(v2 View) []Process {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
+	v2.mu.RLock()
+	defer v2.mu.RUnlock()
+
+	var l []Process
+	for k, _ := range v.Members {
+		l = append(l, k)
+	}
+	for k, _ := range v2.Members {
+		if !v.Members[k] {
+			l = append(l, k)
+		}
+	}
+
 	return l
 }
 
