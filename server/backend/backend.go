@@ -37,7 +37,7 @@ func Run(port uint, join bool, master string) {
 	InitCurrentView(master)
 
 	// Join currentview
-	if !currentView.Members[thisProcess] && join {
+	if !currentView.HasMember(thisProcess) && join {
 		Join()
 	}
 

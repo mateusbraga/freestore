@@ -117,13 +117,8 @@ func newInstallSeqListener() {
 			}
 		}
 
-		auxView := view.New()
-		auxView.Set(*installSeq.AssociatedView)
-		auxView.Merge(*installSeq.InstallView)
-		auxView.AddUpdate(view.Update{view.Leave, thisProcess})
-
 		// Re-send install-seq to all
-		for _, process := range auxView.GetMembers() {
+		for _, process := range installSeq.AssociatedView.GetMembersAlsoIn(*installSeq.InstallView) {
 			go sendInstallSeq(process, installSeq)
 		}
 
@@ -185,7 +180,7 @@ func syncState(installSeq InstallSeqMsg) {
 		}
 	}
 
-	for update, _ := range installSeq.InstallView.Entries {
+	for _, update := range installSeq.InstallView.GetEntries() {
 		delete(recv, update)
 	}
 	log.Println("end syncState")
@@ -198,13 +193,13 @@ func gotInstallSeqQuorum(installSeq InstallSeqMsg) {
 
 	installViewContainsCv := installSeq.InstallView.Contains(currentView)
 
-	if installViewContainsCv && installSeq.AssociatedView.Members[thisProcess] {
+	if installViewContainsCv && installSeq.AssociatedView.HasMember(thisProcess) {
 		// disable r/w
 		register.mu.Lock()
 		log.Println("R/W operations disabled")
 	}
 
-	if installSeq.AssociatedView.Members[thisProcess] { // If the thisProcess was on the old view
+	if installSeq.AssociatedView.HasMember(thisProcess) { // If the thisProcess was on the old view
 		recvMutex.RLock()
 
 		state := StateUpdateMsg{}
@@ -223,7 +218,7 @@ func gotInstallSeqQuorum(installSeq InstallSeqMsg) {
 	log.Println("State sent!")
 
 	if installViewContainsCv {
-		if installSeq.InstallView.Members[thisProcess] { // If thisProcess is on the new view
+		if installSeq.InstallView.HasMember(thisProcess) { // If thisProcess is on the new view
 			syncState(installSeq)
 
 			currentView.Set(*installSeq.InstallView)
@@ -386,6 +381,7 @@ func Leave() error {
 	errChan := make(chan error, currentView.N())
 
 	reconfig := ReconfigMsg{Update: view.Update{view.Leave, thisProcess}}
+	reconfig.CurrentView = view.New()
 	reconfig.CurrentView.Set(currentView)
 
 	// Send reconfig request to all
@@ -500,8 +496,10 @@ func (r *ReconfigurationRequest) Reconfig(arg ReconfigMsg, reply *error) error {
 	defer recvMutex.Unlock()
 
 	if arg.CurrentView.Equal(currentView) {
-		recv[arg.Update] = true
-		log.Printf("%v added to recv\n", arg.Update)
+		if !currentView.HasUpdate(arg.Update) {
+			recv[arg.Update] = true
+			log.Printf("%v added to recv\n", arg.Update)
+		}
 	} else {
 		err := view.OldViewError{}
 		err.OldView.Set(arg.CurrentView)

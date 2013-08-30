@@ -4,6 +4,8 @@ import (
 	"log"
 	"net/rpc"
 	"runtime"
+
+	"mateusbraga/gotf/view"
 )
 
 type ControllerRequest int
@@ -19,6 +21,19 @@ func (r *ControllerRequest) Terminate(anything bool, reply *bool) error {
 }
 
 func (r *ControllerRequest) Ping(anything bool, reply *bool) error {
+	return nil
+}
+
+func (r *ControllerRequest) Join(view view.View, reply *bool) error {
+	log.Println("ControllerRequest to join view", view)
+	currentView.Set(view)
+	Join()
+	return nil
+}
+
+func (r *ControllerRequest) Leave(anything bool, reply *bool) error {
+	log.Println("ControllerRequest to leave view")
+	Leave()
 	return nil
 }
 

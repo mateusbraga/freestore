@@ -8,56 +8,57 @@
 
         <table>
             <tr>
-                <td>Doozerd</td>
-                {{if .Doozerd}}
-                    <td><div class="running">Running</div></td>
-                    <td><a href="terminateDoozerd">Terminate</a></td>
-                {{else}}
-                    <td><div class="notRunning">Not Running</div></td>
-                    <td><a href="startDoozerd">Start</a></td>
-                {{end}}
-            </tr>
-        </table>
-        <table>
-            <tr>
                 <th>Process</td>
                 <th>Status</td>
                 <th>Action</td>
                 <th>Reconfiguration</td>
                 <th>Test</td>
             </tr>
-            {{range .ProcessStatus}}
-                <tr>
-                    <td><a href="{{printf "http://localhost%v" .Process.Addr}}">{{.Process}}</a></td>
-                    {{if .Running}}
-                        <td><div class="running">Running</div></td>
-                        <td><a href="{{printf "terminate/%v" .Process.Addr}}">Terminate</a></td>
+                {{range .ProcessStatus}}
+                    <tr>
+                        <td><a href="{{printf "http://localhost%v" .Process.Addr}}">{{.Process}}</a></td>
                         {{if .Running}}
-                            <td><a href="{{printf "join/%v" .Process.Addr}}">Join</a></td>
+                            <td><div class="running">Running</div></td>
+                            <td><a href="{{printf "process/%v/terminate" .Process.Addr}}">Terminate</a></td>
+                            {{if $.CurrentView.HasMember .Process}}
+                                <td><a href="{{printf "process/%v/leave" .Process.Addr}}">Leave</a></td>
+                            {{else}}
+                                <td><a href="{{printf "process/%v/join" .Process.Addr}}">Join</a></td>
+                            {{end}}
+                            <td><a href="{{printf "process/%v/view" .Process.Addr}}">GetView</a></td>
                         {{else}}
-                            <td><a href="{{printf "leave/%v" .Process.Addr}}">Leave</a></td>
+                            <td><div class="notRunning">Not Running</div></td>
+                            <td><a href="{{printf "process/%v/start" .Process.Addr}}">Start</a></td>
+                            <td></td>
+                            <td></td>
                         {{end}}
-                        <td><a href="{{printf "testConsensus/%v" .Process.Addr}}">TestConsensus</a></td>
-                    {{else}}
-                        <td><div class="notRunning">Not Running</div></td>
-                        <td><a href="{{printf "start/%v" .Process.Addr}}">Start</a></td>
-                        <td></td>
-                        <td></td>
-                    {{end}}
-                </tr>
-            {{else}}
-                No process running
-            {{end}}
+                    </tr>
+                {{else}}
+                    No process running
+                {{end}}
         </table>
         <table>
             <tr>
                 <td>
-                    <a href="start">Start All</a>
+                    <a href="process/all/start">Start All</a>
                 </td>
                 <td>
-                    <a href="terminate">Terminate All</a>
+                    <a href="process/all/terminate">Terminate All</a>
                 </td>
             </tr>
         </table>
+        <table>
+            <tr>
+                <td>Doozerd</td>
+                {{if .Doozerd}}
+                    <td><div class="running">Running</div></td>
+                    <td><a href="doozerd/kill">Terminate</a></td>
+                {{else}}
+                    <td><div class="notRunning">Not Running</div></td>
+                    <td><a href="doozerd/start">Start</a></td>
+                {{end}}
+            </tr>
+        </table>
+        {{.CurrentView}}
     </body>
 </html>
