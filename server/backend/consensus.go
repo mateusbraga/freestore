@@ -119,7 +119,7 @@ func (consensus *Consensus) NewLearnRequest(proposal Proposal) {
 	//log.Println("learn", proposal)
 	consensus.learnCounter++
 
-	if consensus.learnCounter >= currentView.QuorunSize() {
+	if consensus.learnCounter == currentView.QuorumSize() {
 		select { // Send just the size of the channel/Do not block
 		case consensus.CallbackLearnChan <- proposal.Value:
 			//log.Println("sent to callback")
@@ -176,7 +176,7 @@ func (consensus *Consensus) Prepare(proposalNumber int) (interface{}, error) {
 				highestNumberedAcceptedProposal = receivedProposal
 			}
 
-			if success >= currentView.QuorunSize() {
+			if success == currentView.QuorumSize() {
 				return highestNumberedAcceptedProposal.Value, nil
 			}
 		case err := <-errChan:
@@ -214,7 +214,7 @@ func (consensus *Consensus) Accept(proposal Proposal) error {
 
 			success++
 
-			if success >= currentView.QuorunSize() {
+			if success == currentView.QuorumSize() {
 				return nil
 			}
 		case err := <-errChan:

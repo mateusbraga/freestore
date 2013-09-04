@@ -85,7 +85,7 @@ func TestViewSize(t *testing.T) {
 		t.Errorf("v1 should have 2 members, not %d", n)
 	}
 
-	if q := v1.QuorunSize(); q != 2 {
+	if q := v1.QuorumSize(); q != 2 {
 		t.Errorf("Quorum of 2 processes should be 2, not %d", q)
 	}
 
@@ -95,7 +95,7 @@ func TestViewSize(t *testing.T) {
 
 	v1.AddUpdate(Update{Join, Process{"3"}})
 
-	if q := v1.QuorunSize(); q != 2 {
+	if q := v1.QuorumSize(); q != 2 {
 		t.Errorf("Quorum of 3 processes should be 2, not %d", q)
 	}
 

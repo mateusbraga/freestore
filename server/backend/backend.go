@@ -36,9 +36,12 @@ func Run(port uint, join bool, master string) {
 
 	InitCurrentView(master)
 
-	// Join currentview
-	if !currentView.HasMember(thisProcess) && join {
-		Join()
+	if currentView.HasMember(thisProcess) {
+		register.mu.Unlock() // Enable operations
+	} else {
+		if join {
+			Join()
+		}
 	}
 
 	initStorage(port)

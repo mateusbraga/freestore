@@ -235,7 +235,7 @@ func (v View) NumberOfEntries() int {
 	return len(v.Entries)
 }
 
-func (v View) QuorunSize() int {
+func (v View) QuorumSize() int {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
@@ -255,7 +255,7 @@ func (v View) F() int {
 	defer v.mu.RUnlock()
 
 	n := len(v.Members) + 1
-	// N() - QuorunSize()
+	// N() - QuorumSize()
 	return (n - 1) - (n/2 + n%2)
 }
 

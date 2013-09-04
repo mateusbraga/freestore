@@ -17,7 +17,6 @@ func InitCurrentView(master string) {
 		currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5000"}})
 		currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5001"}})
 		currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5002"}})
-		register.mu.Unlock() // Enable operations
 	} else {
 		GetCurrentView(view.Process{master})
 	}

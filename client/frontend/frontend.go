@@ -95,7 +95,7 @@ func basicWriteQuorum(v Value) error {
 			}
 
 			success++
-			if success >= currentView.QuorunSize() {
+			if success == currentView.QuorumSize() {
 				return nil
 			}
 
@@ -203,7 +203,7 @@ func basicReadQuorum() (Value, error) {
 				finalValue = resultValue
 			}
 
-			if len(resultArray) >= currentView.QuorunSize() {
+			if len(resultArray) == currentView.QuorumSize() {
 				for _, val := range resultArray {
 					if finalValue.Timestamp != val.Timestamp { // There are divergence on the processes
 						return finalValue, DiffResultsErr
