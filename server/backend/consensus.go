@@ -117,14 +117,10 @@ func (consensus *Consensus) NewLearnRequest(proposal Proposal) {
 	defer consensus.mu.Unlock()
 
 	//log.Println("learn", proposal)
-	consensus.learnCounter++
 
+	consensus.learnCounter++
 	if consensus.learnCounter == currentView.QuorumSize() {
-		select { // Send just the size of the channel/Do not block
-		case consensus.CallbackLearnChan <- proposal.Value:
-			//log.Println("sent to callback")
-		default:
-		}
+		consensus.CallbackLearnChan <- proposal.Value
 	}
 }
 
@@ -148,15 +144,23 @@ func (consensus *Consensus) Propose(defaultValue interface{}) {
 	}
 }
 
+func FillStopChan(stopChan chan bool, times int) {
+	for i := 0; i < times; i++ {
+		stopChan <- true
+	}
+}
+
 func (consensus *Consensus) Prepare(proposalNumber int) (interface{}, error) {
 	resultChan := make(chan Proposal, currentView.N())
 	errChan := make(chan error, currentView.N())
+	stopChan := make(chan bool, currentView.N())
+	defer FillStopChan(stopChan, currentView.N())
 
 	proposal := Proposal{N: proposalNumber, ConsensusId: consensus.Id}
 
 	// Send read request to all
 	for _, process := range currentView.GetMembers() {
-		go prepareProcess(process, proposal, resultChan, errChan)
+		go prepareProcess(process, proposal, resultChan, errChan, stopChan)
 	}
 
 	// Get quorum
@@ -193,12 +197,14 @@ func (consensus *Consensus) Prepare(proposalNumber int) (interface{}, error) {
 func (consensus *Consensus) Accept(proposal Proposal) error {
 	resultChan := make(chan Proposal, currentView.N())
 	errChan := make(chan error, currentView.N())
+	stopChan := make(chan bool, currentView.N())
+	defer FillStopChan(stopChan, currentView.N())
 
 	proposal.ConsensusId = consensus.Id
 
 	// Send accept request to all
 	for _, process := range currentView.GetMembers() {
-		go acceptProcess(process, proposal, resultChan, errChan)
+		go acceptProcess(process, proposal, resultChan, errChan, stopChan)
 	}
 
 	// Get quorum
@@ -326,10 +332,14 @@ func spreadAcceptance(proposal Proposal) {
 	}
 }
 
-func prepareProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error) {
+func prepareProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error, stopChan chan bool) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
-		errChan <- err
+		select {
+		case errChan <- err:
+		case <-stopChan:
+			log.Println("Error ignored:", err)
+		}
 		return
 	}
 	defer client.Close()
@@ -338,17 +348,28 @@ func prepareProcess(process view.Process, proposal Proposal, resultChan chan Pro
 
 	err = client.Call("ConsensusRequest.Prepare", proposal, &reply)
 	if err != nil {
-		errChan <- err
+		select {
+		case errChan <- err:
+		case <-stopChan:
+			log.Println("Error ignored:", err)
+		}
 		return
 	}
 
-	resultChan <- reply
+	select {
+	case resultChan <- reply:
+	case <-stopChan:
+	}
 }
 
-func acceptProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error) {
+func acceptProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error, stopChan chan bool) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
-		errChan <- err
+		select {
+		case errChan <- err:
+		case <-stopChan:
+			log.Println("Error ignored:", err)
+		}
 		return
 	}
 	defer client.Close()
@@ -356,11 +377,18 @@ func acceptProcess(process view.Process, proposal Proposal, resultChan chan Prop
 	var reply Proposal
 	err = client.Call("ConsensusRequest.Accept", proposal, &reply)
 	if err != nil {
-		errChan <- err
+		select {
+		case errChan <- err:
+		case <-stopChan:
+			log.Println("Error ignored:", err)
+		}
 		return
 	}
 
-	resultChan <- reply
+	select {
+	case resultChan <- reply:
+	case <-stopChan:
+	}
 }
 
 func spreadAcceptanceProcess(process view.Process, proposal Proposal) {

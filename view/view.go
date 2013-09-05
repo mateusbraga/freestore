@@ -38,7 +38,7 @@ func New() View {
 	return v
 }
 
-func (v View) String() string {
+func (v *View) String() string {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
@@ -68,7 +68,7 @@ func (v View) String() string {
 	return b.String()
 }
 
-func (v *View) Set(v2 View) {
+func (v *View) Set(v2 *View) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -86,7 +86,7 @@ func (v *View) Set(v2 View) {
 	}
 }
 
-func (v View) Contains(v2 View) bool {
+func (v *View) Contains(v2 *View) bool {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
@@ -101,7 +101,7 @@ func (v View) Contains(v2 View) bool {
 	return true
 }
 
-func (v View) Equal(v2 View) bool {
+func (v *View) Equal(v2 *View) bool {
 	return v.Contains(v2) && v2.Contains(v)
 }
 
@@ -121,7 +121,7 @@ func (v *View) AddUpdate(u Update) {
 	}
 }
 
-func (v *View) Merge(v2 View) {
+func (v *View) Merge(v2 *View) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -142,21 +142,21 @@ func (v *View) Merge(v2 View) {
 	}
 }
 
-func (v View) HasUpdate(u Update) bool {
+func (v *View) HasUpdate(u Update) bool {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
 	return v.Entries[u]
 }
 
-func (v View) HasMember(p Process) bool {
+func (v *View) HasMember(p Process) bool {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
 	return v.Members[p]
 }
 
-func (v View) GetEntries() []Update {
+func (v *View) GetEntries() []Update {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
@@ -167,7 +167,7 @@ func (v View) GetEntries() []Update {
 	return l
 }
 
-func (v View) GetMembers() []Process {
+func (v *View) GetMembers() []Process {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
@@ -178,7 +178,7 @@ func (v View) GetMembers() []Process {
 	return l
 }
 
-func (v *View) GetMembersAlsoIn(v2 View) []Process {
+func (v *View) GetMembersAlsoIn(v2 *View) []Process {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -198,7 +198,7 @@ func (v *View) GetMembersAlsoIn(v2 View) []Process {
 	return l
 }
 
-func (v *View) GetMembersNotIn(v2 View) []Process {
+func (v *View) GetMembersNotIn(v2 *View) []Process {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -215,7 +215,7 @@ func (v *View) GetMembersNotIn(v2 View) []Process {
 	return l
 }
 
-func (v View) GetProcessPosition(process Process) int {
+func (v *View) GetProcessPosition(process Process) int {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
@@ -228,14 +228,14 @@ func (v View) GetProcessPosition(process Process) int {
 	return i
 }
 
-func (v View) NumberOfEntries() int {
+func (v *View) NumberOfEntries() int {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
 	return len(v.Entries)
 }
 
-func (v View) QuorumSize() int {
+func (v *View) QuorumSize() int {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
@@ -243,14 +243,14 @@ func (v View) QuorumSize() int {
 	return n/2 + n%2
 }
 
-func (v View) N() int {
+func (v *View) N() int {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
 	return len(v.Members)
 }
 
-func (v View) F() int {
+func (v *View) F() int {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 

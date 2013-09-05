@@ -1,7 +1,7 @@
 package frontend
 
 import (
-	"expvar"
+	//"expvar"
 	"log"
 	"net/rpc"
 
@@ -27,7 +27,7 @@ func init() {
 	//currentView.AddUpdate(view.Update{view.Join, view.Process{":5001"}})
 	//currentView.AddUpdate(view.Update{view.Join, view.Process{":5002"}})
 
-	expvar.Publish("currentView", currentView)
+	//expvar.Publish("currentView", currentView)
 }
 
 // GetCurrentViewClient asks process for the currentView
@@ -44,6 +44,6 @@ func GetCurrentView(process view.Process) {
 		log.Fatal(err)
 	}
 
-	currentView.Set(newView)
+	currentView.Set(&newView)
 	log.Println("Got new current view:", currentView)
 }

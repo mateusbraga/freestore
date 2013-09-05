@@ -26,7 +26,7 @@ var (
 type Status struct {
 	Doozerd       bool
 	ProcessStatus []*ProcessStatus
-	CurrentView   view.View
+	CurrentView   *view.View
 }
 
 type ProcessStatus struct {
@@ -144,8 +144,9 @@ func init() {
 	currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5001"}})
 	currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5002"}})
 
-	status.CurrentView = view.New()
-	status.CurrentView.Set(currentView)
+	v := view.New()
+	status.CurrentView = &v
+	status.CurrentView.Set(&currentView)
 	// Init status
 	for i := 5000; i < 5020; i++ {
 		status.ProcessStatus = append(status.ProcessStatus, &ProcessStatus{view.Process{fmt.Sprintf("[::]:%v", i)}, false})
@@ -271,7 +272,7 @@ func sendGetCurrentView(process view.Process) {
 		log.Fatal(err)
 	}
 
-	currentView.Set(newView)
-	status.CurrentView.Set(newView)
+	currentView.Set(&newView)
+	status.CurrentView.Set(&newView)
 	fmt.Println("New Current View:", currentView)
 }

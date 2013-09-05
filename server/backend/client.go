@@ -26,12 +26,12 @@ func (r *ClientRequest) Read(clientView view.View, reply *Value) error {
 	register.mu.RLock()
 	defer register.mu.RUnlock()
 
-	if !clientView.Equal(currentView) {
+	if !clientView.Equal(&currentView) {
 		err := view.OldViewError{}
 		err.OldView = view.New()
 		err.NewView = view.New()
-		err.OldView.Set(clientView)
-		err.NewView.Set(currentView)
+		err.OldView.Set(&clientView)
+		err.NewView.Set(&currentView)
 		reply.Err = err
 	}
 
@@ -46,12 +46,12 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 	register.mu.Lock()
 	defer register.mu.Unlock()
 
-	if !value.View.Equal(currentView) {
+	if !value.View.Equal(&currentView) {
 		err := view.OldViewError{}
 		err.OldView = view.New()
 		err.NewView = view.New()
-		err.OldView.Set(value.View)
-		err.NewView.Set(currentView)
+		err.OldView.Set(&value.View)
+		err.NewView.Set(&currentView)
 
 		reply.Err = err
 		log.Println("Done write request")
@@ -68,7 +68,7 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 
 func (r *ClientRequest) GetCurrentView(value int, reply *view.View) error {
 	*reply = view.New()
-	reply.Set(currentView)
+	reply.Set(&currentView)
 	log.Println("Done GetCurrentView request")
 	return nil
 }

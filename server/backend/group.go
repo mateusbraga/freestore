@@ -37,5 +37,5 @@ func GetCurrentView(process view.Process) {
 		log.Fatal(err)
 	}
 
-	currentView.Set(newView)
+	currentView.Set(&newView)
 }

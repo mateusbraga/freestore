@@ -24,7 +24,7 @@ func findMostUpdatedView(seq []view.View) view.View {
 	for i, v := range seq {
 		isMostUpdated := true
 		for _, v2 := range seq[i+1:] {
-			if !v.Contains(v2) {
+			if !v.Contains(&v2) {
 				isMostUpdated = false
 				break
 			}
@@ -43,14 +43,14 @@ func getViewGenerator(associatedView view.View, initialSeq []view.View) ViewGene
 	defer viewGeneratorsMu.Unlock()
 
 	for _, vgi := range viewGenerators {
-		if vgi.AssociatedView.Equal(associatedView) {
+		if vgi.AssociatedView.Equal(&associatedView) {
 			return vgi
 		}
 	}
 
 	vgi := ViewGeneratorInfo{}
 	vgi.AssociatedView = view.New()
-	vgi.AssociatedView.Set(associatedView)
+	vgi.AssociatedView.Set(&associatedView)
 	vgi.jobChan = make(chan ViewGeneratorJob, 20) //TODO
 	go ViewGeneratorWorker(vgi.AssociatedView, initialSeq, vgi.jobChan)
 
@@ -59,6 +59,7 @@ func getViewGenerator(associatedView view.View, initialSeq []view.View) ViewGene
 	return vgi
 }
 
+//TODO decide how to kill this goroutine
 func ViewGeneratorWorker(associatedView view.View, seq []view.View, jobChan chan ViewGeneratorJob) {
 	var proposedSeq []view.View
 	var lastConvergedSeq []view.View
@@ -95,7 +96,7 @@ func ViewGeneratorWorker(associatedView view.View, seq []view.View, jobChan chan
 				for _, v := range jobPointer.ProposedSeq {
 					found := false
 					for _, v2 := range proposedSeq {
-						if v.Equal(v2) {
+						if v.Equal(&v2) {
 							found = true
 							break
 						}
@@ -106,7 +107,7 @@ func ViewGeneratorWorker(associatedView view.View, seq []view.View, jobChan chan
 
 						hasConflict := true
 						for _, v2 := range proposedSeq {
-							if v.Contains(v2) || v2.Contains(v) {
+							if v.Contains(&v2) || v2.Contains(&v) {
 								hasConflict = false
 								break
 							}
@@ -114,7 +115,9 @@ func ViewGeneratorWorker(associatedView view.View, seq []view.View, jobChan chan
 
 						if hasConflict {
 							log.Println("Has conflict!")
-							if findMostUpdatedView(jobPointer.LastConvergedSeq).Contains(findMostUpdatedView(lastConvergedSeq)) {
+							jobPointerMostUpdatedView := findMostUpdatedView(jobPointer.LastConvergedSeq)
+							thisProcessMostUpdatedView := findMostUpdatedView(lastConvergedSeq)
+							if jobPointerMostUpdatedView.Contains(&thisProcessMostUpdatedView) {
 								lastConvergedSeq = jobPointer.LastConvergedSeq
 							}
 
@@ -122,8 +125,8 @@ func ViewGeneratorWorker(associatedView view.View, seq []view.View, jobChan chan
 							receivedMostUpdated := findMostUpdatedView(jobPointer.ProposedSeq)
 
 							auxView := view.New()
-							auxView.Set(oldMostUpdated)
-							auxView.Merge(receivedMostUpdated)
+							auxView.Set(&oldMostUpdated)
+							auxView.Merge(&receivedMostUpdated)
 
 							proposedSeq = append(lastConvergedSeq, auxView)
 							break
@@ -191,7 +194,7 @@ func generateViewSequenceWithoutConsensus(associatedView view.View, seq []view.V
 
 	// assert only updated views on seq
 	for _, view := range seq {
-		if !view.Contains(associatedView) || associatedView.Contains(view) {
+		if !view.Contains(&associatedView) || associatedView.Contains(&view) {
 			log.Fatalln("Found an old view in view sequence:", seq, ". associatedView:", associatedView)
 		}
 	}
@@ -260,7 +263,7 @@ func (seqConv SeqConv) Equal(seqConv2 SeqConv) bool {
 		return false
 	}
 	for i, _ := range seqConv.Seq {
-		if !seqConv.Seq[i].Equal(seqConv2.Seq[i]) {
+		if !seqConv.Seq[i].Equal(&seqConv2.Seq[i]) {
 			return false
 		}
 	}
@@ -281,20 +284,20 @@ func (viewSeq ViewSeq) Equal(viewSeq2 ViewSeq) bool {
 	if len(viewSeq.ProposedSeq) != len(viewSeq2.ProposedSeq) {
 		return false
 	}
-	if len(viewSeq.LastConvergedSeq) != len(viewSeq2.LastConvergedSeq) {
-		return false
-	}
+	//if len(viewSeq.LastConvergedSeq) != len(viewSeq2.LastConvergedSeq) {
+	//return false
+	//}
 
 	for i, _ := range viewSeq.ProposedSeq {
-		if !viewSeq.ProposedSeq[i].Equal(viewSeq2.ProposedSeq[i]) {
+		if !viewSeq.ProposedSeq[i].Equal(&viewSeq2.ProposedSeq[i]) {
 			return false
 		}
 	}
-	for i, _ := range viewSeq.LastConvergedSeq {
-		if !viewSeq.LastConvergedSeq[i].Equal(viewSeq2.LastConvergedSeq[i]) {
-			return false
-		}
-	}
+	//for i, _ := range viewSeq.LastConvergedSeq {
+	//if !viewSeq.LastConvergedSeq[i].Equal(viewSeq2.LastConvergedSeq[i]) {
+	//return false
+	//}
+	//}
 	return true
 }
 

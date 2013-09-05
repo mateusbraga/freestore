@@ -68,13 +68,15 @@ func Write(v int) {
 func basicWriteQuorum(v Value) error {
 	resultChan := make(chan Value, currentView.N())
 	errChan := make(chan error, currentView.N())
+	stopChan := make(chan bool, currentView.N())
+	defer FillStopChan(stopChan, currentView.N())
 
 	v.View = view.New()
-	v.View.Set(currentView)
+	v.View.Set(&currentView)
 
 	// Send write request to all
 	for _, process := range currentView.GetMembers() {
-		go writeProcess(process, v, resultChan, errChan)
+		go writeProcess(process, v, resultChan, errChan, stopChan)
 	}
 
 	// Get quorum
@@ -89,7 +91,7 @@ func basicWriteQuorum(v Value) error {
 					log.Fatal("resultValue from writeProcess returned unexpected error of type: %T", err)
 				case *view.OldViewError:
 					log.Println("View updated during basic write quorum")
-					currentView.Set(err.NewView)
+					currentView.Set(&err.NewView)
 					return ViewUpdatedErr
 				}
 			}
@@ -118,10 +120,14 @@ func basicWriteQuorum(v Value) error {
 }
 
 // writeProcess writes value to process and return the result through resultChan or an error through errChan
-func writeProcess(process view.Process, value Value, resultChan chan Value, errChan chan error) {
+func writeProcess(process view.Process, value Value, resultChan chan Value, errChan chan error, stopChan chan bool) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
-		errChan <- err
+		select {
+		case errChan <- err:
+		case <-stopChan:
+			log.Println("Error ignored:", err)
+		}
 		return
 	}
 	defer client.Close()
@@ -129,11 +135,18 @@ func writeProcess(process view.Process, value Value, resultChan chan Value, errC
 	var result Value
 	err = client.Call("ClientRequest.Write", value, &result)
 	if err != nil {
-		errChan <- err
+		select {
+		case errChan <- err:
+		case <-stopChan:
+			log.Println("Error ignored:", err)
+		}
 		return
 	}
 
-	resultChan <- result
+	select {
+	case resultChan <- result:
+	case <-stopChan:
+	}
 }
 
 // Read executes the quorum read protocol.
@@ -172,10 +185,12 @@ func Read() int {
 func basicReadQuorum() (Value, error) {
 	resultChan := make(chan Value, currentView.N())
 	errChan := make(chan error, currentView.N())
+	stopChan := make(chan bool, currentView.N())
+	defer FillStopChan(stopChan, currentView.N())
 
 	// Send read request to all
 	for _, process := range currentView.GetMembers() {
-		go readProcess(process, resultChan, errChan)
+		go readProcess(process, resultChan, errChan, stopChan)
 	}
 
 	// Get quorum
@@ -192,7 +207,7 @@ func basicReadQuorum() (Value, error) {
 					log.Fatal("resultValue from writeProcess returned unexpected error of type: %T", err)
 				case *view.OldViewError:
 					log.Println("View updated during basic read quorum")
-					currentView.Set(err.NewView)
+					currentView.Set(&err.NewView)
 					return Value{}, ViewUpdatedErr
 				}
 			}
@@ -230,10 +245,14 @@ func basicReadQuorum() (Value, error) {
 }
 
 // readProcess reads the value on process and return an err through errChan or a result through resultChan
-func readProcess(process view.Process, resultChan chan Value, errChan chan error) {
+func readProcess(process view.Process, resultChan chan Value, errChan chan error, stopChan chan bool) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
-		errChan <- err
+		select {
+		case errChan <- err:
+		case <-stopChan:
+			log.Println("Error ignored:", err)
+		}
 		return
 	}
 	defer client.Close()
@@ -242,9 +261,22 @@ func readProcess(process view.Process, resultChan chan Value, errChan chan error
 
 	err = client.Call("ClientRequest.Read", currentView, &value)
 	if err != nil {
-		errChan <- err
+		select {
+		case errChan <- err:
+		case <-stopChan:
+			log.Println("Error ignored:", err)
+		}
 		return
 	}
 
-	resultChan <- value
+	select {
+	case resultChan <- value:
+	case <-stopChan:
+	}
+}
+
+func FillStopChan(stopChan chan bool, times int) {
+	for i := 0; i < times; i++ {
+		stopChan <- true
+	}
 }
