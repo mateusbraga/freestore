@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	DiffResultsErr = errors.New("Read divergence")
+	DiffResultsErr = errors.New("Read Divergence")
 	ViewUpdatedErr = errors.New("View Updated")
 )
 
@@ -88,7 +88,7 @@ func basicWriteQuorum(v Value) error {
 			if resultValue.Err != nil {
 				switch err := resultValue.Err.(type) {
 				default:
-					log.Fatal("resultValue from writeProcess returned unexpected error of type: %T", err)
+					log.Fatalf("resultValue from writeProcess returned unexpected error: %v (%T)", err, err)
 				case *view.OldViewError:
 					log.Println("View updated during basic write quorum")
 					currentView.Set(&err.NewView)
@@ -102,7 +102,7 @@ func basicWriteQuorum(v Value) error {
 			}
 
 		case err := <-errChan:
-			log.Println("+1 failure to write:", err)
+			log.Println("+1 fault to write:", err)
 			failed++
 
 			// currentView.F() needs an updated View, and we know we have an updated view when success > 0
@@ -204,7 +204,7 @@ func basicReadQuorum() (Value, error) {
 			if resultValue.Err != nil {
 				switch err := resultValue.Err.(type) {
 				default:
-					log.Fatal("resultValue from writeProcess returned unexpected error of type: %T", err)
+					log.Fatalf("resultValue from readProcess returned unexpected error: %v (%T)", err, err)
 				case *view.OldViewError:
 					log.Println("View updated during basic read quorum")
 					currentView.Set(&err.NewView)
@@ -227,7 +227,7 @@ func basicReadQuorum() (Value, error) {
 				return finalValue, nil
 			}
 		case err := <-errChan:
-			log.Println("+1 failure to read:", err)
+			log.Println("+1 fault to read:", err)
 			failed++
 
 			// currentView.F() needs an updated View, and we know we have an updated view when len(resultArray) > 0
