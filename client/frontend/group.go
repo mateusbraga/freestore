@@ -21,7 +21,7 @@ func init() {
 	//GetCurrentView(view.Process{addr})
 
 	currentView = view.New()
-	GetCurrentView(view.Process{"[::]:5000"})
+	getCurrentView(view.Process{"[::]:5000"})
 
 	//currentView.AddUpdate(view.Update{view.Join, view.Process{":5000"}})
 	//currentView.AddUpdate(view.Update{view.Join, view.Process{":5001"}})
@@ -30,8 +30,8 @@ func init() {
 	//expvar.Publish("currentView", currentView)
 }
 
-// GetCurrentViewClient asks process for the currentView
-func GetCurrentView(process view.Process) {
+// getCurrentView asks process for the currentView
+func getCurrentView(process view.Process) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		log.Fatal(err)

@@ -69,7 +69,7 @@ func basicWriteQuorum(v Value) error {
 	resultChan := make(chan Value, currentView.N())
 	errChan := make(chan error, currentView.N())
 	stopChan := make(chan bool, currentView.N())
-	defer FillStopChan(stopChan, currentView.N())
+	defer fillStopChan(stopChan, currentView.N())
 
 	v.View = view.New()
 	v.View.Set(&currentView)
@@ -186,7 +186,7 @@ func basicReadQuorum() (Value, error) {
 	resultChan := make(chan Value, currentView.N())
 	errChan := make(chan error, currentView.N())
 	stopChan := make(chan bool, currentView.N())
-	defer FillStopChan(stopChan, currentView.N())
+	defer fillStopChan(stopChan, currentView.N())
 
 	// Send read request to all
 	for _, process := range currentView.GetMembers() {
@@ -275,7 +275,7 @@ func readProcess(process view.Process, resultChan chan Value, errChan chan error
 	}
 }
 
-func FillStopChan(stopChan chan bool, times int) {
+func fillStopChan(stopChan chan bool, times int) {
 	for i := 0; i < times; i++ {
 		stopChan <- true
 	}
