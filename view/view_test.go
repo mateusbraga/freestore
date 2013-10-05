@@ -8,7 +8,7 @@ func TestViewEqual(t *testing.T) {
 	v1 := New()
 	v2 := New()
 
-	if !v1.Equal(v2) {
+	if !v1.Equal(&v2) {
 		t.Fatalf("Empty views v1 and v2 should be equal")
 	}
 
@@ -17,7 +17,7 @@ func TestViewEqual(t *testing.T) {
 	v1.AddUpdate(Update{Join, Process{"3"}})
 	v1.AddUpdate(Update{Leave, Process{"1"}})
 
-	if v1.Equal(v2) {
+	if v1.Equal(&v2) {
 		t.Fatalf("Views v1 and v2 should be different")
 	}
 
@@ -26,13 +26,13 @@ func TestViewEqual(t *testing.T) {
 	v2.AddUpdate(Update{Join, Process{"3"}})
 	v2.AddUpdate(Update{Leave, Process{"1"}})
 
-	if !v1.Equal(v2) {
+	if !v1.Equal(&v2) {
 		t.Fatalf("Views v1 and v2 should be equal")
 	}
 
 	v2.AddUpdate(Update{Leave, Process{"2"}})
 
-	if v1.Equal(v2) {
+	if v1.Equal(&v2) {
 		t.Fatalf("Views v1 and v2 should be different")
 	}
 }
@@ -50,9 +50,9 @@ func TestViewSet(t *testing.T) {
 		t.Fatalf("v1 should have 2 members")
 	}
 
-	v2.Set(v1)
+	v2.Set(&v1)
 
-	if !v1.Equal(v2) {
+	if !v1.Equal(&v2) {
 		t.Fatalf("Views v1 and v2 should be equal")
 	}
 }
@@ -101,5 +101,15 @@ func TestViewSize(t *testing.T) {
 
 	if f := v1.F(); f != 1 {
 		t.Errorf("Number of tolerable failures of 3 processes should be 1, not %d", f)
+	}
+
+	v1.AddUpdate(Update{Join, Process{"4"}})
+
+	if q := v1.QuorumSize(); q != 3 {
+		t.Errorf("Quorum of 4 processes should be 3, not %d", q)
+	}
+
+	if f := v1.F(); f != 1 {
+		t.Errorf("Number of tolerable failures of 4 processes should be 1, not %d", f)
 	}
 }
