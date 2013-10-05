@@ -5,7 +5,7 @@ import (
 	"net/rpc"
 	"sync"
 
-	"mateusbraga/gotf/view"
+	"mateusbraga/gotf/freestore/view"
 )
 
 var (

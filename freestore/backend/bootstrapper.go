@@ -11,7 +11,7 @@ import (
 	"database/sql"
 	_ "github.com/mattn/go-sqlite3"
 
-	"mateusbraga/gotf/view"
+	"mateusbraga/gotf/freestore/view"
 )
 
 // ------- Internal State ----------

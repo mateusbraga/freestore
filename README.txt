@@ -18,3 +18,11 @@ Requirements:
     implement permanent storage.
         Required by: Consensus
     Reliable communication: Like TCP.
+
+---
+
+TODO: 
+
+Usar mais interfaces, por exemplo, register poderia ser uma interface.
+View generators também poderia ser uma interface
+

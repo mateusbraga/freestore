@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"time"
 
-	"mateusbraga/gotf/client/frontend"
+	"mateusbraga/gotf/freestore/frontend"
 )
 
 func main() {

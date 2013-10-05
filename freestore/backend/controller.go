@@ -5,7 +5,7 @@ import (
 	"net/rpc"
 	"runtime"
 
-	"mateusbraga/gotf/view"
+	"mateusbraga/gotf/freestore/view"
 )
 
 type ControllerRequest int

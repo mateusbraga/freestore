@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/rpc"
 
-	"mateusbraga/gotf/view"
+	"mateusbraga/gotf/freestore/view"
 )
 
 var (

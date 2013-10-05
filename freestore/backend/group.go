@@ -2,7 +2,7 @@ package backend
 
 import (
 	"log"
-	"mateusbraga/gotf/view"
+	"mateusbraga/gotf/freestore/view"
 	"net/rpc"
 )
 

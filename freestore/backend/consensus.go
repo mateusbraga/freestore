@@ -8,7 +8,7 @@ import (
 	"net/rpc"
 	"sync"
 
-	"mateusbraga/gotf/view"
+	"mateusbraga/gotf/freestore/view"
 
 	"database/sql"
 	_ "github.com/mattn/go-sqlite3"

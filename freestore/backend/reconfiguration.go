@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"mateusbraga/gotf/view"
+	"mateusbraga/gotf/freestore/view"
 )
 
 // ---------- Internal State ------------
