@@ -8,18 +8,12 @@ import (
 	"mateusbraga/gotf/view"
 )
 
+// --------- External State ---------
+
+// --------- Internal State ---------
 var register Value
 
-type Value struct {
-	Value     int
-	Timestamp int
-
-	View view.View
-	Err  error
-
-	mu sync.RWMutex
-}
-
+//  ---------- Interface -------------
 type ClientRequest int
 
 func (r *ClientRequest) Read(clientView view.View, reply *Value) error {
@@ -73,11 +67,23 @@ func (r *ClientRequest) GetCurrentView(value int, reply *view.View) error {
 	return nil
 }
 
+// --------- Bootstrapping ---------
 func init() {
-	register.mu.Lock()
+	register.mu.Lock() // The register starts locked
 	register.Value = 3
 	register.Timestamp = 1
 
 	clientRequest := new(ClientRequest)
 	rpc.Register(clientRequest)
+}
+
+// --------- Types ---------
+type Value struct {
+	Value     int
+	Timestamp int
+
+	View view.View
+	Err  error
+
+	mu sync.RWMutex
 }

@@ -14,12 +14,14 @@ import (
 	"mateusbraga/gotf/view"
 )
 
+// ------- Internal State ----------
 var (
 	listener    net.Listener
 	thisProcess view.Process
 	db          *sql.DB
 )
 
+// ------- Bootstrapping -----------
 func Run(port uint, join bool, master string) {
 	var err error
 
@@ -34,7 +36,7 @@ func Run(port uint, join bool, master string) {
 	//log.Fatal(err)
 	//}
 
-	InitCurrentView(master)
+	initCurrentView(master)
 
 	if currentView.HasMember(thisProcess) {
 		register.mu.Unlock() // Enable operations

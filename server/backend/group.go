@@ -6,13 +6,15 @@ import (
 	"net/rpc"
 )
 
+// -------- Internal State ---------
 var currentView view.View
 
+// -------- Bootstrapping ---------
 func init() {
 	currentView = view.New()
 }
 
-func InitCurrentView(master string) {
+func initCurrentView(master string) {
 	if thisProcess.Addr == "[::]:5000" || thisProcess.Addr == "[::]:5001" || thisProcess.Addr == "[::]:5002" {
 		currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5000"}})
 		currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5001"}})
@@ -22,6 +24,8 @@ func InitCurrentView(master string) {
 	}
 	log.Println("Init current view:", currentView)
 }
+
+// ------------- Others ------------
 
 // GetCurrentViewClient asks process for the currentView
 func GetCurrentView(process view.Process) {

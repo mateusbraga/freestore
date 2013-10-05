@@ -12,6 +12,7 @@ import (
 	"mateusbraga/gotf/view"
 )
 
+// ---------- Internal State ------------
 var (
 	recv      map[view.Update]bool
 	recvMutex sync.RWMutex
@@ -24,6 +25,7 @@ var (
 	resetTimer chan bool
 )
 
+// ---------- Bootstrapping ------------
 func init() {
 	recv = make(map[view.Update]bool)
 
@@ -39,6 +41,8 @@ func init() {
 	go resetTimerLoop()
 }
 
+// ---------- Gorotines ------------
+
 func resetTimerLoop() {
 	timer := time.AfterFunc(10*time.Second, reconfigurationTask)
 	for {
@@ -47,6 +51,7 @@ func resetTimerLoop() {
 	}
 }
 
+// ---------- Others ------------
 type newViewSeq struct {
 	ViewSeq        []view.View
 	AssociatedView view.View
@@ -305,6 +310,7 @@ func reconfigurationTask() {
 func generateViewSequenceWithConsensus(associatedView view.View, seq []view.View) {
 	log.Println("start generateViewSequenceWithConsensus")
 	// assert only updated views on seq
+	//TODO testar se eh diferente?
 	for _, view := range seq {
 		if !view.Contains(&associatedView) {
 			log.Fatalln("Found an old view in view sequence:", seq)

@@ -57,22 +57,27 @@ func (consensusTable *ConsensusTable) GetConsensus(id int) *Consensus {
 }
 
 type Proposal struct {
-	ConsensusId int
-	N           int
-	Value       interface{}
-	Err         error
+	ConsensusId int //ConsensusId makes possible multiples consensus to run at the same time
+
+	N int // N is the proposal number
+
+	Value interface{} // Value proposed
+
+	Err error // Err is used to return an error related to the proposal
 }
 
 type Consensus struct {
-	Id int
+	Id int // Id makes possible multiples consensus to run at the same time
 
 	acceptedProposal          Proposal // highest numbered accepted proposal
 	lastPromiseProposalNumber int      // highest numbered prepare request
-	learnCounter              int      // number of learn requests
+	learnCounter              int      // number of learn requests received
 
+	//TODO check the use of this mutex
 	mu sync.RWMutex
 
 	CallbackLearnChan chan interface{}
+	//TODO maybe add a field to keep the learn value
 }
 
 func (consensus *Consensus) SetLastPromiseProposalNumber(proposal *Proposal) {
