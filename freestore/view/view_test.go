@@ -113,3 +113,38 @@ func TestViewSize(t *testing.T) {
 		t.Errorf("Number of tolerable failures of 4 processes should be 1, not %d", f)
 	}
 }
+
+func TestViewLessUpdatedThan(t *testing.T) {
+	v1 := New()
+	v2 := New()
+
+	v1.AddUpdate(Update{Join, Process{"1"}})
+	v1.AddUpdate(Update{Join, Process{"2"}})
+
+	v2.AddUpdate(Update{Join, Process{"1"}})
+
+	if v1.LessUpdatedThan(&v2) {
+		t.Errorf("v1 is not less updated than v2!")
+	}
+
+	if !v2.LessUpdatedThan(&v1) {
+		t.Errorf("v2 is less updated than v1!")
+	}
+
+	v2.AddUpdate(Update{Join, Process{"3"}})
+
+	if !v1.LessUpdatedThan(&v2) {
+		t.Errorf("v1 is less updated than v2!")
+	}
+
+	if !v2.LessUpdatedThan(&v1) {
+		t.Errorf("v2 is less updated than v1!")
+	}
+
+	v1.AddUpdate(Update{Join, Process{"3"}})
+	v2.AddUpdate(Update{Join, Process{"2"}})
+
+	if v2.LessUpdatedThan(&v1) {
+		t.Errorf("v2 is not less updated than v1!")
+	}
+}

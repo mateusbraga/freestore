@@ -45,16 +45,16 @@ func (v *View) String() string {
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "{")
 	first := true
-	fmt.Fprintf(&b, "{")
-	for k, _ := range v.Entries {
-		if !first {
-			fmt.Fprintf(&b, ", ")
-		}
-		fmt.Fprintf(&b, "<%v, %v>", k.Type, k.Process)
-		first = false
-	}
-	fmt.Fprintf(&b, "}")
-	fmt.Fprintf(&b, "{")
+	//fmt.Fprintf(&b, "{")
+	//for k, _ := range v.Entries {
+	//if !first {
+	//fmt.Fprintf(&b, ", ")
+	//}
+	//fmt.Fprintf(&b, "<%v, %v>", k.Type, k.Process)
+	//first = false
+	//}
+	//fmt.Fprintf(&b, "}")
+	//fmt.Fprintf(&b, "{")
 	first = true
 	for k, _ := range v.Members {
 		if !first {
@@ -63,7 +63,7 @@ func (v *View) String() string {
 		fmt.Fprintf(&b, "%v", k.Addr)
 		first = false
 	}
-	fmt.Fprintf(&b, "}")
+	//fmt.Fprintf(&b, "}")
 	fmt.Fprintf(&b, "}")
 	return b.String()
 }
@@ -99,6 +99,26 @@ func (v *View) Contains(v2 *View) bool {
 		}
 	}
 	return true
+}
+
+func (v *View) LessUpdatedThan(v2 *View) bool {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
+	v2.mu.RLock()
+	defer v2.mu.RUnlock()
+
+	if len(v2.Entries) > len(v.Entries) {
+		return true
+	}
+
+	for k2, _ := range v2.Entries {
+		if _, ok := v.Entries[k2]; !ok {
+			return true
+		}
+	}
+	return false
+
 }
 
 func (v *View) Equal(v2 *View) bool {
