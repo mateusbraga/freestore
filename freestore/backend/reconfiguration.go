@@ -309,6 +309,7 @@ func reconfigurationTask() {
 
 func generateViewSequenceWithConsensus(associatedView view.View, seq []view.View) {
 	log.Println("start generateViewSequenceWithConsensus")
+
 	// assert only updated views on seq
 	//TODO testar se eh diferente?
 	for _, view := range seq {
@@ -350,7 +351,7 @@ func Join() error {
 	resultChan := make(chan error, currentView.N())
 	errChan := make(chan error, currentView.N())
 	stopChan := make(chan bool, currentView.N())
-	defer FillStopChan(stopChan, currentView.N())
+	defer fillStopChan(stopChan, currentView.N())
 
 	reconfig := ReconfigMsg{CurrentView: view.New(), Update: view.Update{view.Join, thisProcess}}
 	reconfig.CurrentView.Set(&currentView)
@@ -390,7 +391,7 @@ func Leave() error {
 	resultChan := make(chan error, currentView.N())
 	errChan := make(chan error, currentView.N())
 	stopChan := make(chan bool, currentView.N())
-	defer FillStopChan(stopChan, currentView.N())
+	defer fillStopChan(stopChan, currentView.N())
 
 	reconfig := ReconfigMsg{Update: view.Update{view.Leave, thisProcess}}
 	reconfig.CurrentView = view.New()

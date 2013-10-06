@@ -6,10 +6,8 @@ import (
 	"net/rpc"
 )
 
-// -------- Internal State ---------
 var currentView view.View
 
-// -------- Bootstrapping ---------
 func init() {
 	currentView = view.New()
 }
@@ -20,15 +18,13 @@ func initCurrentView(master string) {
 		currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5001"}})
 		currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5002"}})
 	} else {
-		GetCurrentView(view.Process{master})
+		getCurrentView(view.Process{master})
 	}
 	log.Println("Init current view:", currentView)
 }
 
-// ------------- Others ------------
-
 // GetCurrentViewClient asks process for the currentView
-func GetCurrentView(process view.Process) {
+func getCurrentView(process view.Process) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		log.Fatal(err)
