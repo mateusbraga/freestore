@@ -18,9 +18,11 @@ var (
 	thisProcess view.Process
 	rpcServer   *rpc.Server
 	db          *sql.DB
+
+	useConsensus bool
 )
 
-func Run(port uint, join bool, master string) {
+func Run(port uint, join bool, master string, useConsensus bool) {
 	var err error
 
 	listener, err = net.Listen("tcp", fmt.Sprintf(":%d", port))

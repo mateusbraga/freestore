@@ -48,7 +48,6 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 		err.NewView.Set(&currentView)
 
 		reply.Err = err
-		log.Println("Done write request")
 		return nil
 	}
 
@@ -57,6 +56,7 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 		register.Timestamp = value.Timestamp
 	}
 
+	log.Println("Done write request")
 	return nil
 }
 

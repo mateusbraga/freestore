@@ -24,7 +24,7 @@ func findMostUpdatedView(seq []view.View) view.View {
 	for i, v := range seq {
 		isMostUpdated := true
 		for _, v2 := range seq[i+1:] {
-			if !v.Contains(&v2) {
+			if v.LessUpdatedThan(&v2) {
 				isMostUpdated = false
 				break
 			}
@@ -59,7 +59,7 @@ func getViewGenerator(associatedView view.View, initialSeq []view.View) ViewGene
 	return vgi
 }
 
-//TODO decide how to kill this goroutine
+//TODO Send StopWorker to its jobChan to kill the goroutine
 func ViewGeneratorWorker(associatedView view.View, seq []view.View, jobChan chan ViewGeneratorJob) {
 	var proposedSeq []view.View
 	var lastConvergedSeq []view.View
@@ -178,9 +178,11 @@ func ViewGeneratorWorker(associatedView view.View, seq []view.View, jobChan chan
 
 			// Quorum check
 			if seqConvQuorumCounter.count(jobPointer, associatedView.QuorumSize()) {
-				newViewSeqChan <- newViewSeq{jobPointer.Seq, associatedView}
+				viewSeqProcessingChan <- newViewSeq{jobPointer.Seq, associatedView}
 			}
 
+		case StopWorker:
+			return
 		default:
 			log.Fatalln("Something is wrong with the switch statement")
 		}
@@ -194,12 +196,39 @@ func generateViewSequenceWithoutConsensus(associatedView view.View, seq []view.V
 
 	// assert only updated views on seq
 	for _, view := range seq {
-		if !view.Contains(&associatedView) || associatedView.Contains(&view) {
+		if view.LessUpdatedThan(&associatedView) {
 			log.Fatalln("Found an old view in view sequence:", seq, ". associatedView:", associatedView)
 		}
 	}
 
 	_ = getViewGenerator(associatedView, seq)
+}
+
+func generateViewSequenceWithConsensus(associatedView view.View, seq []view.View) {
+	log.Println("start generateViewSequenceWithConsensus")
+
+	// assert only updated views on seq
+	for _, view := range seq {
+		if view.LessUpdatedThan(&associatedView) {
+			log.Fatalln("Found an old view in view sequence:", seq, ". associatedView:", associatedView)
+		}
+	}
+
+	callbackChan := make(chan interface{})
+	consensus := GetConsensusOrCreate(currentView.NumberOfEntries(), callbackChan)
+	if currentView.GetProcessPosition(thisProcess) == 0 {
+		log.Println("CONSENSUS: leader")
+		consensus.Propose(seq)
+	}
+	log.Println("CONSENSUS: wait learn message")
+	value := <-consensus.CallbackLearnChan
+
+	result, ok := value.(*[]view.View)
+	if !ok {
+		log.Fatalf("FATAL: consensus on generateViewSequenceWithConsensus got %T %v\n", value, value)
+	}
+	viewSeqProcessingChan <- newViewSeq{*result, associatedView}
+	log.Println("end generateViewSequenceWithConsensus")
 }
 
 type viewSeqQuorumCounterType struct {
@@ -208,14 +237,12 @@ type viewSeqQuorumCounterType struct {
 }
 
 func (quorumCounter *viewSeqQuorumCounterType) count(newViewSeq *ViewSeq, quorumSize int) bool {
-	//TODO improve this - cleanup viewS or change algorithm
+	//TODO improve this - cleanup views or change algorithm
 	for i, _ := range quorumCounter.list {
 		if quorumCounter.list[i].Equal(*newViewSeq) {
 			quorumCounter.counter[i]++
 
-			if quorumCounter.counter[i] == quorumSize {
-				return true
-			}
+			return quorumCounter.counter[i] == quorumSize
 		}
 	}
 
@@ -231,14 +258,12 @@ type seqConvQuorumCounterType struct {
 }
 
 func (quorumCounter *seqConvQuorumCounterType) count(newSeqConv *SeqConv, quorumSize int) bool {
-	//TODO improve this - cleanup viewS or change algorithm
+	//TODO improve this - cleanup views or change algorithm
 	for i, _ := range quorumCounter.list {
 		if quorumCounter.list[i].Equal(*newSeqConv) {
 			quorumCounter.counter[i]++
 
-			if quorumCounter.counter[i] == quorumSize {
-				return true
-			}
+			return quorumCounter.counter[i] == quorumSize
 		}
 	}
 
@@ -269,6 +294,8 @@ func (seqConv SeqConv) Equal(seqConv2 SeqConv) bool {
 	}
 	return true
 }
+
+type StopWorker interface{}
 
 type ViewSeq struct {
 	ProposedSeq      []view.View
