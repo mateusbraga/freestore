@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/rpc"
 	"os"
-	"time"
 
 	"database/sql"
 	_ "github.com/mattn/go-sqlite3"
@@ -14,14 +13,13 @@ import (
 	"mateusbraga/gotf/freestore/view"
 )
 
-// ------- Internal State ----------
 var (
 	listener    net.Listener
 	thisProcess view.Process
+	rpcServer   *rpc.Server
 	db          *sql.DB
 )
 
-// ------- Bootstrapping -----------
 func Run(port uint, join bool, master string) {
 	var err error
 
@@ -32,26 +30,19 @@ func Run(port uint, join bool, master string) {
 	log.Println("Listening on address:", listener.Addr())
 
 	thisProcess = view.Process{listener.Addr().String()}
-	//if err := view.PublishAddr(thisProcess.Addr); err != nil {
-	//log.Fatal(err)
-	//}
 
 	initCurrentView(master)
+	initStorage(port)
 
 	if currentView.HasMember(thisProcess) {
-		register.mu.Unlock() // Enable operations
+		register.mu.Unlock() // Enable r/w operations
 	} else {
 		if join {
 			Join()
 		}
 	}
 
-	initStorage(port)
-
 	rpc.Accept(listener)
-
-	// Sleep a little to give time to finish pending gorotines (from rpc)
-	time.Sleep(3 * time.Second)
 }
 
 func initStorage(port uint) {
