@@ -1,10 +1,8 @@
 /*
-frontend is the Front End to the servers and contain the quorum logic
+frontend is how clients should access the system
+
 
 TODO:
-    An old view can make read/write fail with no necessity
-        Add logic to update view according to the view reconfiguration
-
     Because we send so many requests at once using threads, we may have problems having buffer overflow on the socket buffer.
         We could limit the number of concurrent threads sending a request.
 */
@@ -19,12 +17,11 @@ import (
 )
 
 var (
-	DiffResultsErr = errors.New("Read Divergence")
-	ViewUpdatedErr = errors.New("View Updated")
+	diffResultsErr = errors.New("Read Divergence")
+	viewUpdatedErr = errors.New("View Updated")
 )
 
-type Value struct {
-	// Read
+type RegisterMsg struct {
 	Value     int
 	Timestamp int
 
@@ -33,28 +30,28 @@ type Value struct {
 	Err error
 }
 
-// Write implements the quorum write protocol.
+// Write v on the system by running the quorum write protocol.
 func Write(v int) {
 	readValue, err := basicReadQuorum()
 	if err != nil {
 		switch err {
-		case ViewUpdatedErr:
+		case viewUpdatedErr:
 			Write(v)
-		case DiffResultsErr:
-			// Ignore - we will write a new value anyway
+		case diffResultsErr:
+			// Do nothing - we will write a new value anyway
 		default:
 			log.Fatal(err)
 		}
 	}
 
-	writeValue := Value{}
-	writeValue.Value = v
-	writeValue.Timestamp = readValue.Timestamp + 1
+	writeMsg := RegisterMsg{}
+	writeMsg.Value = v
+	writeMsg.Timestamp = readValue.Timestamp + 1
 
-	err = basicWriteQuorum(writeValue)
+	err = basicWriteQuorum(writeMsg)
 	if err != nil {
 		switch err {
-		case ViewUpdatedErr:
+		case viewUpdatedErr:
 			Write(v)
 		default:
 			log.Fatal(err)
@@ -64,19 +61,19 @@ func Write(v int) {
 
 // basicWriteQuorum writes v to all processes on the currentView and return as soon as it gets the confirmation from a quorum
 //
-// If the view needs to be updated, it will update the view and return ViewUpdatedErr. Otherwise, returns nil
-func basicWriteQuorum(v Value) error {
-	resultChan := make(chan Value, currentView.N())
+// If the view needs to be updated, it will update the view and return viewUpdatedErr. Otherwise, returns nil
+func basicWriteQuorum(writeMsg RegisterMsg) error {
+	resultChan := make(chan RegisterMsg, currentView.N())
 	errChan := make(chan error, currentView.N())
 	stopChan := make(chan bool, currentView.N())
 	defer fillStopChan(stopChan, currentView.N())
 
-	v.View = view.New()
-	v.View.Set(&currentView)
+	writeMsg.View = view.New()
+	writeMsg.View.Set(&currentView)
 
 	// Send write request to all
 	for _, process := range currentView.GetMembers() {
-		go writeProcess(process, v, resultChan, errChan, stopChan)
+		go writeProcess(process, writeMsg, resultChan, errChan, stopChan)
 	}
 
 	// Get quorum
@@ -92,7 +89,7 @@ func basicWriteQuorum(v Value) error {
 				case *view.OldViewError:
 					log.Println("View updated during basic write quorum")
 					currentView.Set(&err.NewView)
-					return ViewUpdatedErr
+					return viewUpdatedErr
 				}
 			}
 
@@ -102,7 +99,7 @@ func basicWriteQuorum(v Value) error {
 			}
 
 		case err := <-errChan:
-			log.Println("+1 fault to write:", err)
+			log.Println("+1 error on write:", err)
 			failed++
 
 			// currentView.F() needs an updated View, and we know we have an updated view when success > 0
@@ -119,26 +116,26 @@ func basicWriteQuorum(v Value) error {
 	}
 }
 
-// writeProcess writes value to process and return the result through resultChan or an error through errChan
-func writeProcess(process view.Process, value Value, resultChan chan Value, errChan chan error, stopChan chan bool) {
+// writeProcess sends a write request with writeMsg to process and return the result through resultChan or an error through errChan if stopChan is empty
+func writeProcess(process view.Process, writeMsg RegisterMsg, resultChan chan RegisterMsg, errChan chan error, stopChan chan bool) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		select {
 		case errChan <- err:
 		case <-stopChan:
-			log.Println("Error ignored:", err)
+			log.Println("Error masked:", err)
 		}
 		return
 	}
 	defer client.Close()
 
-	var result Value
-	err = client.Call("ClientRequest.Write", value, &result)
+	var result RegisterMsg
+	err = client.Call("ClientRequest.Write", writeMsg, &result)
 	if err != nil {
 		select {
 		case errChan <- err:
 		case <-stopChan:
-			log.Println("Error ignored:", err)
+			log.Println("Error masked:", err)
 		}
 		return
 	}
@@ -151,39 +148,39 @@ func writeProcess(process view.Process, value Value, resultChan chan Value, errC
 
 // Read executes the quorum read protocol.
 func Read() int {
-	value, err := basicReadQuorum()
+	readMsg, err := basicReadQuorum()
 	if err != nil {
 		switch err {
-		case DiffResultsErr:
+		case diffResultsErr:
 			log.Println("Found divergence: Going to 2nd phase of read protocol")
 
-			err := basicWriteQuorum(value)
+			err := basicWriteQuorum(readMsg)
 			if err != nil {
 				switch err {
-				case ViewUpdatedErr:
+				case viewUpdatedErr:
 					return Read()
 				default:
 					log.Fatal(err)
 				}
 			}
 
-		case ViewUpdatedErr:
+		case viewUpdatedErr:
 			return Read()
 		default:
 			log.Fatal(err)
 		}
 	}
 
-	return value.Value
+	return readMsg.Value
 }
 
-// basicReadQuorum reads a Value from all members of the most updated currentView returning the most recent one. It decides which is the most recent one as soon as it gets a quorum
+// basicReadQuorum reads a RegisterMsg from all members of the most updated currentView returning the most recent one. It decides which is the most recent one as soon as it gets a quorum
 //
-// Value is only valid if err == nil
-// If the view needs to be updated, it will update the view and return ViewUpdatedErr.
-// If any value returned by a process differ, it will return DiffResultsErr
-func basicReadQuorum() (Value, error) {
-	resultChan := make(chan Value, currentView.N())
+// RegisterMsg is only valid if err == nil
+// If the view needs to be updated, it will update the view and return viewUpdatedErr.
+// If any value returned by a process differ, it will return diffResultsErr
+func basicReadQuorum() (RegisterMsg, error) {
+	resultChan := make(chan RegisterMsg, currentView.N())
 	errChan := make(chan error, currentView.N())
 	stopChan := make(chan bool, currentView.N())
 	defer fillStopChan(stopChan, currentView.N())
@@ -195,8 +192,8 @@ func basicReadQuorum() (Value, error) {
 
 	// Get quorum
 	var failed int
-	var resultArray []Value
-	var finalValue Value
+	var resultArray []RegisterMsg
+	var finalValue RegisterMsg
 	finalValue.Timestamp = -1 // Make it negative to force value.Timestamp > finalValue.Timestamp
 	for {
 		select {
@@ -208,7 +205,7 @@ func basicReadQuorum() (Value, error) {
 				case *view.OldViewError:
 					log.Println("View updated during basic read quorum")
 					currentView.Set(&err.NewView)
-					return Value{}, ViewUpdatedErr
+					return RegisterMsg{}, viewUpdatedErr
 				}
 			}
 
@@ -221,60 +218,61 @@ func basicReadQuorum() (Value, error) {
 			if len(resultArray) == currentView.QuorumSize() {
 				for _, val := range resultArray {
 					if finalValue.Timestamp != val.Timestamp { // There are divergence on the processes
-						return finalValue, DiffResultsErr
+						return finalValue, diffResultsErr
 					}
 				}
 				return finalValue, nil
 			}
 		case err := <-errChan:
-			log.Println("+1 fault to read:", err)
+			log.Println("+1 error on read:", err)
 			failed++
 
 			// currentView.F() needs an updated View, and we know we have an updated view when len(resultArray) > 0
 			if len(resultArray) > 0 {
 				if failed > currentView.F() {
-					return Value{}, errors.New("Failed to get read quorun")
+					return RegisterMsg{}, errors.New("Failed to get read quorun")
 				}
 			} else {
 				if failed == currentView.N() {
-					return Value{}, errors.New("Failed to get read quorun")
+					return RegisterMsg{}, errors.New("Failed to get read quorun")
 				}
 			}
 		}
 	}
 }
 
-// readProcess reads the value on process and return an err through errChan or a result through resultChan
-func readProcess(process view.Process, resultChan chan Value, errChan chan error, stopChan chan bool) {
+// readProcess sends a read request to process and return an err through errChan or a result through resultChan if stopChan is empty
+func readProcess(process view.Process, resultChan chan RegisterMsg, errChan chan error, stopChan chan bool) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		select {
 		case errChan <- err:
 		case <-stopChan:
-			log.Println("Error ignored:", err)
+			log.Println("Error masked:", err)
 		}
 		return
 	}
 	defer client.Close()
 
-	var value Value
+	var readMsg RegisterMsg
 
-	err = client.Call("ClientRequest.Read", currentView, &value)
+	err = client.Call("ClientRequest.Read", currentView, &readMsg)
 	if err != nil {
 		select {
 		case errChan <- err:
 		case <-stopChan:
-			log.Println("Error ignored:", err)
+			log.Println("Error masked:", err)
 		}
 		return
 	}
 
 	select {
-	case resultChan <- value:
+	case resultChan <- readMsg:
 	case <-stopChan:
 	}
 }
 
+// fillStopChan send times * 'true' on stopChan. It is used to signal completion to readProcess and writeProcess.
 func fillStopChan(stopChan chan bool, times int) {
 	for i := 0; i < times; i++ {
 		stopChan <- true

@@ -1,7 +1,6 @@
 package frontend
 
 import (
-	//"expvar"
 	"log"
 	"net/rpc"
 
@@ -13,21 +12,20 @@ var (
 )
 
 func init() {
-	//addr, err := view.GetRunningServer()
-	//if err != nil {
-	//log.Fatal(err)
-	//}
-
-	//GetCurrentView(view.Process{addr})
-
 	currentView = view.New()
 	getCurrentView(view.Process{"[::]:5000"})
 
+	// Option 1: Static initial view
 	//currentView.AddUpdate(view.Update{view.Join, view.Process{":5000"}})
 	//currentView.AddUpdate(view.Update{view.Join, view.Process{":5001"}})
 	//currentView.AddUpdate(view.Update{view.Join, view.Process{":5002"}})
 
-	//expvar.Publish("currentView", currentView)
+	// Option 2: Get view on predefined location
+	//addr, err := view.GetRunningServer()
+	//if err != nil {
+	//log.Fatal(err)
+	//}
+	//GetCurrentView(view.Process{addr})
 }
 
 // getCurrentView asks process for the currentView
@@ -44,6 +42,6 @@ func getCurrentView(process view.Process) {
 		log.Fatal(err)
 	}
 
+	log.Printf("Updating view from %v to %v\n", currentView, newView)
 	currentView.Set(&newView)
-	log.Println("Got new current view:", currentView)
 }
