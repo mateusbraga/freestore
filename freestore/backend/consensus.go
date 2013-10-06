@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	OldProposalNumberErr OldProposalNumberError
+	oldProposalNumberErr OldProposalNumberError
 	consensusTable       ConsensusTable
 )
 
@@ -28,6 +28,7 @@ type ConsensusTable struct {
 	mu    sync.RWMutex
 }
 
+// GetConsensusOrCreate return the consensus instance with id. Create if it does not exist.
 func GetConsensusOrCreate(id int, callbackLearnChan chan interface{}) *Consensus {
 	consensusTable.mu.Lock()
 	defer consensusTable.mu.Unlock()
@@ -36,22 +37,8 @@ func GetConsensusOrCreate(id int, callbackLearnChan chan interface{}) *Consensus
 		return consensus
 	} else {
 		log.Println("Creating consensus with id", id)
-		consensus := &Consensus{Id: id, CallbackLearnChan: callbackLearnChan}
-		consensusTable.Table[consensus.Id] = consensus
-		return consensus
-	}
-}
-
-func (consensusTable *ConsensusTable) GetConsensus(id int) *Consensus {
-	consensusTable.mu.Lock()
-	defer consensusTable.mu.Unlock()
-
-	if consensus, ok := consensusTable.Table[id]; ok {
-		return consensus
-	} else {
-		log.Println("Creating consensus with id", id)
-		consensus := &Consensus{Id: id, CallbackLearnChan: make(chan interface{}, 1)}
-		consensusTable.Table[consensus.Id] = consensus
+		consensus := &Consensus{id: id, CallbackLearnChan: callbackLearnChan}
+		consensusTable.Table[consensus.id] = consensus
 		return consensus
 	}
 }
@@ -67,61 +54,66 @@ type Proposal struct {
 }
 
 type Consensus struct {
-	Id int // Id makes possible multiples consensus to run at the same time
+	id int // id makes possible multiples consensus to run at the same time
 
 	acceptedProposal          Proposal // highest numbered accepted proposal
 	lastPromiseProposalNumber int      // highest numbered prepare request
 	learnCounter              int      // number of learn requests received
 
-	//TODO check the use of this mutex
 	mu sync.RWMutex
 
 	CallbackLearnChan chan interface{}
-	//TODO maybe add a field to keep the learn value
 }
 
-func (consensus *Consensus) SetLastPromiseProposalNumber(proposal *Proposal) {
-	consensus.savePrepareRequest(proposal)
+// setLastPromiseProposalNumber save prepare proposal to permanent storage and then sets consensus.lastPromiseProposalNumber.
+//
+// This function must not be executed without concorrency control
+func (consensus *Consensus) setLastPromiseProposalNumber(proposal *Proposal) {
+	savePrepareRequest(consensus.id, proposal)
 	consensus.lastPromiseProposalNumber = proposal.N
 }
 
-func (consensus *Consensus) SetAcceptedProposal(proposal *Proposal) {
-	consensus.saveAcceptedProposal(proposal)
+// setAcceptedProposal save accepted proposal to permanent storage and then sets consensus.acceptedProposal.
+//
+// This function must not be executed without concorrency control
+func (consensus *Consensus) setAcceptedProposal(proposal *Proposal) {
+	saveAcceptedProposal(consensus.id, proposal)
 	consensus.acceptedProposal = *proposal
 }
 
-func (consensus *Consensus) NewPrepareRequest(proposal *Proposal, reply *Proposal) {
+// newPrepareRequest processes the proposal prepare request and returns reply. Like a rpc funcion.
+func (consensus *Consensus) newPrepareRequest(proposal *Proposal, reply *Proposal) {
 	consensus.mu.Lock()
 	defer consensus.mu.Unlock()
 
 	if proposal.N > consensus.lastPromiseProposalNumber {
-		consensus.SetLastPromiseProposalNumber(proposal)
+		consensus.setLastPromiseProposalNumber(proposal)
 		reply.N = consensus.acceptedProposal.N
 		reply.Value = consensus.acceptedProposal.Value
 	} else {
-		reply.Err = OldProposalNumberErr
+		reply.Err = oldProposalNumberErr
 	}
 	return
 }
 
-func (consensus *Consensus) NewAcceptRequest(proposal *Proposal, reply *Proposal) {
+// newAcceptRequest processes the proposal accept request and returns reply. Like a rpc funcion.
+func (consensus *Consensus) newAcceptRequest(proposal *Proposal, reply *Proposal) {
 	consensus.mu.Lock()
 	defer consensus.mu.Unlock()
 
 	if proposal.N >= consensus.lastPromiseProposalNumber {
-		consensus.SetAcceptedProposal(proposal)
+		consensus.setAcceptedProposal(proposal)
 		go spreadAcceptance(*proposal)
 	} else {
-		reply.Err = OldProposalNumberErr
+		reply.Err = oldProposalNumberErr
 	}
 	return
 }
 
-func (consensus *Consensus) NewLearnRequest(proposal Proposal) {
+// newLearnRequest processes the proposal learn request.
+func (consensus *Consensus) newLearnRequest(proposal Proposal) {
 	consensus.mu.Lock()
 	defer consensus.mu.Unlock()
-
-	//log.Println("learn", proposal)
 
 	consensus.learnCounter++
 	if consensus.learnCounter == currentView.QuorumSize() {
@@ -129,12 +121,18 @@ func (consensus *Consensus) NewLearnRequest(proposal Proposal) {
 	}
 }
 
+// Propose proposes the value to be agreed upon on this consensus instance. It should be run only by the leader process to guarantee termination.
+//
+// Has concurrency control
 func (consensus *Consensus) Propose(defaultValue interface{}) {
-	proposalNumber := consensus.getNextProposalNumber()
+	consensusId := consensus.Id()
 
-	value, err := consensus.Prepare(proposalNumber)
+	proposalNumber := getNextProposalNumber(consensusId)
+
+	value, err := consensus.prepare(proposalNumber)
 	if err != nil {
-		log.Println("WARN: Failed to propose. Could not pass prepare phase")
+		// Could not get quorum or old proposal number
+		log.Println("WARN: Failed to propose. Could not pass prepare phase: ", err)
 		return
 	}
 
@@ -143,25 +141,29 @@ func (consensus *Consensus) Propose(defaultValue interface{}) {
 	}
 
 	proposal := Proposal{N: proposalNumber, Value: value}
-	if err := consensus.Accept(proposal); err != nil {
-		log.Println("WARN: Failed to propose. Could not pass accept phase")
+	if err := consensus.accept(proposal); err != nil {
+		// Could not get quorum or old proposal number
+		log.Println("WARN: Failed to propose. Could not pass accept phase: ", err)
 		return
 	}
 }
 
-func FillStopChan(stopChan chan bool, times int) {
-	for i := 0; i < times; i++ {
-		stopChan <- true
-	}
+// Propose proposes the value to be agreed upon on this consensus instance. It should be run only by the leader process to guarantee termination.
+func (consensus *Consensus) Id() int {
+	consensus.mu.Lock()
+	defer consensus.mu.Unlock()
+
+	return consensus.id
 }
 
-func (consensus *Consensus) Prepare(proposalNumber int) (interface{}, error) {
+// prepare is a stage of the Propose funcion
+func (consensus *Consensus) prepare(proposalNumber int) (interface{}, error) {
 	resultChan := make(chan Proposal, currentView.N())
 	errChan := make(chan error, currentView.N())
 	stopChan := make(chan bool, currentView.N())
-	defer FillStopChan(stopChan, currentView.N())
+	defer fillStopChan(stopChan, currentView.N())
 
-	proposal := Proposal{N: proposalNumber, ConsensusId: consensus.Id}
+	proposal := Proposal{N: proposalNumber, ConsensusId: consensus.Id()}
 
 	// Send read request to all
 	for _, process := range currentView.GetMembers() {
@@ -199,13 +201,14 @@ func (consensus *Consensus) Prepare(proposalNumber int) (interface{}, error) {
 	}
 }
 
-func (consensus *Consensus) Accept(proposal Proposal) error {
+// accept is a stage of the Propose funcion.
+func (consensus *Consensus) accept(proposal Proposal) error {
 	resultChan := make(chan Proposal, currentView.N())
 	errChan := make(chan error, currentView.N())
 	stopChan := make(chan bool, currentView.N())
-	defer FillStopChan(stopChan, currentView.N())
+	defer fillStopChan(stopChan, currentView.N())
 
-	proposal.ConsensusId = consensus.Id
+	proposal.ConsensusId = consensus.Id()
 
 	// Send accept request to all
 	for _, process := range currentView.GetMembers() {
@@ -239,10 +242,13 @@ func (consensus *Consensus) Accept(proposal Proposal) error {
 	}
 }
 
-func (consensus *Consensus) checkForChosenValue() (interface{}, error) {
-	proposalNumber := consensus.getNextProposalNumber()
+// CheckForChosenValue checks to see if any value has already been agreed upon on this consensus instance.
+func (consensus *Consensus) CheckForChosenValue() (interface{}, error) {
+	consensusId := consensus.Id()
 
-	value, err := consensus.Prepare(proposalNumber)
+	proposalNumber := getNextProposalNumber(consensusId)
+
+	value, err := consensus.prepare(proposalNumber)
 	if err != nil {
 		return nil, errors.New("Could not read prepare consensus")
 	}
@@ -253,10 +259,11 @@ func (consensus *Consensus) checkForChosenValue() (interface{}, error) {
 	return value, nil
 }
 
-func (consensus Consensus) getNextProposalNumber() (proposalNumber int) {
+// getNextProposalNumber to be used by this process. This function is a stage of the Propose funcion.
+func getNextProposalNumber(consensusId int) (proposalNumber int) {
 	thisProcessPosition := currentView.GetProcessPosition(thisProcess)
 
-	lastProposalNumber, err := consensus.getLastProposalNumber()
+	lastProposalNumber, err := getLastProposalNumber(consensusId)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			proposalNumber = currentView.N() + thisProcessPosition
@@ -267,17 +274,18 @@ func (consensus Consensus) getNextProposalNumber() (proposalNumber int) {
 		proposalNumber = ((lastProposalNumber / currentView.N()) + 1) + thisProcessPosition
 	}
 
-	consensus.saveProposalNumber(proposalNumber)
+	saveProposalNumber(consensusId, proposalNumber)
 	return
 }
 
-func (consensus Consensus) saveProposalNumber(proposalNumber int) {
+// saveProposalNumber to permanent storage.
+func saveProposalNumber(consensusId int, proposalNumber int) {
 	// MODEL
 	tx, err := db.Begin()
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = tx.Exec("insert into proposal_number(consensus_id, last_proposal_number) values (?, ?)", consensus.Id, proposalNumber)
+	_, err = tx.Exec("insert into proposal_number(consensus_id, last_proposal_number) values (?, ?)", consensusId, proposalNumber)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -287,10 +295,11 @@ func (consensus Consensus) saveProposalNumber(proposalNumber int) {
 	}
 }
 
-func (consensus Consensus) getLastProposalNumber() (int, error) {
+// getLastProposalNumber from permanent storage.
+func getLastProposalNumber(consensusId int) (int, error) {
 	// MODEL
 	var proposalNumber int
-	err := db.QueryRow("select last_proposal_number from proposal_number WHERE consensus_id = ? ORDER BY last_proposal_number DESC", consensus.Id).Scan(&proposalNumber)
+	err := db.QueryRow("select last_proposal_number from proposal_number WHERE consensus_id = ? ORDER BY last_proposal_number DESC", consensusId).Scan(&proposalNumber)
 	if err != nil {
 		return 0, err
 	}
@@ -298,13 +307,14 @@ func (consensus Consensus) getLastProposalNumber() (int, error) {
 	return proposalNumber, nil
 }
 
-func (consensus Consensus) saveAcceptedProposal(proposal *Proposal) {
+// saveAcceptedProposal to permanent storage.
+func saveAcceptedProposal(consensusId int, proposal *Proposal) {
 	// TODO make this work with slices
 	//tx, err := db.Begin()
 	//if err != nil {
 	//log.Fatal(err)
 	//}
-	//_, err = tx.Exec("insert into accepted_proposal(consensus_id, accepted_proposal) values (?, ?)", consensus.Id, proposal.Value)
+	//_, err = tx.Exec("insert into accepted_proposal(consensus_id, accepted_proposal) values (?, ?)", consensusId, proposal.Value)
 	//if err != nil {
 	//log.Fatal(err)
 	//}
@@ -314,12 +324,13 @@ func (consensus Consensus) saveAcceptedProposal(proposal *Proposal) {
 	//}
 }
 
-func (consensus Consensus) savePrepareRequest(proposal *Proposal) {
+// savePrepareRequest to permanent storage
+func savePrepareRequest(consensusId int, proposal *Proposal) {
 	tx, err := db.Begin()
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = tx.Exec("insert into prepare_request(consensus_id, highest_proposal_number) values (?, ?)", consensus.Id, proposal.N)
+	_, err = tx.Exec("insert into prepare_request(consensus_id, highest_proposal_number) values (?, ?)", consensusId, proposal.N)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -329,6 +340,7 @@ func (consensus Consensus) savePrepareRequest(proposal *Proposal) {
 	}
 }
 
+// spreadAcceptance to all processes on the current view
 func spreadAcceptance(proposal Proposal) {
 	// Send acceptances to all
 	// TODO can improve: it will send too many messages
@@ -337,13 +349,14 @@ func spreadAcceptance(proposal Proposal) {
 	}
 }
 
+// prepareProcess sends a prepare proposal to process.
 func prepareProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error, stopChan chan bool) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		select {
 		case errChan <- err:
 		case <-stopChan:
-			log.Println("Error ignored:", err)
+			log.Println("Failure masked:", err)
 		}
 		return
 	}
@@ -356,7 +369,7 @@ func prepareProcess(process view.Process, proposal Proposal, resultChan chan Pro
 		select {
 		case errChan <- err:
 		case <-stopChan:
-			log.Println("Error ignored:", err)
+			log.Println("Failure masked:", err)
 		}
 		return
 	}
@@ -367,13 +380,14 @@ func prepareProcess(process view.Process, proposal Proposal, resultChan chan Pro
 	}
 }
 
+// acceptProcess sends a prepare proposal to process.
 func acceptProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error, stopChan chan bool) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		select {
 		case errChan <- err:
 		case <-stopChan:
-			log.Println("Error ignored:", err)
+			log.Println("Failure masked:", err)
 		}
 		return
 	}
@@ -385,7 +399,7 @@ func acceptProcess(process view.Process, proposal Proposal, resultChan chan Prop
 		select {
 		case errChan <- err:
 		case <-stopChan:
-			log.Println("Error ignored:", err)
+			log.Println("Failure masked:", err)
 		}
 		return
 	}
@@ -396,10 +410,11 @@ func acceptProcess(process view.Process, proposal Proposal, resultChan chan Prop
 	}
 }
 
+// spreadAcceptance sends acceptance to process.
 func spreadAcceptanceProcess(process view.Process, proposal Proposal) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
-		log.Println("WARN: learnProcess:", err)
+		log.Println("WARN: spreadAcceptanceProcess:", err)
 		return
 	}
 	defer client.Close()
@@ -407,7 +422,7 @@ func spreadAcceptanceProcess(process view.Process, proposal Proposal) {
 	var reply Proposal
 	err = client.Call("ConsensusRequest.Learn", proposal, &reply)
 	if err != nil {
-		log.Println("WARN: learnProcess:", err)
+		log.Println("WARN: spreadAcceptanceProcess:", err)
 		return
 	}
 }
@@ -415,21 +430,24 @@ func spreadAcceptanceProcess(process view.Process, proposal Proposal) {
 // -------- REQUESTS -----------
 type ConsensusRequest int
 
+// Prepare Request
 func (r *ConsensusRequest) Prepare(arg Proposal, reply *Proposal) error {
-	consensus := consensusTable.GetConsensus(arg.ConsensusId)
-	consensus.NewPrepareRequest(&arg, reply)
+	consensus := GetConsensusOrCreate(arg.ConsensusId, make(chan interface{}, 1))
+	consensus.newPrepareRequest(&arg, reply)
 	return nil
 }
 
+// Accept Request
 func (r *ConsensusRequest) Accept(arg Proposal, reply *Proposal) error {
-	consensus := consensusTable.GetConsensus(arg.ConsensusId)
-	consensus.NewAcceptRequest(&arg, reply)
+	consensus := GetConsensusOrCreate(arg.ConsensusId, make(chan interface{}, 1))
+	consensus.newAcceptRequest(&arg, reply)
 	return nil
 }
 
+// Learn Request
 func (r *ConsensusRequest) Learn(arg Proposal, reply *Proposal) error {
-	consensus := consensusTable.GetConsensus(arg.ConsensusId)
-	go consensus.NewLearnRequest(arg)
+	consensus := GetConsensusOrCreate(arg.ConsensusId, make(chan interface{}, 1))
+	go consensus.newLearnRequest(arg)
 	return nil
 }
 
@@ -447,4 +465,12 @@ func (e OldProposalNumberError) Error() string {
 
 func init() {
 	gob.Register(new(OldProposalNumberError))
+}
+
+// ------- Auxiliary functions -----------
+// fillStopChan send times * 'true' on stopChan. It is used to signal completion to readProcess and writeProcess.
+func fillStopChan(stopChan chan bool, times int) {
+	for i := 0; i < times; i++ {
+		stopChan <- true
+	}
 }
