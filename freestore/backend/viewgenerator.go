@@ -9,6 +9,7 @@ import (
 )
 
 var (
+	//TODO clean this up periodically
 	viewGenerators   []ViewGeneratorInfo
 	viewGeneratorsMu sync.Mutex
 )
@@ -34,7 +35,7 @@ func findMostUpdatedView(seq []view.View) view.View {
 		}
 	}
 
-	log.Fatalln("Could not find most updated view in:", seq)
+	log.Fatalln("BUG! Could not find most updated view in: ", seq)
 	return view.New()
 }
 
@@ -181,8 +182,8 @@ func ViewGeneratorWorker(associatedView view.View, seq []view.View, jobChan chan
 				viewSeqProcessingChan <- newViewSeq{jobPointer.Seq, associatedView}
 			}
 
-		case StopWorker:
-			return
+		//case StopWorker:
+		//return
 		default:
 			log.Fatalln("Something is wrong with the switch statement")
 		}
@@ -197,7 +198,7 @@ func generateViewSequenceWithoutConsensus(associatedView view.View, seq []view.V
 	// assert only updated views on seq
 	for _, view := range seq {
 		if view.LessUpdatedThan(&associatedView) {
-			log.Fatalln("Found an old view in view sequence:", seq, ". associatedView:", associatedView)
+			log.Fatalf("BUG! Found an old view in view sequence: %v. associatedView: %v\n", seq, associatedView)
 		}
 	}
 
@@ -210,18 +211,17 @@ func generateViewSequenceWithConsensus(associatedView view.View, seq []view.View
 	// assert only updated views on seq
 	for _, view := range seq {
 		if view.LessUpdatedThan(&associatedView) {
-			log.Fatalln("Found an old view in view sequence:", seq, ". associatedView:", associatedView)
+			log.Fatalf("BUG! Found an old view in view sequence: %v. associatedView: %v\n", seq, associatedView)
 		}
 	}
 
-	callbackChan := make(chan interface{})
-	consensus := GetConsensusOrCreate(currentView.NumberOfEntries(), callbackChan)
+	consensusInfo := getConsensus(currentView.NumberOfEntries())
 	if currentView.GetProcessPosition(thisProcess) == 0 {
 		log.Println("CONSENSUS: leader")
-		consensus.Propose(seq)
+		Propose(consensusInfo, seq)
 	}
 	log.Println("CONSENSUS: wait learn message")
-	value := <-consensus.CallbackLearnChan
+	value := <-consensusInfo.callbackLearnChan
 
 	result, ok := value.(*[]view.View)
 	if !ok {
@@ -295,7 +295,7 @@ func (seqConv SeqConv) Equal(seqConv2 SeqConv) bool {
 	return true
 }
 
-type StopWorker interface{}
+//type StopWorker interface{}
 
 type ViewSeq struct {
 	ProposedSeq      []view.View

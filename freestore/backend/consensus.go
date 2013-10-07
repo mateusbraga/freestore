@@ -15,121 +15,99 @@ import (
 )
 
 var (
+	consensusTable   map[int]consensusInfo
+	consensusTableMu sync.RWMutex
+
 	oldProposalNumberErr OldProposalNumberError
-	consensusTable       ConsensusTable
 )
 
+type consensusInfo struct {
+	id                int
+	taskChan          chan consensusTask
+	callbackLearnChan chan interface{}
+}
+
+type consensusTask interface{}
+type StopWorker interface{}
+
 func init() {
-	consensusTable.Table = make(map[int]*Consensus)
+	consensusTable = make(map[int]consensusInfo)
 }
 
-type ConsensusTable struct {
-	Table map[int]*Consensus
-	mu    sync.RWMutex
-}
+func getConsensus(id int) consensusInfo {
+	consensusTableMu.Lock()
+	defer consensusTableMu.Unlock()
 
-// GetConsensusOrCreate return the consensus instance with id. Create if it does not exist.
-func GetConsensusOrCreate(id int, callbackLearnChan chan interface{}) *Consensus {
-	consensusTable.mu.Lock()
-	defer consensusTable.mu.Unlock()
-
-	if consensus, ok := consensusTable.Table[id]; ok {
-		return consensus
+	if ci, ok := consensusTable[id]; ok {
+		return ci
 	} else {
-		log.Println("Creating consensus with id", id)
-		consensus := &Consensus{id: id, CallbackLearnChan: callbackLearnChan}
-		consensusTable.Table[consensus.id] = consensus
-		return consensus
+		ci := consensusInfo{id: id, taskChan: make(chan consensusTask, 20), callbackLearnChan: make(chan interface{}, 1)}
+		go consensusWorker(ci)
+
+		consensusTable[ci.id] = ci
+		log.Println("Created consensusInfo:", ci)
+		return ci
 	}
 }
 
-type Proposal struct {
-	ConsensusId int //ConsensusId makes possible multiples consensus to run at the same time
+//TODO implement a way to stop workers that are no longer being used
+func consensusWorker(ci consensusInfo) {
+	var acceptedProposal Proposal     // highest numbered accepted proposal
+	var lastPromiseProposalNumber int // highest numbered prepare request
+	var learnCounter int              // number of learn requests received
 
-	N int // N is the proposal number
+	for {
+		taskInterface := <-ci.taskChan
+		switch task := taskInterface.(type) {
+		case *Prepare:
+			log.Println("Processing prepare request")
+			if task.N > lastPromiseProposalNumber {
+				//setLastPromiseProposalNumber
+				savePrepareRequest(ci.id, task)
+				lastPromiseProposalNumber = task.N
 
-	Value interface{} // Value proposed
+				task.reply.N = acceptedProposal.N
+				task.reply.Value = acceptedProposal.Value
+			} else {
+				task.reply.Err = oldProposalNumberErr
+			}
+			task.returnChan <- true
+		case *Accept:
+			log.Println("Processing accept request")
+			if task.N >= lastPromiseProposalNumber {
+				//setAcceptedProposal
+				saveAcceptedProposal(ci.id, task.Proposal)
+				acceptedProposal = *task.Proposal
 
-	Err error // Err is used to return an error related to the proposal
-}
-
-type Consensus struct {
-	id int // id makes possible multiples consensus to run at the same time
-
-	acceptedProposal          Proposal // highest numbered accepted proposal
-	lastPromiseProposalNumber int      // highest numbered prepare request
-	learnCounter              int      // number of learn requests received
-
-	mu sync.RWMutex
-
-	CallbackLearnChan chan interface{}
-}
-
-// setLastPromiseProposalNumber save prepare proposal to permanent storage and then sets consensus.lastPromiseProposalNumber.
-//
-// This function must not be executed without concorrency control
-func (consensus *Consensus) setLastPromiseProposalNumber(proposal *Proposal) {
-	savePrepareRequest(consensus.id, proposal)
-	consensus.lastPromiseProposalNumber = proposal.N
-}
-
-// setAcceptedProposal save accepted proposal to permanent storage and then sets consensus.acceptedProposal.
-//
-// This function must not be executed without concorrency control
-func (consensus *Consensus) setAcceptedProposal(proposal *Proposal) {
-	saveAcceptedProposal(consensus.id, proposal)
-	consensus.acceptedProposal = *proposal
-}
-
-// newPrepareRequest processes the proposal prepare request and returns reply. Like a rpc funcion.
-func (consensus *Consensus) newPrepareRequest(proposal *Proposal, reply *Proposal) {
-	consensus.mu.Lock()
-	defer consensus.mu.Unlock()
-
-	if proposal.N > consensus.lastPromiseProposalNumber {
-		consensus.setLastPromiseProposalNumber(proposal)
-		reply.N = consensus.acceptedProposal.N
-		reply.Value = consensus.acceptedProposal.Value
-	} else {
-		reply.Err = oldProposalNumberErr
+				go spreadAcceptance(*task.Proposal)
+			} else {
+				task.reply.Err = oldProposalNumberErr
+			}
+			task.returnChan <- true
+		case *Learn:
+			log.Println("Processing learn request")
+			learnCounter++
+			if learnCounter == currentView.QuorumSize() {
+				ci.callbackLearnChan <- task.Value
+			}
+		//case StopWorker:
+		//log.Println("Processing StopWorker request")
+		//return
+		default:
+			log.Fatalln("BUG in the ConsensusWorker switch")
+		}
 	}
-	return
-}
 
-// newAcceptRequest processes the proposal accept request and returns reply. Like a rpc funcion.
-func (consensus *Consensus) newAcceptRequest(proposal *Proposal, reply *Proposal) {
-	consensus.mu.Lock()
-	defer consensus.mu.Unlock()
-
-	if proposal.N >= consensus.lastPromiseProposalNumber {
-		consensus.setAcceptedProposal(proposal)
-		go spreadAcceptance(*proposal)
-	} else {
-		reply.Err = oldProposalNumberErr
-	}
-	return
-}
-
-// newLearnRequest processes the proposal learn request.
-func (consensus *Consensus) newLearnRequest(proposal Proposal) {
-	consensus.mu.Lock()
-	defer consensus.mu.Unlock()
-
-	consensus.learnCounter++
-	if consensus.learnCounter == currentView.QuorumSize() {
-		consensus.CallbackLearnChan <- proposal.Value
-	}
 }
 
 // Propose proposes the value to be agreed upon on this consensus instance. It should be run only by the leader process to guarantee termination.
 //
 // Has concurrency control
-func (consensus *Consensus) Propose(defaultValue interface{}) {
-	consensusId := consensus.Id()
+func Propose(ci consensusInfo, defaultValue interface{}) {
+	log.Println("Got in propose")
+	proposalNumber := getNextProposalNumber(ci.id)
 
-	proposalNumber := getNextProposalNumber(consensusId)
-
-	value, err := consensus.prepare(proposalNumber)
+	value, err := prepare(ci, proposalNumber)
 	if err != nil {
 		// Could not get quorum or old proposal number
 		log.Println("WARN: Failed to propose. Could not pass prepare phase: ", err)
@@ -141,29 +119,21 @@ func (consensus *Consensus) Propose(defaultValue interface{}) {
 	}
 
 	proposal := Proposal{N: proposalNumber, Value: value}
-	if err := consensus.accept(proposal); err != nil {
+	if err := accept(ci, proposal); err != nil {
 		// Could not get quorum or old proposal number
 		log.Println("WARN: Failed to propose. Could not pass accept phase: ", err)
 		return
 	}
 }
 
-// Propose proposes the value to be agreed upon on this consensus instance. It should be run only by the leader process to guarantee termination.
-func (consensus *Consensus) Id() int {
-	consensus.mu.Lock()
-	defer consensus.mu.Unlock()
-
-	return consensus.id
-}
-
 // prepare is a stage of the Propose funcion
-func (consensus *Consensus) prepare(proposalNumber int) (interface{}, error) {
+func prepare(ci consensusInfo, proposalNumber int) (interface{}, error) {
 	resultChan := make(chan Proposal, currentView.N())
 	errChan := make(chan error, currentView.N())
 	stopChan := make(chan bool, currentView.N())
 	defer fillStopChan(stopChan, currentView.N())
 
-	proposal := Proposal{N: proposalNumber, ConsensusId: consensus.Id()}
+	proposal := Proposal{N: proposalNumber, ConsensusId: ci.id}
 
 	// Send read request to all
 	for _, process := range currentView.GetMembers() {
@@ -202,13 +172,13 @@ func (consensus *Consensus) prepare(proposalNumber int) (interface{}, error) {
 }
 
 // accept is a stage of the Propose funcion.
-func (consensus *Consensus) accept(proposal Proposal) error {
+func accept(ci consensusInfo, proposal Proposal) error {
 	resultChan := make(chan Proposal, currentView.N())
 	errChan := make(chan error, currentView.N())
 	stopChan := make(chan bool, currentView.N())
 	defer fillStopChan(stopChan, currentView.N())
 
-	proposal.ConsensusId = consensus.Id()
+	proposal.ConsensusId = ci.id
 
 	// Send accept request to all
 	for _, process := range currentView.GetMembers() {
@@ -243,12 +213,10 @@ func (consensus *Consensus) accept(proposal Proposal) error {
 }
 
 // CheckForChosenValue checks to see if any value has already been agreed upon on this consensus instance.
-func (consensus *Consensus) CheckForChosenValue() (interface{}, error) {
-	consensusId := consensus.Id()
+func CheckForChosenValue(ci consensusInfo) (interface{}, error) {
+	proposalNumber := getNextProposalNumber(ci.id)
 
-	proposalNumber := getNextProposalNumber(consensusId)
-
-	value, err := consensus.prepare(proposalNumber)
+	value, err := prepare(ci, proposalNumber)
 	if err != nil {
 		return nil, errors.New("Could not read prepare consensus")
 	}
@@ -325,7 +293,7 @@ func saveAcceptedProposal(consensusId int, proposal *Proposal) {
 }
 
 // savePrepareRequest to permanent storage
-func savePrepareRequest(consensusId int, proposal *Proposal) {
+func savePrepareRequest(consensusId int, proposal *Prepare) {
 	tx, err := db.Begin()
 	if err != nil {
 		log.Fatal(err)
@@ -430,24 +398,76 @@ func spreadAcceptanceProcess(process view.Process, proposal Proposal) {
 // -------- REQUESTS -----------
 type ConsensusRequest int
 
+type Proposal struct {
+	ConsensusId int //ConsensusId makes possible multiples consensus to run at the same time
+
+	N int // N is the proposal number
+
+	Value interface{} // Value proposed
+
+	Err error // Err is used to return an error related to the proposal
+}
+
+type Prepare struct {
+	*Proposal
+	reply      *Proposal
+	returnChan chan bool
+}
+
+type Accept struct {
+	*Proposal
+	reply      *Proposal
+	returnChan chan bool
+}
+
+type Learn struct {
+	*Proposal
+}
+
 // Prepare Request
 func (r *ConsensusRequest) Prepare(arg Proposal, reply *Proposal) error {
-	consensus := GetConsensusOrCreate(arg.ConsensusId, make(chan interface{}, 1))
-	consensus.newPrepareRequest(&arg, reply)
+	log.Println("New Prepare Request")
+	ci := getConsensus(arg.ConsensusId)
+
+	var prepare Prepare
+	prepare.Proposal = &arg
+	prepare.returnChan = make(chan bool)
+	prepare.reply = reply
+
+	ci.taskChan <- &prepare
+
+	<-prepare.returnChan
+
 	return nil
 }
 
 // Accept Request
 func (r *ConsensusRequest) Accept(arg Proposal, reply *Proposal) error {
-	consensus := GetConsensusOrCreate(arg.ConsensusId, make(chan interface{}, 1))
-	consensus.newAcceptRequest(&arg, reply)
+	log.Println("New Accept Request")
+	ci := getConsensus(arg.ConsensusId)
+
+	var accept Accept
+	accept.Proposal = &arg
+	accept.returnChan = make(chan bool)
+	accept.reply = reply
+
+	ci.taskChan <- &accept
+
+	<-accept.returnChan
+
 	return nil
 }
 
 // Learn Request
 func (r *ConsensusRequest) Learn(arg Proposal, reply *Proposal) error {
-	consensus := GetConsensusOrCreate(arg.ConsensusId, make(chan interface{}, 1))
-	go consensus.newLearnRequest(arg)
+	log.Println("New Learn Request")
+	ci := getConsensus(arg.ConsensusId)
+
+	var learn Learn
+	learn.Proposal = &arg
+
+	ci.taskChan <- &learn
+
 	return nil
 }
 

@@ -22,7 +22,7 @@ var (
 	useConsensus bool
 )
 
-func Run(port uint, join bool, master string, useConsensus bool) {
+func Run(port uint, join bool, master string, useConsensusArg bool) {
 	var err error
 
 	listener, err = net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -35,6 +35,7 @@ func Run(port uint, join bool, master string, useConsensus bool) {
 
 	initCurrentView(master)
 	initStorage(port)
+	useConsensus = useConsensusArg
 
 	if currentView.HasMember(thisProcess) {
 		register.mu.Unlock() // Enable r/w operations
