@@ -15,43 +15,42 @@ import (
 )
 
 var (
-	consensusTable   map[int]consensusInfo
+	consensusTable   map[int]consensusInstance
 	consensusTableMu sync.RWMutex
 
 	oldProposalNumberErr OldProposalNumberError
 )
 
-type consensusInfo struct {
+type consensusInstance struct {
 	id                int
 	taskChan          chan consensusTask
 	callbackLearnChan chan interface{}
 }
 
 type consensusTask interface{}
-type StopWorker interface{}
 
 func init() {
-	consensusTable = make(map[int]consensusInfo)
+	consensusTable = make(map[int]consensusInstance)
 }
 
-func getConsensus(id int) consensusInfo {
+func getConsensus(id int) consensusInstance {
 	consensusTableMu.Lock()
 	defer consensusTableMu.Unlock()
 
 	if ci, ok := consensusTable[id]; ok {
 		return ci
 	} else {
-		ci := consensusInfo{id: id, taskChan: make(chan consensusTask, 20), callbackLearnChan: make(chan interface{}, 1)}
+		ci := consensusInstance{id: id, taskChan: make(chan consensusTask, 20), callbackLearnChan: make(chan interface{}, 1)}
 		go consensusWorker(ci)
 
 		consensusTable[ci.id] = ci
-		log.Println("Created consensusInfo:", ci)
+		log.Println("Created consensusInstance:", ci)
 		return ci
 	}
 }
 
 //TODO implement a way to stop workers that are no longer being used
-func consensusWorker(ci consensusInfo) {
+func consensusWorker(ci consensusInstance) {
 	var acceptedProposal Proposal     // highest numbered accepted proposal
 	var lastPromiseProposalNumber int // highest numbered prepare request
 	var learnCounter int              // number of learn requests received
@@ -101,13 +100,12 @@ func consensusWorker(ci consensusInfo) {
 }
 
 // Propose proposes the value to be agreed upon on this consensus instance. It should be run only by the leader process to guarantee termination.
-//
-// Has concurrency control
-func Propose(ci consensusInfo, defaultValue interface{}) {
+func Propose(ci consensusInstance, defaultValue interface{}) {
 	log.Println("Got in propose")
 	proposalNumber := getNextProposalNumber(ci.id)
 
-	value, err := prepare(ci, proposalNumber)
+	proposal := Proposal{N: proposalNumber, ConsensusId: ci.id}
+	value, err := prepare(proposal)
 	if err != nil {
 		// Could not get quorum or old proposal number
 		log.Println("WARN: Failed to propose. Could not pass prepare phase: ", err)
@@ -118,8 +116,8 @@ func Propose(ci consensusInfo, defaultValue interface{}) {
 		value = defaultValue
 	}
 
-	proposal := Proposal{N: proposalNumber, Value: value}
-	if err := accept(ci, proposal); err != nil {
+	proposal.Value = value
+	if err := accept(proposal); err != nil {
 		// Could not get quorum or old proposal number
 		log.Println("WARN: Failed to propose. Could not pass accept phase: ", err)
 		return
@@ -127,13 +125,11 @@ func Propose(ci consensusInfo, defaultValue interface{}) {
 }
 
 // prepare is a stage of the Propose funcion
-func prepare(ci consensusInfo, proposalNumber int) (interface{}, error) {
+func prepare(proposal Proposal) (interface{}, error) {
 	resultChan := make(chan Proposal, currentView.N())
 	errChan := make(chan error, currentView.N())
 	stopChan := make(chan bool, currentView.N())
 	defer fillStopChan(stopChan, currentView.N())
-
-	proposal := Proposal{N: proposalNumber, ConsensusId: ci.id}
 
 	// Send read request to all
 	for _, process := range currentView.GetMembers() {
@@ -172,13 +168,11 @@ func prepare(ci consensusInfo, proposalNumber int) (interface{}, error) {
 }
 
 // accept is a stage of the Propose funcion.
-func accept(ci consensusInfo, proposal Proposal) error {
+func accept(proposal Proposal) error {
 	resultChan := make(chan Proposal, currentView.N())
 	errChan := make(chan error, currentView.N())
 	stopChan := make(chan bool, currentView.N())
 	defer fillStopChan(stopChan, currentView.N())
-
-	proposal.ConsensusId = ci.id
 
 	// Send accept request to all
 	for _, process := range currentView.GetMembers() {
@@ -213,10 +207,11 @@ func accept(ci consensusInfo, proposal Proposal) error {
 }
 
 // CheckForChosenValue checks to see if any value has already been agreed upon on this consensus instance.
-func CheckForChosenValue(ci consensusInfo) (interface{}, error) {
+func CheckForChosenValue(ci consensusInstance) (interface{}, error) {
 	proposalNumber := getNextProposalNumber(ci.id)
 
-	value, err := prepare(ci, proposalNumber)
+	proposal := Proposal{N: proposalNumber, ConsensusId: ci.id}
+	value, err := prepare(proposal)
 	if err != nil {
 		return nil, errors.New("Could not read prepare consensus")
 	}

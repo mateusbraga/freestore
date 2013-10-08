@@ -10,36 +10,18 @@ import (
 
 var (
 	//TODO clean this up periodically
-	viewGenerators   []ViewGeneratorInfo
+	viewGenerators   []viewGeneratorInstance
 	viewGeneratorsMu sync.Mutex
 )
 
-type ViewGeneratorInfo struct {
-	AssociatedView view.View
+type viewGeneratorInstance struct {
+	AssociatedView view.View //Id
 	jobChan        chan ViewGeneratorJob
 }
 
 type ViewGeneratorJob interface{}
 
-func findMostUpdatedView(seq []view.View) view.View {
-	for i, v := range seq {
-		isMostUpdated := true
-		for _, v2 := range seq[i+1:] {
-			if v.LessUpdatedThan(&v2) {
-				isMostUpdated = false
-				break
-			}
-		}
-		if isMostUpdated {
-			return v
-		}
-	}
-
-	log.Fatalln("BUG! Could not find most updated view in: ", seq)
-	return view.New()
-}
-
-func getViewGenerator(associatedView view.View, initialSeq []view.View) ViewGeneratorInfo {
+func getViewGenerator(associatedView view.View, initialSeq []view.View) viewGeneratorInstance {
 	viewGeneratorsMu.Lock()
 	defer viewGeneratorsMu.Unlock()
 
@@ -49,19 +31,23 @@ func getViewGenerator(associatedView view.View, initialSeq []view.View) ViewGene
 		}
 	}
 
-	vgi := ViewGeneratorInfo{}
+	vgi := viewGeneratorInstance{}
 	vgi.AssociatedView = view.New()
 	vgi.AssociatedView.Set(&associatedView)
 	vgi.jobChan = make(chan ViewGeneratorJob, 20) //TODO
-	go ViewGeneratorWorker(vgi.AssociatedView, initialSeq, vgi.jobChan)
+	go ViewGeneratorWorker(vgi, initialSeq)
 
 	viewGenerators = append(viewGenerators, vgi)
 	log.Println("Created vgi", vgi)
 	return vgi
 }
 
-//TODO Send StopWorker to its jobChan to kill the goroutine
-func ViewGeneratorWorker(associatedView view.View, seq []view.View, jobChan chan ViewGeneratorJob) {
+func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []view.View) {
+	// Make a copy of the vgi
+	associatedView := view.New()
+	associatedView.Set(&vgi.AssociatedView)
+	jobChan := vgi.jobChan
+
 	var proposedSeq []view.View
 	var lastConvergedSeq []view.View
 	var viewSeqQuorumCounter viewSeqQuorumCounterType
@@ -237,7 +223,6 @@ type viewSeqQuorumCounterType struct {
 }
 
 func (quorumCounter *viewSeqQuorumCounterType) count(newViewSeq *ViewSeq, quorumSize int) bool {
-	//TODO improve this - cleanup views or change algorithm
 	for i, _ := range quorumCounter.list {
 		if quorumCounter.list[i].Equal(*newViewSeq) {
 			quorumCounter.counter[i]++
@@ -258,7 +243,6 @@ type seqConvQuorumCounterType struct {
 }
 
 func (quorumCounter *seqConvQuorumCounterType) count(newSeqConv *SeqConv, quorumSize int) bool {
-	//TODO improve this - cleanup views or change algorithm
 	for i, _ := range quorumCounter.list {
 		if quorumCounter.list[i].Equal(*newSeqConv) {
 			quorumCounter.counter[i]++
@@ -271,6 +255,24 @@ func (quorumCounter *seqConvQuorumCounterType) count(newSeqConv *SeqConv, quorum
 	quorumCounter.counter = append(quorumCounter.counter, 1)
 
 	return (1 == quorumSize)
+}
+
+func findMostUpdatedView(seq []view.View) view.View {
+	for i, v := range seq {
+		isMostUpdated := true
+		for _, v2 := range seq[i+1:] {
+			if v.LessUpdatedThan(&v2) {
+				isMostUpdated = false
+				break
+			}
+		}
+		if isMostUpdated {
+			return v
+		}
+	}
+
+	log.Fatalln("BUG! Could not find most updated view in: ", seq)
+	return view.New()
 }
 
 // -------- REQUESTS -----------
@@ -295,8 +297,6 @@ func (seqConv SeqConv) Equal(seqConv2 SeqConv) bool {
 	return true
 }
 
-//type StopWorker interface{}
-
 type ViewSeq struct {
 	ProposedSeq      []view.View
 	LastConvergedSeq []view.View
@@ -311,20 +311,12 @@ func (viewSeq ViewSeq) Equal(viewSeq2 ViewSeq) bool {
 	if len(viewSeq.ProposedSeq) != len(viewSeq2.ProposedSeq) {
 		return false
 	}
-	//if len(viewSeq.LastConvergedSeq) != len(viewSeq2.LastConvergedSeq) {
-	//return false
-	//}
 
 	for i, _ := range viewSeq.ProposedSeq {
 		if !viewSeq.ProposedSeq[i].Equal(&viewSeq2.ProposedSeq[i]) {
 			return false
 		}
 	}
-	//for i, _ := range viewSeq.LastConvergedSeq {
-	//if !viewSeq.LastConvergedSeq[i].Equal(viewSeq2.LastConvergedSeq[i]) {
-	//return false
-	//}
-	//}
 	return true
 }
 
