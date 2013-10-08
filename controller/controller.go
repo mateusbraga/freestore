@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"mateusbraga/gotf/view"
+	"mateusbraga/gotf/freestore/view"
 	"net"
 	"net/http"
 	"net/rpc"
@@ -19,8 +19,8 @@ import (
 )
 
 var (
-	currentView view.View
-	status      Status = Status{}
+	currentView  view.View
+	systemStatus Status = Status{}
 )
 
 type Status struct {
@@ -47,13 +47,13 @@ func startProcess(process view.Process) {
 
 func processHandler(w http.ResponseWriter, r *http.Request) {
 	if ok, err := path.Match("/process/all/start", r.URL.Path); err == nil && ok {
-		for _, status := range status.ProcessStatus {
+		for _, status := range systemStatus.ProcessStatus {
 			if !status.Running {
 				startProcess(status.Process)
 			}
 		}
 	} else if ok, err := path.Match("/process/all/terminate", r.URL.Path); err == nil && ok {
-		for _, status := range status.ProcessStatus {
+		for _, status := range systemStatus.ProcessStatus {
 			if status.Running {
 				sendTerminateProcess(status.Process)
 			}
@@ -88,14 +88,16 @@ func list(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 
-	t.Execute(w, status)
+	t.Execute(w, systemStatus)
 }
 
 func failureDetector() {
 	for {
 		select {
 		case <-time.Tick(time.Second):
-			for _, status := range status.ProcessStatus {
+			//TODO this is causing a race condition! fix!
+			// Make a big for loop and answer status queries and update status only there.
+			for _, status := range systemStatus.ProcessStatus {
 				go checkStatus(status)
 			}
 		}
@@ -145,11 +147,11 @@ func init() {
 	currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5002"}})
 
 	v := view.New()
-	status.CurrentView = &v
-	status.CurrentView.Set(&currentView)
-	// Init status
+	systemStatus.CurrentView = &v
+	systemStatus.CurrentView.Set(&currentView)
+	// Init systemStatus
 	for i := 5000; i < 5020; i++ {
-		status.ProcessStatus = append(status.ProcessStatus, &ProcessStatus{view.Process{fmt.Sprintf("[::]:%v", i)}, false})
+		systemStatus.ProcessStatus = append(systemStatus.ProcessStatus, &ProcessStatus{view.Process{fmt.Sprintf("[::]:%v", i)}, false})
 	}
 	checkDoozerdStatus()
 }
@@ -162,7 +164,7 @@ func startDoozerd() {
 		log.Fatal(err)
 	}
 
-	status.Doozerd = true
+	systemStatus.Doozerd = true
 }
 
 func stopDoozerd() {
@@ -171,15 +173,15 @@ func stopDoozerd() {
 		log.Fatal(err)
 	}
 
-	status.Doozerd = false
+	systemStatus.Doozerd = false
 }
 
 func checkDoozerdStatus() {
 	server := exec.Command("pgrep", "doozerd")
 	if err := server.Run(); err != nil {
-		status.Doozerd = false
+		systemStatus.Doozerd = false
 	} else {
-		status.Doozerd = true
+		systemStatus.Doozerd = true
 	}
 }
 
@@ -273,6 +275,6 @@ func sendGetCurrentView(process view.Process) {
 	}
 
 	currentView.Set(&newView)
-	status.CurrentView.Set(&newView)
+	systemStatus.CurrentView.Set(&newView)
 	fmt.Println("New Current View:", currentView)
 }
