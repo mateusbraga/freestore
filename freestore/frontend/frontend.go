@@ -31,7 +31,7 @@ type RegisterMsg struct {
 }
 
 // Write v on the system by running the quorum write protocol.
-func Write(v int) {
+func Write(v int) error {
 	readValue, err := basicReadQuorum()
 	if err != nil {
 		switch err {
@@ -40,7 +40,7 @@ func Write(v int) {
 		case diffResultsErr:
 			// Do nothing - we will write a new value anyway
 		default:
-			log.Fatal(err)
+			return err
 		}
 	}
 
@@ -54,9 +54,11 @@ func Write(v int) {
 		case viewUpdatedErr:
 			Write(v)
 		default:
-			log.Fatal(err)
+			return err
 		}
 	}
+
+	return nil
 }
 
 // basicWriteQuorum writes v to all processes on the currentView and return as soon as it gets the confirmation from a quorum
@@ -147,7 +149,7 @@ func writeProcess(process view.Process, writeMsg RegisterMsg, resultChan chan Re
 }
 
 // Read executes the quorum read protocol.
-func Read() int {
+func Read() (int, error) {
 	readMsg, err := basicReadQuorum()
 	if err != nil {
 		switch err {
@@ -160,18 +162,18 @@ func Read() int {
 				case viewUpdatedErr:
 					return Read()
 				default:
-					log.Fatal(err)
+					return 0, err
 				}
 			}
 
 		case viewUpdatedErr:
 			return Read()
 		default:
-			log.Fatal(err)
+			return 0, err
 		}
 	}
 
-	return readMsg.Value
+	return readMsg.Value, nil
 }
 
 // basicReadQuorum reads a RegisterMsg from all members of the most updated currentView returning the most recent one. It decides which is the most recent one as soon as it gets a quorum
