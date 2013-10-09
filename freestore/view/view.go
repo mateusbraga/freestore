@@ -93,6 +93,10 @@ func (v *View) Contains(v2 *View) bool {
 	v2.mu.RLock()
 	defer v2.mu.RUnlock()
 
+	if len(v.Entries) < len(v2.Entries) {
+		return false
+	}
+
 	for k2, _ := range v2.Entries {
 		if _, ok := v.Entries[k2]; !ok {
 			return false
