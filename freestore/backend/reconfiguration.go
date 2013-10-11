@@ -566,11 +566,11 @@ type ViewInstalledMsg struct {
 }
 
 func (r *ReconfigurationRequest) Reconfig(arg ReconfigMsg, reply *error) error {
-	recvMutex.Lock()
-	defer recvMutex.Unlock()
-
 	if arg.CurrentView.Equal(&currentView) {
 		if !currentView.HasUpdate(arg.Update) {
+			recvMutex.Lock()
+			defer recvMutex.Unlock()
+
 			recv[arg.Update] = true
 			log.Printf("%v added to recv\n", arg.Update)
 		}
