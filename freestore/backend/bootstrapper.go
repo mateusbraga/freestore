@@ -16,7 +16,6 @@ import (
 var (
 	listener    net.Listener
 	thisProcess view.Process
-	rpcServer   *rpc.Server
 	db          *sql.DB
 
 	useConsensus bool
