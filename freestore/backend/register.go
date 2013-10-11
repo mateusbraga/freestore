@@ -17,9 +17,6 @@ var register Value
 type ClientRequest int
 
 func (r *ClientRequest) Read(clientView view.View, reply *Value) error {
-	register.mu.RLock()
-	defer register.mu.RUnlock()
-
 	if !clientView.Equal(&currentView) {
 		err := view.OldViewError{}
 		err.OldView = view.New()
@@ -29,6 +26,9 @@ func (r *ClientRequest) Read(clientView view.View, reply *Value) error {
 		reply.Err = err
 	}
 
+	register.mu.RLock()
+	defer register.mu.RUnlock()
+
 	reply.Value = register.Value
 	reply.Timestamp = register.Timestamp
 
@@ -37,9 +37,6 @@ func (r *ClientRequest) Read(clientView view.View, reply *Value) error {
 }
 
 func (r *ClientRequest) Write(value Value, reply *Value) error {
-	register.mu.Lock()
-	defer register.mu.Unlock()
-
 	if !value.View.Equal(&currentView) {
 		err := view.OldViewError{}
 		err.OldView = view.New()
@@ -50,6 +47,9 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 		reply.Err = err
 		return nil
 	}
+
+	register.mu.Lock()
+	defer register.mu.Unlock()
 
 	if value.Timestamp > register.Timestamp {
 		register.Value = value.Value
