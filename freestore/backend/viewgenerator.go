@@ -201,8 +201,8 @@ func generateViewSequenceWithConsensus(associatedView view.View, seq []view.View
 		}
 	}
 
-	consensusInfo := getConsensus(currentView.NumberOfEntries())
-	if currentView.GetProcessPosition(thisProcess) == 0 {
+	consensusInfo := getConsensus(associatedView.NumberOfEntries())
+	if associatedView.GetProcessPosition(thisProcess) == 0 {
 		log.Println("CONSENSUS: leader")
 		Propose(consensusInfo, seq)
 	}
