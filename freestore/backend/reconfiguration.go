@@ -214,6 +214,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 
 				resetTimer <- true
 			} else {
+				//TODO talvez nao precisa criar essa cópia
 				currentViewCopy := view.New()
 				currentViewCopy.Set(&currentView)
 

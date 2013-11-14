@@ -78,6 +78,7 @@ func init() {
 }
 
 // --------- Types ---------
+// TODO mudar para interface{}
 type Value struct {
 	Value     int
 	Timestamp int
