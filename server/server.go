@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 
-	"mateusbraga/gotf/freestore/backend"
+	"mateusbraga/gotf/freestore/server"
 )
 
 var port uint
@@ -22,5 +22,5 @@ func init() {
 func main() {
 	flag.Parse()
 
-	backend.Run(port, join, master, useConsensus)
+	server.Run(port, join, master, useConsensus)
 }

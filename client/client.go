@@ -1,5 +1,5 @@
 /*
-This is a Quorum client
+This is a simple client
 */
 package main
 
@@ -8,7 +8,7 @@ import (
 	"log"
 	"time"
 
-	"mateusbraga/gotf/freestore/frontend"
+	"mateusbraga/gotf/freestore/client"
 )
 
 func main() {
@@ -17,14 +17,14 @@ func main() {
 
 	for {
 		startRead := time.Now()
-		finalValue, err = frontend.Read()
+		finalValue, err = client.Read()
 		endRead := time.Now()
 		if err != nil {
 			log.Fatalln(err)
 		}
 
 		startWrite := time.Now()
-		err = frontend.Write(finalValue + 1)
+		err = client.Write(finalValue + 1)
 		endWrite := time.Now()
 		if err != nil {
 			log.Fatalln(err)
