@@ -13,3 +13,6 @@ clean:
 	go clean -i mateusbraga/freestore/server
 	go clean -i mateusbraga/freestore/samples/client
 	go clean -i mateusbraga/freestore/samples/server
+
+upload:
+	rsync -avz -f"- .git/" -f"+ *" --delete freestore/ mateusbr@users.emulab.net:/proj/freestore/src/mateusbraga/freestore
