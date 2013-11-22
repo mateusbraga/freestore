@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/rpc"
 
-	"mateusbraga/gotf/freestore/view"
+	"mateusbraga/freestore/view"
 )
 
 var (
@@ -42,6 +42,6 @@ func getCurrentView(process view.Process) {
 		log.Fatal(err)
 	}
 
-	log.Printf("Updating view from %v to %v\n", currentView, newView)
+	log.Printf("Updating view from %v to %v\n", &currentView, &newView)
 	currentView.Set(&newView)
 }

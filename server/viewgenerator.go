@@ -5,7 +5,7 @@ import (
 	"net/rpc"
 	"sync"
 
-	"mateusbraga/gotf/freestore/view"
+	"mateusbraga/freestore/view"
 )
 
 const (

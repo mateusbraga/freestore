@@ -8,7 +8,7 @@ import (
 
 	"github.com/cznic/kv"
 
-	"mateusbraga/gotf/freestore/view"
+	"mateusbraga/freestore/view"
 )
 
 var (

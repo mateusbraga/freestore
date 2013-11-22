@@ -2,7 +2,7 @@ package server
 
 import (
 	"log"
-	"mateusbraga/gotf/freestore/view"
+	"mateusbraga/freestore/view"
 	"net/rpc"
 )
 

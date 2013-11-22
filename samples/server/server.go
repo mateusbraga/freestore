@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 
-	"mateusbraga/gotf/freestore/server"
+	"mateusbraga/freestore/server"
 )
 
 var port uint

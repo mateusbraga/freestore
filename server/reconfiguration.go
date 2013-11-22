@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"mateusbraga/gotf/freestore/view"
+	"mateusbraga/freestore/view"
 )
 
 const (

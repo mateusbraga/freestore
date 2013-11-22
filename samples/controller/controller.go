@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"mateusbraga/gotf/freestore/view"
+	"mateusbraga/freestore/view"
 	"net"
 	"net/http"
 	"net/rpc"

@@ -1,7 +1,7 @@
 package server
 
 import (
-	"mateusbraga/gotf/freestore/view"
+	"mateusbraga/freestore/view"
 	"testing"
 )
 
