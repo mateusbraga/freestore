@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	var finalValue int
+	var finalValue interface{}
 	var err error
 
 	for {
@@ -24,7 +24,7 @@ func main() {
 		}
 
 		startWrite := time.Now()
-		err = client.Write(finalValue + 1)
+		err = client.Write(finalValue.(int) + 1)
 		endWrite := time.Now()
 		if err != nil {
 			log.Fatalln(err)

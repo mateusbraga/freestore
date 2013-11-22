@@ -20,7 +20,7 @@ var (
 )
 
 type RegisterMsg struct {
-	Value     int
+	Value     interface{}
 	Timestamp int
 
 	View view.View
@@ -29,7 +29,7 @@ type RegisterMsg struct {
 }
 
 // Write v on the system by running the quorum write protocol.
-func Write(v int) error {
+func Write(v interface{}) error {
 	readValue, err := basicReadQuorum()
 	if err != nil {
 		switch err {
@@ -146,7 +146,7 @@ func writeProcess(process view.Process, writeMsg RegisterMsg, resultChan chan Re
 }
 
 // Read executes the quorum read protocol.
-func Read() (int, error) {
+func Read() (interface{}, error) {
 	readMsg, err := basicReadQuorum()
 	if err != nil {
 		switch err {
