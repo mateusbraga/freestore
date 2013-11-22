@@ -12,6 +12,10 @@ import (
 	"mateusbraga/gotf/freestore/view"
 )
 
+const (
+	CHANNEL_DEFAULT_SIZE int = 20
+)
+
 var (
 	recv      map[view.Update]bool
 	recvMutex sync.RWMutex
@@ -30,11 +34,11 @@ func init() {
 	recv = make(map[view.Update]bool)
 
 	viewSeqProcessingChan = make(chan newViewSeq)
-	installSeqProcessingChan = make(chan InstallSeqMsg, 20)   //TODO
-	stateUpdateProcessingChan = make(chan StateUpdateMsg, 20) //TODO
+	installSeqProcessingChan = make(chan InstallSeqMsg, CHANNEL_DEFAULT_SIZE)
+	stateUpdateProcessingChan = make(chan StateUpdateMsg, CHANNEL_DEFAULT_SIZE)
 
-	newViewInstalledChan = make(chan ViewInstalledMsg, 20)                            //TODO
-	callbackChanStateUpdateRequestChan = make(chan getCallbackStateUpdateRequest, 20) //TODO
+	newViewInstalledChan = make(chan ViewInstalledMsg, CHANNEL_DEFAULT_SIZE)
+	callbackChanStateUpdateRequestChan = make(chan getCallbackStateUpdateRequest, CHANNEL_DEFAULT_SIZE)
 
 	go viewSeqProcessingLoop()
 	go installSeqProcessingLoop()
@@ -45,7 +49,7 @@ func init() {
 }
 
 func resetTimerLoop() {
-	timer := time.AfterFunc(10*time.Second, reconfigurationTask)
+	timer := time.AfterFunc(10*time.Second, initReconfiguration)
 	for {
 		<-resetTimer
 		timer.Reset(1 * time.Minute)
@@ -58,6 +62,7 @@ type newViewSeq struct {
 	AssociatedView view.View
 }
 
+// TODO test this and maybe improve it
 func findLeastUpdatedView(seq []view.View) view.View {
 	for i, v := range seq {
 		isLeastUpdated := true
@@ -73,7 +78,7 @@ func findLeastUpdatedView(seq []view.View) view.View {
 	}
 
 	log.Panicln("BUG! Should not execute this. Failed to find least updated view on: ", seq)
-	return view.New()
+	return view.View{}
 }
 
 func viewSeqProcessingLoop() {
@@ -103,7 +108,7 @@ type installSeqQuorumCounterType struct {
 }
 
 func (quorumCounter *installSeqQuorumCounterType) count(newInstallSeq *InstallSeq, quorumSize int) bool {
-	//TODO improve this - cleanup views or change algorithm
+	//TODO Cleanup quorum counter old views
 	for i, _ := range quorumCounter.list {
 		if quorumCounter.list[i].Equal(*newInstallSeq) {
 			quorumCounter.counter[i]++
@@ -150,9 +155,9 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 
 	startTime := time.Now()
 
-	installViewMoreUpdatedThanCv := currentView.LessUpdatedThan(installSeq.InstallView)
+	cvIsLessUpdatedThanInstallView := currentView.LessUpdatedThan(installSeq.InstallView)
 
-	if installViewMoreUpdatedThanCv && installSeq.AssociatedView.HasMember(thisProcess) {
+	if cvIsLessUpdatedThanInstallView && installSeq.AssociatedView.HasMember(thisProcess) {
 		// disable r/w
 		register.mu.Lock()
 		log.Println("R/W operations disabled")
@@ -179,7 +184,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 		log.Println("State sent!")
 	}
 
-	if installViewMoreUpdatedThanCv {
+	if cvIsLessUpdatedThanInstallView {
 		if installSeq.InstallView.HasMember(thisProcess) { // If thisProcess is on the new view
 			syncState(installSeq.InstallView)
 
@@ -187,8 +192,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 			log.Println("View installed:", currentView)
 
 			viewInstalled := ViewInstalledMsg{}
-			viewInstalled.CurrentView = view.New()
-			viewInstalled.CurrentView.Set(&currentView)
+			viewInstalled.CurrentView = currentView.NewCopy()
 
 			// Send view-installed to all
 			for _, process := range installSeq.AssociatedView.GetMembersNotIn(&currentView) {
@@ -214,9 +218,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 
 				resetTimer <- true
 			} else {
-				//TODO talvez nao precisa criar essa cópia
-				currentViewCopy := view.New()
-				currentViewCopy.Set(&currentView)
+				currentViewCopy := currentView.NewCopy()
 
 				log.Println("Generate next view sequence with:", newSeq)
 				if useConsensus {
@@ -356,8 +358,7 @@ func syncState(installView *view.View) {
 
 	var callbackRequest getCallbackStateUpdateRequest
 	returnChan := make(chan chan *stateUpdateQuorumType)
-	newView := view.New()
-	newView.Set(&currentView)
+	newView := currentView.NewCopy()
 	callbackRequest.associatedView = &newView
 	callbackRequest.returnChan = returnChan
 
@@ -385,23 +386,21 @@ func syncState(installView *view.View) {
 	log.Println("end syncState")
 }
 
-func reconfigurationTask() {
+func initReconfiguration() {
 	recvMutex.Lock()
 	defer recvMutex.Unlock()
 
 	if len(recv) != 0 {
 		log.Println("Reconfiguration from currentView:", currentView)
 		var seq []view.View
-		newView := view.New()
+		newView := currentView.NewCopy()
 
-		newView.Set(&currentView)
 		for update, _ := range recv {
 			newView.AddUpdate(update)
 		}
 
 		seq = append(seq, newView)
-		currentViewCopy := view.New()
-		currentViewCopy.Set(&currentView)
+		currentViewCopy := currentView.NewCopy()
 
 		if useConsensus {
 			go generateViewSequenceWithConsensus(currentViewCopy, seq)
@@ -429,8 +428,7 @@ func Join() error {
 	stopChan := make(chan bool, currentView.N())
 	defer fillStopChan(stopChan, currentView.N())
 
-	reconfig := ReconfigMsg{CurrentView: view.New(), Update: view.Update{view.Join, thisProcess}}
-	reconfig.CurrentView.Set(&currentView)
+	reconfig := ReconfigMsg{CurrentView: currentView.NewCopy(), Update: view.Update{view.Join, thisProcess}}
 
 	// Send reconfig request to all
 	for _, process := range currentView.GetMembers() {
@@ -470,8 +468,7 @@ func Leave() error {
 	defer fillStopChan(stopChan, currentView.N())
 
 	reconfig := ReconfigMsg{Update: view.Update{view.Leave, thisProcess}}
-	reconfig.CurrentView = view.New()
-	reconfig.CurrentView.Set(&currentView)
+	reconfig.CurrentView = currentView.NewCopy()
 
 	// Send reconfig request to all
 	for _, process := range currentView.GetMembers() {
@@ -576,10 +573,7 @@ func (r *ReconfigurationRequest) Reconfig(arg ReconfigMsg, reply *error) error {
 			log.Printf("%v added to recv\n", arg.Update)
 		}
 	} else {
-		err := view.OldViewError{}
-		err.OldView.Set(&arg.CurrentView)
-		err.NewView.Set(&currentView)
-		*reply = err
+		*reply = view.OldViewError{NewView: currentView.NewCopy()}
 		log.Printf("Reconfig with old view: %v.\n", arg.CurrentView)
 	}
 	return nil

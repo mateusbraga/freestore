@@ -148,3 +148,17 @@ func TestViewLessUpdatedThan(t *testing.T) {
 		t.Errorf("v2 is not less updated than v1!")
 	}
 }
+
+func TestNewCopy(t *testing.T) {
+	v1 := New()
+
+	v1.AddUpdate(Update{Join, Process{"1"}})
+	v1.AddUpdate(Update{Join, Process{"2"}})
+	v1.AddUpdate(Update{Join, Process{"3"}})
+	v1.AddUpdate(Update{Leave, Process{"1"}})
+
+	v2 := v1.NewCopy()
+	if !v1.Equal(&v2) {
+		t.Errorf("v2 is not a copy of v1!")
+	}
+}

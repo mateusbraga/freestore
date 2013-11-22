@@ -5,10 +5,8 @@ import (
 	"log"
 	"net"
 	"net/rpc"
-	"os"
 
-	"database/sql"
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/cznic/kv"
 
 	"mateusbraga/gotf/freestore/view"
 )
@@ -16,7 +14,7 @@ import (
 var (
 	listener    net.Listener
 	thisProcess view.Process
-	db          *sql.DB
+	db          *kv.DB
 
 	useConsensus bool
 )
@@ -33,7 +31,7 @@ func Run(port uint, join bool, master string, useConsensusArg bool) {
 	thisProcess = view.Process{listener.Addr().String()}
 
 	initCurrentView(master)
-	initStorage(port)
+	initStorage()
 	useConsensus = useConsensusArg
 
 	if currentView.HasMember(thisProcess) {
@@ -47,26 +45,10 @@ func Run(port uint, join bool, master string, useConsensusArg bool) {
 	rpc.Accept(listener)
 }
 
-func initStorage(port uint) {
+func initStorage() {
 	var err error
-
-	dbName := fmt.Sprintf("./gotf.%v.db", port)
-	os.Remove(dbName)
-	db, err = sql.Open("sqlite3", dbName)
+	db, err = kv.CreateMem(new(kv.Options))
 	if err != nil {
-		log.Panic(err)
-	}
-	//TODO find place to close db
-
-	sqls := []string{
-		"create table prepare_request (consensus_id integer, highest_proposal_number integer)",
-		"create table accepted_proposal (consensus_id integer, accepted_proposal integer)",
-		"create table proposal_number (consensus_id integer, last_proposal_number integer)",
-	}
-	for _, sql := range sqls {
-		_, err = db.Exec(sql)
-		if err != nil {
-			log.Panicf("%q: %s\n", err, sql)
-		}
+		log.Fatalln("initStorage error:", err)
 	}
 }
