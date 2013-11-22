@@ -2,7 +2,7 @@
 client is how clients should access the system
 
 
-TODO: Because we send so many requests at once using threads, we may have problems having buffer overflow on the socket buffer.  We could limit the number of concurrent threads sending a request.
+IMPROV: Because we send so many requests at once using threads, we may have problems having buffer overflow on the socket buffer.  We could limit the number of concurrent threads sending a request.
 */
 package client
 

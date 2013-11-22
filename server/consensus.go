@@ -283,7 +283,8 @@ func getLastProposalNumber(consensusId int) (int, error) {
 	return 0, nil
 }
 
-// saveAcceptedProposal to permanent storage.  // TODO needs to be tested
+// saveAcceptedProposal to permanent storage.
+// needs to be tested
 func saveAcceptedProposal(consensusId int, proposal *Proposal) {
 	proposalBuffer := new(bytes.Buffer)
 	enc := gob.NewEncoder(proposalBuffer)
@@ -299,7 +300,8 @@ func saveAcceptedProposal(consensusId int, proposal *Proposal) {
 	}
 }
 
-// savePrepareRequest to permanent storage // TODO needs to be tested
+// savePrepareRequest to permanent storage
+// needs to be tested
 func savePrepareRequest(consensusId int, proposal *Prepare) {
 	proposalBuffer := new(bytes.Buffer)
 	enc := gob.NewEncoder(proposalBuffer)
@@ -317,7 +319,7 @@ func savePrepareRequest(consensusId int, proposal *Prepare) {
 // spreadAcceptance to all processes on the current view
 func spreadAcceptance(proposal Proposal) {
 	// Send acceptances to all
-	// TODO Improve spreadAcceptance: it is currently send too many messages at once
+	// Can be improved: it is currently send too many messages at once
 	for _, process := range currentView.GetMembers() {
 		go spreadAcceptanceProcess(process, proposal)
 	}
