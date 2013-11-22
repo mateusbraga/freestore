@@ -25,6 +25,10 @@ type consensusInstance struct {
 	callbackLearnChan chan interface{}
 }
 
+//func (ci *consensusInstance) Nuke() {
+//close(ci.taskChan)
+//}
+
 type consensusTask interface{}
 
 func init() {
@@ -47,14 +51,18 @@ func getConsensus(id int) consensusInstance {
 	}
 }
 
-//TODO implement a way to stop workers that are no longer being used //for example, a consensus instance that was used and no longer needs to exist //should stop running
 func consensusWorker(ci consensusInstance) {
 	var acceptedProposal Proposal     // highest numbered accepted proposal
 	var lastPromiseProposalNumber int // highest numbered prepare request
 	var learnCounter int              // number of learn requests received
 
 	for {
-		taskInterface := <-ci.taskChan
+		taskInterface, ok := <-ci.taskChan
+		if !ok {
+			log.Printf("consensusInstance %v done\n", ci)
+			return
+		}
+
 		switch task := taskInterface.(type) {
 		case *Prepare:
 			log.Println("Processing prepare request")
@@ -87,11 +95,8 @@ func consensusWorker(ci consensusInstance) {
 			if learnCounter == currentView.QuorumSize() {
 				ci.callbackLearnChan <- task.Value
 			}
-		//case StopWorker:
-		//log.Println("Processing StopWorker request")
-		//return
 		default:
-			log.Fatalln("BUG in the ConsensusWorker switch")
+			log.Fatalf("BUG in the ConsensusWorker switch, got %T %v\n", task, task)
 		}
 	}
 }
