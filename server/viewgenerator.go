@@ -198,13 +198,13 @@ func generateViewSequenceWithConsensus(associatedView view.View, seq []view.View
 	log.Println("start generateViewSequenceWithConsensus")
 	assertOnlyUpdatedViews(associatedView, seq)
 
-	consensusInfo := getConsensus(associatedView.NumberOfEntries())
+	consensusInstance := getConsensus(associatedView.NumberOfEntries())
 	if associatedView.GetProcessPosition(thisProcess) == LEADER_PROCESS_POSITION {
 		log.Println("CONSENSUS: leader")
-		Propose(consensusInfo, seq)
+		Propose(consensusInstance, seq)
 	}
 	log.Println("CONSENSUS: wait learn message")
-	value := <-consensusInfo.callbackLearnChan
+	value := <-consensusInstance.callbackLearnChan
 
 	result, ok := value.(*[]view.View)
 	if !ok {
