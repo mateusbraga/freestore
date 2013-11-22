@@ -62,23 +62,19 @@ type newViewSeq struct {
 	AssociatedView view.View
 }
 
-// TODO test this and maybe improve it
 func findLeastUpdatedView(seq []view.View) view.View {
-	for i, v := range seq {
-		isLeastUpdated := true
-		for _, v2 := range seq[i+1:] {
-			if !v.LessUpdatedThan(&v2) {
-				isLeastUpdated = false
-				break
-			}
-		}
-		if isLeastUpdated {
-			return v
+	if len(seq) == 0 {
+		log.Panicln("ERROR: Got empty seq on findLeastUpdatedView")
+	}
+
+	leastUpdatedView := seq[0]
+	for _, v := range seq[1:] {
+		if v.LessUpdatedThan(&leastUpdatedView) {
+			leastUpdatedView.Set(&v)
 		}
 	}
 
-	log.Panicln("BUG! Should not execute this. Failed to find least updated view on: ", seq)
-	return view.View{}
+	return leastUpdatedView
 }
 
 func viewSeqProcessingLoop() {

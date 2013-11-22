@@ -255,21 +255,18 @@ func (quorumCounter *seqConvQuorumCounterType) count(newSeqConv *SeqConv, quorum
 }
 
 func findMostUpdatedView(seq []view.View) view.View {
-	for i, v := range seq {
-		isMostUpdated := true
-		for _, v2 := range seq[i+1:] {
-			if v.LessUpdatedThan(&v2) {
-				isMostUpdated = false
-				break
-			}
-		}
-		if isMostUpdated {
-			return v
+	if len(seq) == 0 {
+		log.Panicln("ERROR: Got empty seq on findLeastUpdatedView")
+	}
+
+	mostUpdatedView := seq[0]
+	for _, v := range seq[1:] {
+		if mostUpdatedView.LessUpdatedThan(&v) {
+			mostUpdatedView.Set(&v)
 		}
 	}
 
-	log.Fatalln("BUG! Could not find most updated view in: ", seq)
-	return view.View{}
+	return mostUpdatedView
 }
 
 // -------- REQUESTS -----------
