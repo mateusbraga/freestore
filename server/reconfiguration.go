@@ -104,7 +104,6 @@ type installSeqQuorumCounterType struct {
 }
 
 func (quorumCounter *installSeqQuorumCounterType) count(newInstallSeq *InstallSeq, quorumSize int) bool {
-	//TODO Cleanup quorum counter old views
 	for i, _ := range quorumCounter.list {
 		if quorumCounter.list[i].Equal(*newInstallSeq) {
 			quorumCounter.counter[i]++
@@ -121,6 +120,7 @@ func (quorumCounter *installSeqQuorumCounterType) count(newInstallSeq *InstallSe
 
 func installSeqProcessingLoop() {
 	processToInstallSeqMsgMap := make(map[view.Process]*InstallSeqMsg)
+	//IMPROV: clean up quorum counter old views
 	var installSeqQuorumCounter installSeqQuorumCounterType
 
 	for {
@@ -265,7 +265,7 @@ type getCallbackStateUpdateRequest struct {
 }
 
 func stateUpdateProcessingLoop() {
-	// TODO quorumCounters are expected to be used until all stateUpdate messages have arrived and the result collected.
+	//IMPROV: clean up quorum counter old views
 	stateUpdateQuorumCounterList := list.New()
 
 	for {

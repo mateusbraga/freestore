@@ -42,7 +42,7 @@ func getConsensus(id int) consensusInstance {
 	if ci, ok := consensusTable[id]; ok {
 		return ci
 	} else {
-		ci := consensusInstance{id: id, taskChan: make(chan consensusTask, 20), callbackLearnChan: make(chan interface{}, 1)}
+		ci := consensusInstance{id: id, taskChan: make(chan consensusTask, CHANNEL_DEFAULT_SIZE), callbackLearnChan: make(chan interface{}, 1)}
 		go consensusWorker(ci)
 
 		consensusTable[ci.id] = ci

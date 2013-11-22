@@ -13,7 +13,7 @@ const (
 )
 
 var (
-	//TODO clean this up periodically
+	//IMPROV: clean this up periodically
 	viewGenerators   []viewGeneratorInstance
 	viewGeneratorsMu sync.Mutex
 )
@@ -37,7 +37,7 @@ func getViewGenerator(associatedView view.View, initialSeq []view.View) viewGene
 
 	vgi := viewGeneratorInstance{}
 	vgi.AssociatedView = associatedView.NewCopy()
-	vgi.jobChan = make(chan ViewGeneratorJob, 20) //TODO
+	vgi.jobChan = make(chan ViewGeneratorJob, CHANNEL_DEFAULT_SIZE)
 	go ViewGeneratorWorker(vgi, initialSeq)
 
 	viewGenerators = append(viewGenerators, vgi)
