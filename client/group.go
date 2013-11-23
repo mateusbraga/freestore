@@ -3,6 +3,7 @@ package client
 import (
 	"log"
 	"net/rpc"
+	"os"
 
 	"mateusbraga/freestore/view"
 )
@@ -13,7 +14,17 @@ var (
 
 func init() {
 	currentView = view.New()
-	getCurrentView(view.Process{"[::]:5000"})
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	if hostname == "MateusPc" {
+		getCurrentView(view.Process{"[::]:5000"})
+	} else {
+		getCurrentView(view.Process{"10.1.1.2:5000"})
+	}
 
 	// Option 1: Static initial view
 	//currentView.AddUpdate(view.Update{view.Join, view.Process{":5000"}})
