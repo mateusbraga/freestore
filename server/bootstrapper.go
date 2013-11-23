@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"net/rpc"
+	"os"
 
 	"github.com/cznic/kv"
 
@@ -23,7 +24,6 @@ var (
 func Run(bindAddr string, join bool, master string, useConsensusArg bool) {
 	var err error
 
-	//listener, err = net.Listen("tcp", fmt.Sprintf(":%d", port))
 	listener, err = net.Listen("tcp", bindAddr)
 	if err != nil {
 		log.Fatal(err)
@@ -64,13 +64,29 @@ func init() {
 }
 
 func initCurrentView(master string) {
-	if thisProcess.Addr == "[::]:5000" || thisProcess.Addr == "[::]:5001" || thisProcess.Addr == "[::]:5002" {
-		currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5000"}})
-		currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5001"}})
-		currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5002"}})
-	} else {
-		getCurrentView(view.Process{master})
+	hostname, err := os.Hostname()
+	if err != nil {
+		log.Fatalln(err)
 	}
+
+	if hostname == "MateusPc" {
+		if thisProcess.Addr == "[::]:5000" || thisProcess.Addr == "[::]:5001" || thisProcess.Addr == "[::]:5002" {
+			currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5000"}})
+			currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5001"}})
+			currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5002"}})
+		} else {
+			getCurrentView(view.Process{master})
+		}
+	} else {
+		if thisProcess.Addr == "10.1.1.2:5000" || thisProcess.Addr == "10.1.1.3:5000" || thisProcess.Addr == "10.1.1.4:5000" {
+			currentView.AddUpdate(view.Update{view.Join, view.Process{"10.1.1.2:5000"}})
+			currentView.AddUpdate(view.Update{view.Join, view.Process{"10.1.1.3:5000"}})
+			currentView.AddUpdate(view.Update{view.Join, view.Process{"10.1.1.4:5000"}})
+		} else {
+			getCurrentView(view.Process{master})
+		}
+	}
+
 	log.Println("Init current view:", currentView)
 }
 
