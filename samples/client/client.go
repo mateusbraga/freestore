@@ -64,7 +64,7 @@ func saveTime(times []time.Duration, size int) {
 	defer w.Flush()
 
 	for _, t := range times {
-		if _, err := w.Write([]byte(fmt.Sprintf("%v\n", t))); err != nil {
+		if _, err := w.Write([]byte(fmt.Sprintf("%d\n", t))); err != nil {
 			log.Fatalln(err)
 		}
 	}
