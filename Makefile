@@ -16,3 +16,7 @@ clean:
 
 upload:
 	rsync -avz -f"- .git/" -f"+ *" --delete /run/media/mateus/Storage/arquivos/projetos/programar/freestore/ mateusbr@users.emulab.net:/proj/freestore/src/mateusbraga/freestore
+
+getresult:
+	rsync -avz -f"- go/" -f"+ *" mateusbr@pc348.emulab.net:/home/mateus/ /home/mateus/results/
+

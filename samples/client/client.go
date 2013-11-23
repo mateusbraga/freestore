@@ -19,7 +19,9 @@ func main() {
 	sizes := []int{1, 256, 512, 1024}
 
 	for _, size := range sizes {
-		times := make([]time.Duration, 1000)
+		var times []time.Duration
+
+		log.Println("Start size: ", size)
 
 		data := make([]byte, size)
 
@@ -34,7 +36,7 @@ func main() {
 			log.Fatalln(err)
 		}
 
-		for {
+		for i := 0; i < 1000; i++ {
 
 			startRead := time.Now()
 			_, err = client.Read()
@@ -52,7 +54,7 @@ func main() {
 }
 
 func saveTime(times []time.Duration, size int) {
-	file, err := os.Create(fmt.Sprintf("/home/mateus/read-latency-%v"))
+	file, err := os.Create(fmt.Sprintf("/home/mateus/read-latency-%v.txt", size))
 	if err != nil {
 		log.Fatalln(err)
 	}
