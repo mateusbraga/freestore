@@ -61,6 +61,7 @@ func saveTime(times []time.Duration, size int) {
 	defer file.Close()
 
 	w := bufio.NewWriter(file)
+	defer w.Flush()
 
 	for _, t := range times {
 		if _, err := w.Write([]byte(fmt.Sprintf("%v\n", t))); err != nil {
