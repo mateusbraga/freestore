@@ -19,7 +19,7 @@ func main() {
 	sizes := []int{1, 256, 512, 1024}
 
 	for _, size := range sizes {
-		var times []time.Duration
+		var times []int64
 
 		log.Println("Start size: ", size)
 
@@ -46,14 +46,14 @@ func main() {
 			}
 
 			//fmt.Printf("Read %v (%v)-> Write (%v)\n", finalValue, endRead.Sub(startRead), endWrite.Sub(startWrite))
-			times = append(times, endRead.Sub(startRead))
+			times = append(times, endRead.Sub(startRead).Nanoseconds())
 			time.Sleep(300 * time.Millisecond)
 		}
 		saveTime(times, size)
 	}
 }
 
-func saveTime(times []time.Duration, size int) {
+func saveTime(times []int64, size int) {
 	file, err := os.Create(fmt.Sprintf("/home/mateus/read-latency-%v.txt", size))
 	if err != nil {
 		log.Fatalln(err)
