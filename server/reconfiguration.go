@@ -641,29 +641,20 @@ func sendInstallSeq(process view.Process, installSeq InstallSeqMsg) {
 func sendReconfigRequest(process view.Process, reconfig ReconfigMsg, resultChan chan error, errChan chan error, stopChan chan bool) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Error ignored:", err)
-		}
+		errChan <- err
 		return
 	}
 	defer client.Close()
 
 	var reply error
-
-	err = client.Call("ReconfigurationRequest.Reconfig", reconfig, &reply)
-	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Error ignored:", err)
-		}
-		return
-	}
-
+	call := client.Go("ReconfigurationRequest.Reconfig", reconfig, &reply, nil)
 	select {
-	case resultChan <- reply:
+	case <-call.Done:
+		if call.Error != nil {
+			errChan <- call.Error
+		} else {
+			resultChan <- reply
+		}
 	case <-stopChan:
 	}
 }
