@@ -25,18 +25,6 @@ func init() {
 	} else {
 		getCurrentView(view.Process{"10.1.1.2:5000"})
 	}
-
-	// Option 1: Static initial view
-	//currentView.AddUpdate(view.Update{view.Join, view.Process{":5000"}})
-	//currentView.AddUpdate(view.Update{view.Join, view.Process{":5001"}})
-	//currentView.AddUpdate(view.Update{view.Join, view.Process{":5002"}})
-
-	// Option 2: Get view on predefined location
-	//addr, err := view.GetRunningServer()
-	//if err != nil {
-	//log.Fatal(err)
-	//}
-	//GetCurrentView(view.Process{addr})
 }
 
 // getCurrentView asks process for the currentView
