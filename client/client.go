@@ -83,12 +83,12 @@ func basicWriteQuorum(writeMsg RegisterMsg) error {
 		case resultValue := <-resultChan:
 			if resultValue.Err != nil {
 				switch err := resultValue.Err.(type) {
-				default:
-					log.Fatalf("resultValue from writeProcess returned unexpected error: %v (%T)", err, err)
 				case *view.OldViewError:
 					log.Println("View updated during basic write quorum")
 					currentView.Set(&err.NewView)
 					return viewUpdatedErr
+				default:
+					log.Fatalf("resultValue from writeProcess returned unexpected error: %v (%T)", err, err)
 				}
 			}
 
@@ -119,28 +119,20 @@ func basicWriteQuorum(writeMsg RegisterMsg) error {
 func writeProcess(process view.Process, writeMsg RegisterMsg, resultChan chan RegisterMsg, errChan chan error, stopChan chan bool) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Error masked:", err)
-		}
+		errChan <- err
 		return
 	}
 	defer client.Close()
 
 	var result RegisterMsg
-	err = client.Call("ClientRequest.Write", writeMsg, &result)
-	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Error masked:", err)
-		}
-		return
-	}
-
+	call := client.Go("ClientRequest.Write", writeMsg, &result, nil)
 	select {
-	case resultChan <- result:
+	case <-call.Done:
+		if call.Error != nil {
+			errChan <- call.Error
+		} else {
+			resultChan <- result
+		}
 	case <-stopChan:
 	}
 }
@@ -199,12 +191,12 @@ func basicReadQuorum() (RegisterMsg, error) {
 		case resultValue := <-resultChan:
 			if resultValue.Err != nil {
 				switch err := resultValue.Err.(type) {
-				default:
-					log.Fatalf("resultValue from readProcess returned unexpected error: %v (%T)", err, err)
 				case *view.OldViewError:
 					log.Println("View updated during basic read quorum")
 					currentView.Set(&err.NewView)
 					return RegisterMsg{}, viewUpdatedErr
+				default:
+					log.Fatalf("resultValue from readProcess returned unexpected error: %v (%T)", err, err)
 				}
 			}
 
@@ -244,29 +236,20 @@ func basicReadQuorum() (RegisterMsg, error) {
 func readProcess(process view.Process, resultChan chan RegisterMsg, errChan chan error, stopChan chan bool) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Error masked:", err)
-		}
+		errChan <- err
 		return
 	}
 	defer client.Close()
 
 	var readMsg RegisterMsg
-
-	err = client.Call("ClientRequest.Read", currentView, &readMsg)
-	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Error masked:", err)
-		}
-		return
-	}
-
+	call := client.Go("ClientRequest.Read", currentView, &readMsg, nil)
 	select {
-	case resultChan <- readMsg:
+	case <-call.Done:
+		if call.Error != nil {
+			errChan <- call.Error
+		} else {
+			resultChan <- readMsg
+		}
 	case <-stopChan:
 	}
 }
