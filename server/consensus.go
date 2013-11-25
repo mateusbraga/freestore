@@ -25,10 +25,6 @@ type consensusInstance struct {
 	callbackLearnChan chan interface{}
 }
 
-//func (ci *consensusInstance) Nuke() {
-//close(ci.taskChan)
-//}
-
 type consensusTask interface{}
 
 func init() {
@@ -329,29 +325,21 @@ func spreadAcceptance(proposal Proposal) {
 func prepareProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error, stopChan chan bool) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Failure masked:", err)
-		}
+		errChan <- err
 		return
 	}
 	defer client.Close()
 
 	var reply Proposal
 
-	err = client.Call("ConsensusRequest.Prepare", proposal, &reply)
-	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Failure masked:", err)
-		}
-		return
-	}
-
+	call := client.Go("ConsensusRequest.Prepare", proposal, &reply, nil)
 	select {
-	case resultChan <- reply:
+	case <-call.Done:
+		if call.Error != nil {
+			errChan <- call.Error
+		} else {
+			resultChan <- reply
+		}
 	case <-stopChan:
 	}
 }
@@ -360,28 +348,20 @@ func prepareProcess(process view.Process, proposal Proposal, resultChan chan Pro
 func acceptProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error, stopChan chan bool) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Failure masked:", err)
-		}
+		errChan <- err
 		return
 	}
 	defer client.Close()
 
 	var reply Proposal
-	err = client.Call("ConsensusRequest.Accept", proposal, &reply)
-	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Failure masked:", err)
-		}
-		return
-	}
-
+	call := client.Go("ConsensusRequest.Accept", proposal, &reply, nil)
 	select {
-	case resultChan <- reply:
+	case <-call.Done:
+		if call.Error != nil {
+			errChan <- call.Error
+		} else {
+			resultChan <- reply
+		}
 	case <-stopChan:
 	}
 }
