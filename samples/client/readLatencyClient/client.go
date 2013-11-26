@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"mateusbraga/freestore/client"
+	"mateusbraga/freestore/view"
 )
 
 func main() {
@@ -36,6 +37,7 @@ func main() {
 			log.Fatalln(err)
 		}
 
+		client.StartMeasurements()
 		for i := 0; i < 1000; i++ {
 
 			startRead := time.Now()
@@ -47,13 +49,16 @@ func main() {
 
 			//fmt.Printf("Read %v (%v)-> Write (%v)\n", finalValue, endRead.Sub(startRead), endWrite.Sub(startWrite))
 			times = append(times, endRead.Sub(startRead).Nanoseconds())
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 		}
-		saveTime(times, size)
+		serverStats := client.EndMeasurements()
+
+		saveLatencyTimes(times, size)
+		saveThroughputTimes(serverStats, size)
 	}
 }
 
-func saveTime(times []int64, size int) {
+func saveLatencyTimes(times []int64, size int) {
 	file, err := os.Create(fmt.Sprintf("/home/mateus/read-latency-%v.txt", size))
 	if err != nil {
 		log.Fatalln(err)
@@ -65,6 +70,23 @@ func saveTime(times []int64, size int) {
 
 	for _, t := range times {
 		if _, err := w.Write([]byte(fmt.Sprintf("%d\n", t))); err != nil {
+			log.Fatalln(err)
+		}
+	}
+}
+
+func saveThroughputTimes(serverStats map[view.Process]client.ServerStats, size int) {
+	file, err := os.Create(fmt.Sprintf("/home/mateus/throughput-%v.txt", size))
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer file.Close()
+
+	w := bufio.NewWriter(file)
+	defer w.Flush()
+
+	for process, stats := range serverStats {
+		if _, err := w.Write([]byte(fmt.Sprintf("%v %v %v\n", process, stats.NumberOfOperations, stats.Duration.Seconds()))); err != nil {
 			log.Fatalln(err)
 		}
 	}

@@ -10,6 +10,8 @@ import (
 	"errors"
 	"log"
 	"net/rpc"
+	"sync"
+	"time"
 
 	"mateusbraga/freestore/view"
 )
@@ -18,6 +20,17 @@ var (
 	diffResultsErr = errors.New("Read Divergence")
 	viewUpdatedErr = errors.New("View Updated")
 )
+
+var (
+	measurementsId    map[view.Process]int
+	serverStats       map[view.Process]ServerStats
+	measurementsMutex sync.Mutex
+)
+
+func init() {
+	measurementsId = make(map[view.Process]int)
+	serverStats = make(map[view.Process]ServerStats)
+}
 
 type RegisterMsg struct {
 	Value     interface{}
@@ -65,14 +78,12 @@ func Write(v interface{}) error {
 func basicWriteQuorum(writeMsg RegisterMsg) error {
 	resultChan := make(chan RegisterMsg, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
 
 	writeMsg.View = currentView.NewCopy()
 
 	// Send write request to all
 	for _, process := range currentView.GetMembers() {
-		go writeProcess(process, writeMsg, resultChan, errChan, stopChan)
+		go writeProcess(process, writeMsg, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -115,8 +126,8 @@ func basicWriteQuorum(writeMsg RegisterMsg) error {
 	}
 }
 
-// writeProcess sends a write request with writeMsg to process and return the result through resultChan or an error through errChan if stopChan is empty
-func writeProcess(process view.Process, writeMsg RegisterMsg, resultChan chan RegisterMsg, errChan chan error, stopChan chan bool) {
+// writeProcess sends a write request with writeMsg to process and return the result through resultChan or an error through errChan
+func writeProcess(process view.Process, writeMsg RegisterMsg, resultChan chan RegisterMsg, errChan chan error) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		errChan <- err
@@ -125,16 +136,12 @@ func writeProcess(process view.Process, writeMsg RegisterMsg, resultChan chan Re
 	defer client.Close()
 
 	var result RegisterMsg
-	call := client.Go("ClientRequest.Write", writeMsg, &result, nil)
-	select {
-	case <-call.Done:
-		if call.Error != nil {
-			errChan <- call.Error
-		} else {
-			resultChan <- result
-		}
-	case <-stopChan:
+	err = client.Call("ClientRequest.Write", writeMsg, &result)
+	if err != nil {
+		errChan <- err
 	}
+
+	resultChan <- result
 }
 
 // Read executes the quorum read protocol.
@@ -173,12 +180,10 @@ func Read() (interface{}, error) {
 func basicReadQuorum() (RegisterMsg, error) {
 	resultChan := make(chan RegisterMsg, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
 
 	// Send read request to all
 	for _, process := range currentView.GetMembers() {
-		go readProcess(process, resultChan, errChan, stopChan)
+		go readProcess(process, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -232,8 +237,8 @@ func basicReadQuorum() (RegisterMsg, error) {
 	}
 }
 
-// readProcess sends a read request to process and return an err through errChan or a result through resultChan if stopChan is empty
-func readProcess(process view.Process, resultChan chan RegisterMsg, errChan chan error, stopChan chan bool) {
+// readProcess sends a read request to process and return an err through errChan or a result through resultChan
+func readProcess(process view.Process, resultChan chan RegisterMsg, errChan chan error) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		errChan <- err
@@ -242,21 +247,66 @@ func readProcess(process view.Process, resultChan chan RegisterMsg, errChan chan
 	defer client.Close()
 
 	var readMsg RegisterMsg
-	call := client.Go("ClientRequest.Read", currentView, &readMsg, nil)
-	select {
-	case <-call.Done:
-		if call.Error != nil {
-			errChan <- call.Error
-		} else {
-			resultChan <- readMsg
-		}
-	case <-stopChan:
+	err = client.Call("ClientRequest.Read", currentView, &readMsg)
+	if err != nil {
+		errChan <- err
+	}
+
+	resultChan <- readMsg
+}
+
+func StartMeasurements() {
+	for _, process := range currentView.GetMembers() {
+		go startMeasurementsProcess(process)
 	}
 }
 
-// fillStopChan send times * 'true' on stopChan. It is used to signal completion to readProcess and writeProcess.
-func fillStopChan(stopChan chan bool, times int) {
-	for i := 0; i < times; i++ {
-		stopChan <- true
+func EndMeasurements() map[view.Process]ServerStats {
+	for _, process := range currentView.GetMembers() {
+		go endMeasurementsProcess(process)
 	}
+	return serverStats
+}
+
+func startMeasurementsProcess(process view.Process) {
+	client, err := rpc.Dial("tcp", process.Addr)
+	if err != nil {
+		log.Fatalln("startMeasurementsProcess:", err)
+	}
+	defer client.Close()
+
+	var id int
+	err = client.Call("ClientRequest.StartMeasurements", false, &id)
+	if err != nil {
+		log.Fatalln("startMeasurementsProcess:", err)
+	}
+
+	measurementsMutex.Lock()
+	defer measurementsMutex.Unlock()
+
+	measurementsId[process] = id
+}
+
+func endMeasurementsProcess(process view.Process) {
+	client, err := rpc.Dial("tcp", process.Addr)
+	if err != nil {
+		log.Fatalln("endMeasurementsProcess:", err)
+	}
+	defer client.Close()
+
+	var stat ServerStats
+	err = client.Call("ClientRequest.EndMeasurements", measurementsId[process], &stat)
+	if err != nil {
+		log.Fatalln("endMeasurementsProcess:", err)
+	}
+
+	measurementsMutex.Lock()
+	defer measurementsMutex.Unlock()
+
+	serverStats[process] = stat
+}
+
+type ServerStats struct {
+	NumberOfOperations int
+	Duration           time.Duration
 }

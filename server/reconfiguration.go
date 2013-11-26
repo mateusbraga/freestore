@@ -421,14 +421,12 @@ func (quorumCounter *SimpleQuorumCounter) count(quorumSize int) bool {
 func Join() error {
 	resultChan := make(chan error, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
 
 	reconfig := ReconfigMsg{CurrentView: currentView.NewCopy(), Update: view.Update{view.Join, thisProcess}}
 
 	// Send reconfig request to all
 	for _, process := range currentView.GetMembers() {
-		go sendReconfigRequest(process, reconfig, resultChan, errChan, stopChan)
+		go sendReconfigRequest(process, reconfig, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -460,15 +458,13 @@ func Join() error {
 func Leave() error {
 	resultChan := make(chan error, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
 
 	reconfig := ReconfigMsg{Update: view.Update{view.Leave, thisProcess}}
 	reconfig.CurrentView = currentView.NewCopy()
 
 	// Send reconfig request to all
 	for _, process := range currentView.GetMembers() {
-		go sendReconfigRequest(process, reconfig, resultChan, errChan, stopChan)
+		go sendReconfigRequest(process, reconfig, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -638,7 +634,7 @@ func sendInstallSeq(process view.Process, installSeq InstallSeqMsg) {
 	}
 }
 
-func sendReconfigRequest(process view.Process, reconfig ReconfigMsg, resultChan chan error, errChan chan error, stopChan chan bool) {
+func sendReconfigRequest(process view.Process, reconfig ReconfigMsg, resultChan chan error, errChan chan error) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		errChan <- err
@@ -647,14 +643,10 @@ func sendReconfigRequest(process view.Process, reconfig ReconfigMsg, resultChan 
 	defer client.Close()
 
 	var reply error
-	call := client.Go("ReconfigurationRequest.Reconfig", reconfig, &reply, nil)
-	select {
-	case <-call.Done:
-		if call.Error != nil {
-			errChan <- call.Error
-		} else {
-			resultChan <- reply
-		}
-	case <-stopChan:
+	err = client.Call("ReconfigurationRequest.Reconfig", reconfig, &reply)
+	if err != nil {
+		log.Fatalln(err)
 	}
+
+	resultChan <- reply
 }

@@ -126,12 +126,10 @@ func Propose(ci consensusInstance, defaultValue interface{}) {
 func prepare(proposal Proposal) (interface{}, error) {
 	resultChan := make(chan Proposal, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
 
 	// Send read request to all
 	for _, process := range currentView.GetMembers() {
-		go prepareProcess(process, proposal, resultChan, errChan, stopChan)
+		go prepareProcess(process, proposal, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -169,12 +167,10 @@ func prepare(proposal Proposal) (interface{}, error) {
 func accept(proposal Proposal) error {
 	resultChan := make(chan Proposal, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
 
 	// Send accept request to all
 	for _, process := range currentView.GetMembers() {
-		go acceptProcess(process, proposal, resultChan, errChan, stopChan)
+		go acceptProcess(process, proposal, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -322,7 +318,7 @@ func spreadAcceptance(proposal Proposal) {
 }
 
 // prepareProcess sends a prepare proposal to process.
-func prepareProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error, stopChan chan bool) {
+func prepareProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		errChan <- err
@@ -332,20 +328,16 @@ func prepareProcess(process view.Process, proposal Proposal, resultChan chan Pro
 
 	var reply Proposal
 
-	call := client.Go("ConsensusRequest.Prepare", proposal, &reply, nil)
-	select {
-	case <-call.Done:
-		if call.Error != nil {
-			errChan <- call.Error
-		} else {
-			resultChan <- reply
-		}
-	case <-stopChan:
+	err = client.Call("ConsensusRequest.Prepare", proposal, &reply)
+	if err != nil {
+		errChan <- err
 	}
+
+	resultChan <- reply
 }
 
 // acceptProcess sends a prepare proposal to process.
-func acceptProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error, stopChan chan bool) {
+func acceptProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error) {
 	client, err := rpc.Dial("tcp", process.Addr)
 	if err != nil {
 		errChan <- err
@@ -354,16 +346,12 @@ func acceptProcess(process view.Process, proposal Proposal, resultChan chan Prop
 	defer client.Close()
 
 	var reply Proposal
-	call := client.Go("ConsensusRequest.Accept", proposal, &reply, nil)
-	select {
-	case <-call.Done:
-		if call.Error != nil {
-			errChan <- call.Error
-		} else {
-			resultChan <- reply
-		}
-	case <-stopChan:
+	err = client.Call("ConsensusRequest.Accept", proposal, &reply)
+	if err != nil {
+		errChan <- err
 	}
+
+	resultChan <- reply
 }
 
 // spreadAcceptance sends acceptance to process.
@@ -473,12 +461,4 @@ func (e OldProposalNumberError) Error() string {
 
 func init() {
 	gob.Register(new(OldProposalNumberError))
-}
-
-// ------- Auxiliary functions -----------
-// fillStopChan send times * 'true' on stopChan. It is used to signal completion to readProcess and writeProcess.
-func fillStopChan(stopChan chan bool, times int) {
-	for i := 0; i < times; i++ {
-		stopChan <- true
-	}
 }
