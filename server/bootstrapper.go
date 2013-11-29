@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/rpc"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/cznic/kv"
 
+	"mateusbraga/freestore/comm"
 	"mateusbraga/freestore/view"
 )
 
@@ -21,7 +23,7 @@ var (
 	useConsensus bool
 )
 
-func Run(bindAddr string, join bool, master string, useConsensusArg bool) {
+func Run(bindAddr string, join bool, master string, useConsensusArg bool, numberOfServers int) {
 	var err error
 
 	listener, err = net.Listen("tcp", bindAddr)
@@ -31,7 +33,7 @@ func Run(bindAddr string, join bool, master string, useConsensusArg bool) {
 	log.Println("Listening on address:", listener.Addr())
 
 	initThisProcess()
-	initCurrentView(master)
+	initCurrentView(master, numberOfServers)
 	initStorage()
 
 	useConsensus = useConsensusArg
@@ -63,28 +65,29 @@ func init() {
 	currentView = view.New()
 }
 
-func initCurrentView(master string) {
+func initCurrentView(master string, numberOfServers int) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
+	initialView := make(map[view.Process]bool)
 	if hostname == "MateusPc" {
-		if thisProcess.Addr == "[::]:5000" || thisProcess.Addr == "[::]:5001" || thisProcess.Addr == "[::]:5002" {
-			currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5000"}})
-			currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5001"}})
-			currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5002"}})
-		} else {
-			getCurrentView(view.Process{master})
+		for i := 0; i < numberOfServers; i++ {
+			initialView[view.Process{fmt.Sprintf("[::]:500%d", i)}] = true
 		}
 	} else {
-		if thisProcess.Addr == "10.1.1.2:5000" || thisProcess.Addr == "10.1.1.3:5000" || thisProcess.Addr == "10.1.1.4:5000" {
-			currentView.AddUpdate(view.Update{view.Join, view.Process{"10.1.1.2:5000"}})
-			currentView.AddUpdate(view.Update{view.Join, view.Process{"10.1.1.3:5000"}})
-			currentView.AddUpdate(view.Update{view.Join, view.Process{"10.1.1.4:5000"}})
-		} else {
-			getCurrentView(view.Process{master})
+		for i := 0; i < numberOfServers; i++ {
+			initialView[view.Process{fmt.Sprintf("10.1.1.%d:5000", i+2)}] = true
 		}
+	}
+
+	if initialView[thisProcess] {
+		for process, _ := range initialView {
+			currentView.AddUpdate(view.Update{view.Join, process})
+		}
+	} else {
+		getCurrentView(view.Process{master})
 	}
 
 	log.Println("Init current view:", currentView)
@@ -92,16 +95,11 @@ func initCurrentView(master string) {
 
 // GetCurrentViewClient asks process for the currentView
 func getCurrentView(process view.Process) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer client.Close()
-
 	var newView view.View
-	client.Call("ClientRequest.GetCurrentView", 0, &newView)
+	err := comm.SendRPCRequest(process, "ClientRequest.GetCurrentView", 0, &newView)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("ERROR: getCurrentView:", err)
+		return
 	}
 
 	currentView.Set(&newView)

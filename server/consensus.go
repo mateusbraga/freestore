@@ -9,6 +9,7 @@ import (
 	"net/rpc"
 	"sync"
 
+	"mateusbraga/freestore/comm"
 	"mateusbraga/freestore/view"
 )
 
@@ -319,18 +320,11 @@ func spreadAcceptance(proposal Proposal) {
 
 // prepareProcess sends a prepare proposal to process.
 func prepareProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error) {
-	client, err := rpc.Dial("tcp", process.Addr)
+	var reply Proposal
+	err := comm.SendRPCRequest(process, "ConsensusRequest.Prepare", proposal, &reply)
 	if err != nil {
 		errChan <- err
 		return
-	}
-	defer client.Close()
-
-	var reply Proposal
-
-	err = client.Call("ConsensusRequest.Prepare", proposal, &reply)
-	if err != nil {
-		errChan <- err
 	}
 
 	resultChan <- reply
@@ -338,17 +332,11 @@ func prepareProcess(process view.Process, proposal Proposal, resultChan chan Pro
 
 // acceptProcess sends a prepare proposal to process.
 func acceptProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error) {
-	client, err := rpc.Dial("tcp", process.Addr)
+	var reply Proposal
+	err := comm.SendRPCRequest(process, "ConsensusRequest.Accept", proposal, &reply)
 	if err != nil {
 		errChan <- err
 		return
-	}
-	defer client.Close()
-
-	var reply Proposal
-	err = client.Call("ConsensusRequest.Accept", proposal, &reply)
-	if err != nil {
-		errChan <- err
 	}
 
 	resultChan <- reply
@@ -356,15 +344,7 @@ func acceptProcess(process view.Process, proposal Proposal, resultChan chan Prop
 
 // spreadAcceptance sends acceptance to process.
 func spreadAcceptanceProcess(process view.Process, proposal Proposal) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		log.Println("WARN: spreadAcceptanceProcess:", err)
-		return
-	}
-	defer client.Close()
-
-	var reply Proposal
-	err = client.Call("ConsensusRequest.Learn", proposal, &reply)
+	err := comm.SendRPCRequest(process, "ConsensusRequest.Learn", proposal, Proposal{})
 	if err != nil {
 		log.Println("WARN: spreadAcceptanceProcess:", err)
 		return

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"mateusbraga/freestore/comm"
 	"mateusbraga/freestore/view"
 )
 
@@ -298,7 +299,7 @@ func stateUpdateProcessingLoop() {
 					}
 
 					if stateUpdateQuorum.finalValue.Timestamp < stateUpdate.Timestamp {
-						stateUpdateQuorum.finalValue.Value = stateUpdate.Value.(int)
+						stateUpdateQuorum.finalValue.Value = stateUpdate.Value
 						stateUpdateQuorum.finalValue.Timestamp = stateUpdate.Timestamp
 					}
 
@@ -318,7 +319,7 @@ func stateUpdateProcessingLoop() {
 			}
 
 			newCallbackChan := make(chan *stateUpdateQuorumType)
-			newStateUpdateQuorum := stateUpdateQuorumType{stateUpdate.AssociatedView, &Value{Value: stateUpdate.Value.(int), Timestamp: stateUpdate.Timestamp}, make(map[view.Update]bool), 1, newCallbackChan}
+			newStateUpdateQuorum := stateUpdateQuorumType{stateUpdate.AssociatedView, &Value{Value: stateUpdate.Value, Timestamp: stateUpdate.Timestamp}, make(map[view.Update]bool), 1, newCallbackChan}
 
 			if quorumSize == 1 {
 				go func(stateUpdate *stateUpdateQuorumType) { stateUpdate.callbackChan <- stateUpdate }(&newStateUpdateQuorum)
@@ -593,59 +594,38 @@ func init() {
 
 // -------- Send functions -----------
 func sendViewInstalled(process view.Process, viewInstalled ViewInstalledMsg) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		return
-	}
-	defer client.Close()
-
 	var reply error
-	err = client.Call("ReconfigurationRequest.ViewInstalled", viewInstalled, &reply)
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.ViewInstalled", viewInstalled, &reply)
 	if err != nil {
+		log.Println("WARN sendViewInstalled:", err)
 		return
 	}
 }
 
 func sendStateUpdate(process view.Process, state StateUpdateMsg) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		return
-	}
-	defer client.Close()
-
 	var reply error
-	err = client.Call("ReconfigurationRequest.StateUpdate", state, &reply)
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.StateUpdate", state, &reply)
 	if err != nil {
+		log.Println("WARN sendStateUpdate:", err)
 		return
 	}
 }
 
 func sendInstallSeq(process view.Process, installSeq InstallSeqMsg) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		return
-	}
-	defer client.Close()
-
 	var reply error
-	err = client.Call("ReconfigurationRequest.InstallSeq", installSeq, &reply)
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.InstallSeq", installSeq, &reply)
 	if err != nil {
+		log.Println("WARN sendInstallSeq:", err)
 		return
 	}
 }
 
 func sendReconfigRequest(process view.Process, reconfig ReconfigMsg, resultChan chan error, errChan chan error) {
-	client, err := rpc.Dial("tcp", process.Addr)
+	var reply error
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.Reconfig", reconfig, &reply)
 	if err != nil {
 		errChan <- err
 		return
-	}
-	defer client.Close()
-
-	var reply error
-	err = client.Call("ReconfigurationRequest.Reconfig", reconfig, &reply)
-	if err != nil {
-		log.Fatalln(err)
 	}
 
 	resultChan <- reply

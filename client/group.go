@@ -2,9 +2,9 @@ package client
 
 import (
 	"log"
-	"net/rpc"
 	"os"
 
+	"mateusbraga/freestore/comm"
 	"mateusbraga/freestore/view"
 )
 
@@ -29,16 +29,11 @@ func init() {
 
 // getCurrentView asks process for the currentView
 func getCurrentView(process view.Process) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer client.Close()
-
 	var newView view.View
-	client.Call("ClientRequest.GetCurrentView", 0, &newView)
+	err := comm.SendRPCRequest(process, "ClientRequest.GetCurrentView", 0, &newView)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("ERROR getCurrentView:", err)
+		return
 	}
 
 	log.Printf("Updating view from %v to %v\n", &currentView, &newView)

@@ -4,16 +4,20 @@ install:
 	go install mateusbraga/freestore/view
 	go install mateusbraga/freestore/client
 	go install mateusbraga/freestore/server
-	go install mateusbraga/freestore/samples/client/readLatencyClient
-	go install mateusbraga/freestore/samples/client/writeLatencyClient
+	go install mateusbraga/freestore/samples/client
+	go install mateusbraga/freestore/samples/client/clientMeasures
+	#go install mateusbraga/freestore/samples/client/readLatencyClient
+	#go install mateusbraga/freestore/samples/client/writeLatencyClient
 	go install mateusbraga/freestore/samples/server
 
 clean:
 	go clean -i mateusbraga/freestore/view
 	go clean -i mateusbraga/freestore/client
 	go clean -i mateusbraga/freestore/server
-	go clean -i mateusbraga/freestore/samples/client/readLatencyClient
-	go clean -i mateusbraga/freestore/samples/client/writeLatencyClient
+	go clean -i mateusbraga/freestore/samples/client
+	go clean -i mateusbraga/freestore/samples/client/clientMeasures
+	#go clean -i mateusbraga/freestore/samples/client/readLatencyClient
+	#go clean -i mateusbraga/freestore/samples/client/writeLatencyClient
 	go clean -i mateusbraga/freestore/samples/server
 
 upload:
