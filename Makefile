@@ -6,8 +6,6 @@ install:
 	go install mateusbraga/freestore/server
 	go install mateusbraga/freestore/samples/client
 	go install mateusbraga/freestore/samples/client/clientMeasures
-	#go install mateusbraga/freestore/samples/client/readLatencyClient
-	#go install mateusbraga/freestore/samples/client/writeLatencyClient
 	go install mateusbraga/freestore/samples/server
 
 clean:
@@ -16,13 +14,11 @@ clean:
 	go clean -i mateusbraga/freestore/server
 	go clean -i mateusbraga/freestore/samples/client
 	go clean -i mateusbraga/freestore/samples/client/clientMeasures
-	#go clean -i mateusbraga/freestore/samples/client/readLatencyClient
-	#go clean -i mateusbraga/freestore/samples/client/writeLatencyClient
 	go clean -i mateusbraga/freestore/samples/server
 
 upload:
 	rsync -avz -f"- .git/" -f"+ *" --delete /run/media/mateus/Storage/arquivos/projetos/programar/freestore/ mateusbr@users.emulab.net:/proj/freestore/src/mateusbraga/freestore
 
 getresult:
-	rsync -avz -f"- go/" -f"+ *" mateusbr@pc348.emulab.net:/home/mateus/ /home/mateus/results/
+	rsync -avz -f"- go/" -f"+ *" mateusbr@pc299.emulab.net:/home/mateus/ /home/mateus/results/
 
