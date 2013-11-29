@@ -99,8 +99,8 @@ func latencyAndThroughput() {
 
 	endTime := time.Now()
 	totalDuration = endTime.Sub(startTime)
-	fmt.Printf("%v operations done in %v = %v ops/s\n", i, totalDuration, float64(i)/totalDuration.Seconds())
-	saveLatencyWithThroughputTimes()
+	fmt.Printf("%v operations done in %v\n", i, totalDuration)
+	saveLatencyTimes()
 }
 
 func latency() {
@@ -142,33 +142,6 @@ func latency() {
 	}
 
 	saveLatencyTimes()
-}
-
-func saveLatencyWithThroughputTimes() {
-	var filename string
-	if isWrite {
-		filename = fmt.Sprintf("/home/mateus/write-%v.txt", size)
-	} else {
-		filename = fmt.Sprintf("/home/mateus/read-%v.txt", size)
-	}
-
-	file, err := os.Create(filename)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	defer file.Close()
-
-	w := bufio.NewWriter(file)
-	defer w.Flush()
-
-	if _, err := w.Write([]byte(fmt.Sprintf("%v\n", float64(i)/totalDuration.Seconds()))); err != nil {
-		log.Fatalln(err)
-	}
-	for _, t := range latencies {
-		if _, err := w.Write([]byte(fmt.Sprintf("%d\n", t))); err != nil {
-			log.Fatalln(err)
-		}
-	}
 }
 
 func saveLatencyTimes() {
