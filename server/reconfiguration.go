@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"mateusbraga/freestore/comm"
 	"mateusbraga/freestore/view"
 )
 
@@ -298,7 +299,7 @@ func stateUpdateProcessingLoop() {
 					}
 
 					if stateUpdateQuorum.finalValue.Timestamp < stateUpdate.Timestamp {
-						stateUpdateQuorum.finalValue.Value = stateUpdate.Value.(int)
+						stateUpdateQuorum.finalValue.Value = stateUpdate.Value
 						stateUpdateQuorum.finalValue.Timestamp = stateUpdate.Timestamp
 					}
 
@@ -318,7 +319,7 @@ func stateUpdateProcessingLoop() {
 			}
 
 			newCallbackChan := make(chan *stateUpdateQuorumType)
-			newStateUpdateQuorum := stateUpdateQuorumType{stateUpdate.AssociatedView, &Value{Value: stateUpdate.Value.(int), Timestamp: stateUpdate.Timestamp}, make(map[view.Update]bool), 1, newCallbackChan}
+			newStateUpdateQuorum := stateUpdateQuorumType{stateUpdate.AssociatedView, &Value{Value: stateUpdate.Value, Timestamp: stateUpdate.Timestamp}, make(map[view.Update]bool), 1, newCallbackChan}
 
 			if quorumSize == 1 {
 				go func(stateUpdate *stateUpdateQuorumType) { stateUpdate.callbackChan <- stateUpdate }(&newStateUpdateQuorum)
@@ -421,14 +422,12 @@ func (quorumCounter *SimpleQuorumCounter) count(quorumSize int) bool {
 func Join() error {
 	resultChan := make(chan error, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
 
 	reconfig := ReconfigMsg{CurrentView: currentView.NewCopy(), Update: view.Update{view.Join, thisProcess}}
 
 	// Send reconfig request to all
 	for _, process := range currentView.GetMembers() {
-		go sendReconfigRequest(process, reconfig, resultChan, errChan, stopChan)
+		go sendReconfigRequest(process, reconfig, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -460,15 +459,13 @@ func Join() error {
 func Leave() error {
 	resultChan := make(chan error, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
 
 	reconfig := ReconfigMsg{Update: view.Update{view.Leave, thisProcess}}
 	reconfig.CurrentView = currentView.NewCopy()
 
 	// Send reconfig request to all
 	for _, process := range currentView.GetMembers() {
-		go sendReconfigRequest(process, reconfig, resultChan, errChan, stopChan)
+		go sendReconfigRequest(process, reconfig, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -597,73 +594,39 @@ func init() {
 
 // -------- Send functions -----------
 func sendViewInstalled(process view.Process, viewInstalled ViewInstalledMsg) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		return
-	}
-	defer client.Close()
-
 	var reply error
-	err = client.Call("ReconfigurationRequest.ViewInstalled", viewInstalled, &reply)
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.ViewInstalled", viewInstalled, &reply)
 	if err != nil {
+		log.Println("WARN sendViewInstalled:", err)
 		return
 	}
 }
 
 func sendStateUpdate(process view.Process, state StateUpdateMsg) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		return
-	}
-	defer client.Close()
-
 	var reply error
-	err = client.Call("ReconfigurationRequest.StateUpdate", state, &reply)
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.StateUpdate", state, &reply)
 	if err != nil {
+		log.Println("WARN sendStateUpdate:", err)
 		return
 	}
 }
 
 func sendInstallSeq(process view.Process, installSeq InstallSeqMsg) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		return
-	}
-	defer client.Close()
-
 	var reply error
-	err = client.Call("ReconfigurationRequest.InstallSeq", installSeq, &reply)
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.InstallSeq", installSeq, &reply)
 	if err != nil {
+		log.Println("WARN sendInstallSeq:", err)
 		return
 	}
 }
 
-func sendReconfigRequest(process view.Process, reconfig ReconfigMsg, resultChan chan error, errChan chan error, stopChan chan bool) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Error ignored:", err)
-		}
-		return
-	}
-	defer client.Close()
-
+func sendReconfigRequest(process view.Process, reconfig ReconfigMsg, resultChan chan error, errChan chan error) {
 	var reply error
-
-	err = client.Call("ReconfigurationRequest.Reconfig", reconfig, &reply)
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.Reconfig", reconfig, &reply)
 	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Error ignored:", err)
-		}
+		errChan <- err
 		return
 	}
 
-	select {
-	case resultChan <- reply:
-	case <-stopChan:
-	}
+	resultChan <- reply
 }

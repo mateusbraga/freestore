@@ -5,6 +5,7 @@ import (
 	"net/rpc"
 	"sync"
 
+	"mateusbraga/freestore/comm"
 	"mateusbraga/freestore/view"
 )
 
@@ -337,29 +338,19 @@ func init() {
 
 // -------- Send functions -----------
 func sendViewSequence(process view.Process, viewSeq ViewSeqMsg) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		return
-	}
-	defer client.Close()
-
 	var reply error
-	err = client.Call("ViewGeneratorRequest.ViewSeq", viewSeq, &reply)
+	err := comm.SendRPCRequest(process, "ViewGeneratorRequest.ViewSeq", viewSeq, &reply)
 	if err != nil {
+		log.Println("WARN sendViewSequence:", err)
 		return
 	}
 }
 
 func sendViewSequenceConv(process view.Process, seqConv SeqConvMsg) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		return
-	}
-	defer client.Close()
-
 	var reply error
-	err = client.Call("ViewGeneratorRequest.SeqConv", seqConv, &reply)
+	err := comm.SendRPCRequest(process, "ViewGeneratorRequest.SeqConv", seqConv, &reply)
 	if err != nil {
+		log.Println("WARN sendViewSequenceConv:", err)
 		return
 	}
 }

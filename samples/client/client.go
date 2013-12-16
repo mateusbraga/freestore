@@ -24,13 +24,13 @@ func main() {
 		}
 
 		startWrite := time.Now()
-		err = client.Write(finalValue.(int) + 1)
+		err = client.Write(finalValue)
 		endWrite := time.Now()
 		if err != nil {
 			log.Fatalln(err)
 		}
 
 		fmt.Printf("Read %v (%v)-> Write (%v)\n", finalValue, endRead.Sub(startRead), endWrite.Sub(startWrite))
-		time.Sleep(1 * time.Second)
+		time.Sleep(300 * time.Millisecond)
 	}
 }

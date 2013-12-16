@@ -9,6 +9,7 @@ import (
 	"net/rpc"
 	"sync"
 
+	"mateusbraga/freestore/comm"
 	"mateusbraga/freestore/view"
 )
 
@@ -24,10 +25,6 @@ type consensusInstance struct {
 	taskChan          chan consensusTask
 	callbackLearnChan chan interface{}
 }
-
-//func (ci *consensusInstance) Nuke() {
-//close(ci.taskChan)
-//}
 
 type consensusTask interface{}
 
@@ -130,12 +127,10 @@ func Propose(ci consensusInstance, defaultValue interface{}) {
 func prepare(proposal Proposal) (interface{}, error) {
 	resultChan := make(chan Proposal, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
 
 	// Send read request to all
 	for _, process := range currentView.GetMembers() {
-		go prepareProcess(process, proposal, resultChan, errChan, stopChan)
+		go prepareProcess(process, proposal, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -173,12 +168,10 @@ func prepare(proposal Proposal) (interface{}, error) {
 func accept(proposal Proposal) error {
 	resultChan := make(chan Proposal, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
 
 	// Send accept request to all
 	for _, process := range currentView.GetMembers() {
-		go acceptProcess(process, proposal, resultChan, errChan, stopChan)
+		go acceptProcess(process, proposal, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -326,77 +319,32 @@ func spreadAcceptance(proposal Proposal) {
 }
 
 // prepareProcess sends a prepare proposal to process.
-func prepareProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error, stopChan chan bool) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Failure masked:", err)
-		}
-		return
-	}
-	defer client.Close()
-
+func prepareProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error) {
 	var reply Proposal
-
-	err = client.Call("ConsensusRequest.Prepare", proposal, &reply)
+	err := comm.SendRPCRequest(process, "ConsensusRequest.Prepare", proposal, &reply)
 	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Failure masked:", err)
-		}
+		errChan <- err
 		return
 	}
 
-	select {
-	case resultChan <- reply:
-	case <-stopChan:
-	}
+	resultChan <- reply
 }
 
 // acceptProcess sends a prepare proposal to process.
-func acceptProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error, stopChan chan bool) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Failure masked:", err)
-		}
-		return
-	}
-	defer client.Close()
-
+func acceptProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error) {
 	var reply Proposal
-	err = client.Call("ConsensusRequest.Accept", proposal, &reply)
+	err := comm.SendRPCRequest(process, "ConsensusRequest.Accept", proposal, &reply)
 	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Failure masked:", err)
-		}
+		errChan <- err
 		return
 	}
 
-	select {
-	case resultChan <- reply:
-	case <-stopChan:
-	}
+	resultChan <- reply
 }
 
 // spreadAcceptance sends acceptance to process.
 func spreadAcceptanceProcess(process view.Process, proposal Proposal) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		log.Println("WARN: spreadAcceptanceProcess:", err)
-		return
-	}
-	defer client.Close()
-
-	var reply Proposal
-	err = client.Call("ConsensusRequest.Learn", proposal, &reply)
+	err := comm.SendRPCRequest(process, "ConsensusRequest.Learn", proposal, Proposal{})
 	if err != nil {
 		log.Println("WARN: spreadAcceptanceProcess:", err)
 		return
@@ -493,12 +441,4 @@ func (e OldProposalNumberError) Error() string {
 
 func init() {
 	gob.Register(new(OldProposalNumberError))
-}
-
-// ------- Auxiliary functions -----------
-// fillStopChan send times * 'true' on stopChan. It is used to signal completion to readProcess and writeProcess.
-func fillStopChan(stopChan chan bool, times int) {
-	for i := 0; i < times; i++ {
-		stopChan <- true
-	}
 }

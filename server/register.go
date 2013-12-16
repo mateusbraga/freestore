@@ -19,6 +19,7 @@ type ClientRequest int
 func (r *ClientRequest) Read(clientView view.View, reply *Value) error {
 	if !clientView.Equal(&currentView) {
 		reply.Err = view.OldViewError{NewView: currentView.NewCopy()}
+		return nil
 	}
 
 	register.mu.RLock()
@@ -27,7 +28,6 @@ func (r *ClientRequest) Read(clientView view.View, reply *Value) error {
 	reply.Value = register.Value
 	reply.Timestamp = register.Timestamp
 
-	log.Println("Done read request")
 	return nil
 }
 
@@ -45,7 +45,6 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 		register.Timestamp = value.Timestamp
 	}
 
-	log.Println("Done write request")
 	return nil
 }
 
@@ -58,8 +57,8 @@ func (r *ClientRequest) GetCurrentView(value int, reply *view.View) error {
 // --------- Bootstrapping ---------
 func init() {
 	register.mu.Lock() // The register starts locked
-	register.Value = 3
-	register.Timestamp = 1
+	register.Value = nil
+	register.Timestamp = 0
 
 	clientRequest := new(ClientRequest)
 	rpc.Register(clientRequest)

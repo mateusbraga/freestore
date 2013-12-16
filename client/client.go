@@ -9,8 +9,8 @@ package client
 import (
 	"errors"
 	"log"
-	"net/rpc"
 
+	"mateusbraga/freestore/comm"
 	"mateusbraga/freestore/view"
 )
 
@@ -65,14 +65,12 @@ func Write(v interface{}) error {
 func basicWriteQuorum(writeMsg RegisterMsg) error {
 	resultChan := make(chan RegisterMsg, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
 
 	writeMsg.View = currentView.NewCopy()
 
 	// Send write request to all
 	for _, process := range currentView.GetMembers() {
-		go writeProcess(process, writeMsg, resultChan, errChan, stopChan)
+		go writeProcess(process, writeMsg, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -83,12 +81,12 @@ func basicWriteQuorum(writeMsg RegisterMsg) error {
 		case resultValue := <-resultChan:
 			if resultValue.Err != nil {
 				switch err := resultValue.Err.(type) {
-				default:
-					log.Fatalf("resultValue from writeProcess returned unexpected error: %v (%T)", err, err)
 				case *view.OldViewError:
 					log.Println("View updated during basic write quorum")
 					currentView.Set(&err.NewView)
 					return viewUpdatedErr
+				default:
+					log.Fatalf("resultValue from writeProcess returned unexpected error: %v (%T)", err, err)
 				}
 			}
 
@@ -115,34 +113,16 @@ func basicWriteQuorum(writeMsg RegisterMsg) error {
 	}
 }
 
-// writeProcess sends a write request with writeMsg to process and return the result through resultChan or an error through errChan if stopChan is empty
-func writeProcess(process view.Process, writeMsg RegisterMsg, resultChan chan RegisterMsg, errChan chan error, stopChan chan bool) {
-	client, err := rpc.Dial("tcp", process.Addr)
+// writeProcess sends a write request with writeMsg to process and return the result through resultChan or an error through errChan
+func writeProcess(process view.Process, writeMsg RegisterMsg, resultChan chan RegisterMsg, errChan chan error) {
+	var reply RegisterMsg
+	err := comm.SendRPCRequest(process, "ClientRequest.Write", writeMsg, &reply)
 	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Error masked:", err)
-		}
-		return
-	}
-	defer client.Close()
-
-	var result RegisterMsg
-	err = client.Call("ClientRequest.Write", writeMsg, &result)
-	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Error masked:", err)
-		}
+		errChan <- err
 		return
 	}
 
-	select {
-	case resultChan <- result:
-	case <-stopChan:
-	}
+	resultChan <- reply
 }
 
 // Read executes the quorum read protocol.
@@ -181,12 +161,12 @@ func Read() (interface{}, error) {
 func basicReadQuorum() (RegisterMsg, error) {
 	resultChan := make(chan RegisterMsg, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
+
+	currentViewToSend := currentView.NewCopy()
 
 	// Send read request to all
 	for _, process := range currentView.GetMembers() {
-		go readProcess(process, resultChan, errChan, stopChan)
+		go readProcess(process, currentViewToSend, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -199,12 +179,12 @@ func basicReadQuorum() (RegisterMsg, error) {
 		case resultValue := <-resultChan:
 			if resultValue.Err != nil {
 				switch err := resultValue.Err.(type) {
-				default:
-					log.Fatalf("resultValue from readProcess returned unexpected error: %v (%T)", err, err)
 				case *view.OldViewError:
 					log.Println("View updated during basic read quorum")
 					currentView.Set(&err.NewView)
 					return RegisterMsg{}, viewUpdatedErr
+				default:
+					log.Fatalf("resultValue from readProcess returned unexpected error: %v (%T)", err, err)
 				}
 			}
 
@@ -240,40 +220,14 @@ func basicReadQuorum() (RegisterMsg, error) {
 	}
 }
 
-// readProcess sends a read request to process and return an err through errChan or a result through resultChan if stopChan is empty
-func readProcess(process view.Process, resultChan chan RegisterMsg, errChan chan error, stopChan chan bool) {
-	client, err := rpc.Dial("tcp", process.Addr)
+// readProcess sends a read request to process and return an err through errChan or a result through resultChan
+func readProcess(process view.Process, currentViewToSend view.View, resultChan chan RegisterMsg, errChan chan error) {
+	var reply RegisterMsg
+	err := comm.SendRPCRequest(process, "ClientRequest.Read", currentViewToSend, &reply)
 	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Error masked:", err)
-		}
-		return
-	}
-	defer client.Close()
-
-	var readMsg RegisterMsg
-
-	err = client.Call("ClientRequest.Read", currentView, &readMsg)
-	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Error masked:", err)
-		}
+		errChan <- err
 		return
 	}
 
-	select {
-	case resultChan <- readMsg:
-	case <-stopChan:
-	}
-}
-
-// fillStopChan send times * 'true' on stopChan. It is used to signal completion to readProcess and writeProcess.
-func fillStopChan(stopChan chan bool, times int) {
-	for i := 0; i < times; i++ {
-		stopChan <- true
-	}
+	resultChan <- reply
 }
