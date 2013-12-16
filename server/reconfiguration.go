@@ -1,4 +1,4 @@
-package backend
+package server
 
 import (
 	"container/list"
@@ -9,7 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"mateusbraga/gotf/freestore/view"
+	"mateusbraga/freestore/comm"
+	"mateusbraga/freestore/view"
+)
+
+const (
+	CHANNEL_DEFAULT_SIZE int = 20
 )
 
 var (
@@ -30,11 +35,11 @@ func init() {
 	recv = make(map[view.Update]bool)
 
 	viewSeqProcessingChan = make(chan newViewSeq)
-	installSeqProcessingChan = make(chan InstallSeqMsg, 20)   //TODO
-	stateUpdateProcessingChan = make(chan StateUpdateMsg, 20) //TODO
+	installSeqProcessingChan = make(chan InstallSeqMsg, CHANNEL_DEFAULT_SIZE)
+	stateUpdateProcessingChan = make(chan StateUpdateMsg, CHANNEL_DEFAULT_SIZE)
 
-	newViewInstalledChan = make(chan ViewInstalledMsg, 20)                            //TODO
-	callbackChanStateUpdateRequestChan = make(chan getCallbackStateUpdateRequest, 20) //TODO
+	newViewInstalledChan = make(chan ViewInstalledMsg, CHANNEL_DEFAULT_SIZE)
+	callbackChanStateUpdateRequestChan = make(chan getCallbackStateUpdateRequest, CHANNEL_DEFAULT_SIZE)
 
 	go viewSeqProcessingLoop()
 	go installSeqProcessingLoop()
@@ -45,7 +50,7 @@ func init() {
 }
 
 func resetTimerLoop() {
-	timer := time.AfterFunc(10*time.Second, reconfigurationTask)
+	timer := time.AfterFunc(10*time.Second, initReconfiguration)
 	for {
 		<-resetTimer
 		timer.Reset(1 * time.Minute)
@@ -59,21 +64,18 @@ type newViewSeq struct {
 }
 
 func findLeastUpdatedView(seq []view.View) view.View {
-	for i, v := range seq {
-		isLeastUpdated := true
-		for _, v2 := range seq[i+1:] {
-			if !v.LessUpdatedThan(&v2) {
-				isLeastUpdated = false
-				break
-			}
-		}
-		if isLeastUpdated {
-			return v
+	if len(seq) == 0 {
+		log.Panicln("ERROR: Got empty seq on findLeastUpdatedView")
+	}
+
+	leastUpdatedView := seq[0]
+	for _, v := range seq[1:] {
+		if v.LessUpdatedThan(&leastUpdatedView) {
+			leastUpdatedView.Set(&v)
 		}
 	}
 
-	log.Panicln("BUG! Should not execute this. Failed to find least updated view on: ", seq)
-	return view.New()
+	return leastUpdatedView
 }
 
 func viewSeqProcessingLoop() {
@@ -103,7 +105,6 @@ type installSeqQuorumCounterType struct {
 }
 
 func (quorumCounter *installSeqQuorumCounterType) count(newInstallSeq *InstallSeq, quorumSize int) bool {
-	//TODO improve this - cleanup views or change algorithm
 	for i, _ := range quorumCounter.list {
 		if quorumCounter.list[i].Equal(*newInstallSeq) {
 			quorumCounter.counter[i]++
@@ -120,6 +121,7 @@ func (quorumCounter *installSeqQuorumCounterType) count(newInstallSeq *InstallSe
 
 func installSeqProcessingLoop() {
 	processToInstallSeqMsgMap := make(map[view.Process]*InstallSeqMsg)
+	//IMPROV: clean up quorum counter old views
 	var installSeqQuorumCounter installSeqQuorumCounterType
 
 	for {
@@ -150,9 +152,9 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 
 	startTime := time.Now()
 
-	installViewMoreUpdatedThanCv := currentView.LessUpdatedThan(installSeq.InstallView)
+	cvIsLessUpdatedThanInstallView := currentView.LessUpdatedThan(installSeq.InstallView)
 
-	if installViewMoreUpdatedThanCv && installSeq.AssociatedView.HasMember(thisProcess) {
+	if cvIsLessUpdatedThanInstallView && installSeq.AssociatedView.HasMember(thisProcess) {
 		// disable r/w
 		register.mu.Lock()
 		log.Println("R/W operations disabled")
@@ -179,7 +181,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 		log.Println("State sent!")
 	}
 
-	if installViewMoreUpdatedThanCv {
+	if cvIsLessUpdatedThanInstallView {
 		if installSeq.InstallView.HasMember(thisProcess) { // If thisProcess is on the new view
 			syncState(installSeq.InstallView)
 
@@ -187,8 +189,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 			log.Println("View installed:", currentView)
 
 			viewInstalled := ViewInstalledMsg{}
-			viewInstalled.CurrentView = view.New()
-			viewInstalled.CurrentView.Set(&currentView)
+			viewInstalled.CurrentView = currentView.NewCopy()
 
 			// Send view-installed to all
 			for _, process := range installSeq.AssociatedView.GetMembersNotIn(&currentView) {
@@ -214,8 +215,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 
 				resetTimer <- true
 			} else {
-				currentViewCopy := view.New()
-				currentViewCopy.Set(&currentView)
+				currentViewCopy := currentView.NewCopy()
 
 				log.Println("Generate next view sequence with:", newSeq)
 				if useConsensus {
@@ -266,7 +266,7 @@ type getCallbackStateUpdateRequest struct {
 }
 
 func stateUpdateProcessingLoop() {
-	// TODO quorumCounters are expected to be used until all stateUpdate messages have arrived and the result collected.
+	//IMPROV: clean up quorum counter old views
 	stateUpdateQuorumCounterList := list.New()
 
 	for {
@@ -299,7 +299,7 @@ func stateUpdateProcessingLoop() {
 					}
 
 					if stateUpdateQuorum.finalValue.Timestamp < stateUpdate.Timestamp {
-						stateUpdateQuorum.finalValue.Value = stateUpdate.Value.(int)
+						stateUpdateQuorum.finalValue.Value = stateUpdate.Value
 						stateUpdateQuorum.finalValue.Timestamp = stateUpdate.Timestamp
 					}
 
@@ -319,7 +319,7 @@ func stateUpdateProcessingLoop() {
 			}
 
 			newCallbackChan := make(chan *stateUpdateQuorumType)
-			newStateUpdateQuorum := stateUpdateQuorumType{stateUpdate.AssociatedView, &Value{Value: stateUpdate.Value.(int), Timestamp: stateUpdate.Timestamp}, make(map[view.Update]bool), 1, newCallbackChan}
+			newStateUpdateQuorum := stateUpdateQuorumType{stateUpdate.AssociatedView, &Value{Value: stateUpdate.Value, Timestamp: stateUpdate.Timestamp}, make(map[view.Update]bool), 1, newCallbackChan}
 
 			if quorumSize == 1 {
 				go func(stateUpdate *stateUpdateQuorumType) { stateUpdate.callbackChan <- stateUpdate }(&newStateUpdateQuorum)
@@ -355,8 +355,7 @@ func syncState(installView *view.View) {
 
 	var callbackRequest getCallbackStateUpdateRequest
 	returnChan := make(chan chan *stateUpdateQuorumType)
-	newView := view.New()
-	newView.Set(&currentView)
+	newView := currentView.NewCopy()
 	callbackRequest.associatedView = &newView
 	callbackRequest.returnChan = returnChan
 
@@ -384,23 +383,21 @@ func syncState(installView *view.View) {
 	log.Println("end syncState")
 }
 
-func reconfigurationTask() {
+func initReconfiguration() {
 	recvMutex.Lock()
 	defer recvMutex.Unlock()
 
 	if len(recv) != 0 {
 		log.Println("Reconfiguration from currentView:", currentView)
 		var seq []view.View
-		newView := view.New()
+		newView := currentView.NewCopy()
 
-		newView.Set(&currentView)
 		for update, _ := range recv {
 			newView.AddUpdate(update)
 		}
 
 		seq = append(seq, newView)
-		currentViewCopy := view.New()
-		currentViewCopy.Set(&currentView)
+		currentViewCopy := currentView.NewCopy()
 
 		if useConsensus {
 			go generateViewSequenceWithConsensus(currentViewCopy, seq)
@@ -425,15 +422,12 @@ func (quorumCounter *SimpleQuorumCounter) count(quorumSize int) bool {
 func Join() error {
 	resultChan := make(chan error, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
 
-	reconfig := ReconfigMsg{CurrentView: view.New(), Update: view.Update{view.Join, thisProcess}}
-	reconfig.CurrentView.Set(&currentView)
+	reconfig := ReconfigMsg{CurrentView: currentView.NewCopy(), Update: view.Update{view.Join, thisProcess}}
 
 	// Send reconfig request to all
 	for _, process := range currentView.GetMembers() {
-		go sendReconfigRequest(process, reconfig, resultChan, errChan, stopChan)
+		go sendReconfigRequest(process, reconfig, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -465,16 +459,13 @@ func Join() error {
 func Leave() error {
 	resultChan := make(chan error, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
 
 	reconfig := ReconfigMsg{Update: view.Update{view.Leave, thisProcess}}
-	reconfig.CurrentView = view.New()
-	reconfig.CurrentView.Set(&currentView)
+	reconfig.CurrentView = currentView.NewCopy()
 
 	// Send reconfig request to all
 	for _, process := range currentView.GetMembers() {
-		go sendReconfigRequest(process, reconfig, resultChan, errChan, stopChan)
+		go sendReconfigRequest(process, reconfig, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -566,19 +557,16 @@ type ViewInstalledMsg struct {
 }
 
 func (r *ReconfigurationRequest) Reconfig(arg ReconfigMsg, reply *error) error {
-	recvMutex.Lock()
-	defer recvMutex.Unlock()
-
 	if arg.CurrentView.Equal(&currentView) {
 		if !currentView.HasUpdate(arg.Update) {
+			recvMutex.Lock()
+			defer recvMutex.Unlock()
+
 			recv[arg.Update] = true
 			log.Printf("%v added to recv\n", arg.Update)
 		}
 	} else {
-		err := view.OldViewError{}
-		err.OldView.Set(&arg.CurrentView)
-		err.NewView.Set(&currentView)
-		*reply = err
+		*reply = view.OldViewError{NewView: currentView.NewCopy()}
 		log.Printf("Reconfig with old view: %v.\n", arg.CurrentView)
 	}
 	return nil
@@ -606,73 +594,39 @@ func init() {
 
 // -------- Send functions -----------
 func sendViewInstalled(process view.Process, viewInstalled ViewInstalledMsg) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		return
-	}
-	defer client.Close()
-
 	var reply error
-	err = client.Call("ReconfigurationRequest.ViewInstalled", viewInstalled, &reply)
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.ViewInstalled", viewInstalled, &reply)
 	if err != nil {
+		log.Println("WARN sendViewInstalled:", err)
 		return
 	}
 }
 
 func sendStateUpdate(process view.Process, state StateUpdateMsg) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		return
-	}
-	defer client.Close()
-
 	var reply error
-	err = client.Call("ReconfigurationRequest.StateUpdate", state, &reply)
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.StateUpdate", state, &reply)
 	if err != nil {
+		log.Println("WARN sendStateUpdate:", err)
 		return
 	}
 }
 
 func sendInstallSeq(process view.Process, installSeq InstallSeqMsg) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		return
-	}
-	defer client.Close()
-
 	var reply error
-	err = client.Call("ReconfigurationRequest.InstallSeq", installSeq, &reply)
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.InstallSeq", installSeq, &reply)
 	if err != nil {
+		log.Println("WARN sendInstallSeq:", err)
 		return
 	}
 }
 
-func sendReconfigRequest(process view.Process, reconfig ReconfigMsg, resultChan chan error, errChan chan error, stopChan chan bool) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Error ignored:", err)
-		}
-		return
-	}
-	defer client.Close()
-
+func sendReconfigRequest(process view.Process, reconfig ReconfigMsg, resultChan chan error, errChan chan error) {
 	var reply error
-
-	err = client.Call("ReconfigurationRequest.Reconfig", reconfig, &reply)
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.Reconfig", reconfig, &reply)
 	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Error ignored:", err)
-		}
+		errChan <- err
 		return
 	}
 
-	select {
-	case resultChan <- reply:
-	case <-stopChan:
-	}
+	resultChan <- reply
 }

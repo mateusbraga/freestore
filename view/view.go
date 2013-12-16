@@ -86,21 +86,6 @@ func (v *View) Set(v2 *View) {
 	}
 }
 
-func (v *View) Contains(v2 *View) bool {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
-	v2.mu.RLock()
-	defer v2.mu.RUnlock()
-
-	for k2, _ := range v2.Entries {
-		if _, ok := v.Entries[k2]; !ok {
-			return false
-		}
-	}
-	return true
-}
-
 func (v *View) LessUpdatedThan(v2 *View) bool {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
@@ -122,7 +107,22 @@ func (v *View) LessUpdatedThan(v2 *View) bool {
 }
 
 func (v *View) Equal(v2 *View) bool {
-	return v.Contains(v2) && v2.Contains(v)
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
+	v2.mu.RLock()
+	defer v2.mu.RUnlock()
+
+	if len(v.Entries) != len(v2.Entries) {
+		return false
+	}
+
+	for k2, _ := range v2.Entries {
+		if _, ok := v.Entries[k2]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (v *View) AddUpdate(u Update) {
@@ -139,6 +139,12 @@ func (v *View) AddUpdate(u Update) {
 	case Leave:
 		delete(v.Members, u.Process)
 	}
+}
+
+func (v *View) NewCopy() View {
+	newCopy := New()
+	newCopy.Set(v)
+	return newCopy
 }
 
 func (v *View) Merge(v2 *View) {
@@ -282,7 +288,6 @@ func (v *View) F() int {
 // ----- ERRORS -----
 
 type OldViewError struct {
-	OldView View
 	NewView View
 }
 

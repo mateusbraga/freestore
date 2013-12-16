@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"mateusbraga/gotf/freestore/view"
+	"mateusbraga/freestore/view"
 	"net"
 	"net/http"
 	"net/rpc"
@@ -95,7 +95,7 @@ func failureDetector() {
 	for {
 		select {
 		case <-time.Tick(time.Second):
-			//TODO this is causing a race condition! fix!
+			//TODO FIX this is causing a race condition! fix!
 			// Make a big for loop and answer status queries and update status only there.
 			for _, status := range systemStatus.ProcessStatus {
 				go checkStatus(status)
@@ -146,9 +146,7 @@ func init() {
 	currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5001"}})
 	currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5002"}})
 
-	v := view.New()
-	systemStatus.CurrentView = &v
-	systemStatus.CurrentView.Set(&currentView)
+	*systemStatus.CurrentView = (currentView.NewCopy())
 	// Init systemStatus
 	for i := 5000; i < 5020; i++ {
 		systemStatus.ProcessStatus = append(systemStatus.ProcessStatus, &ProcessStatus{view.Process{fmt.Sprintf("[::]:%v", i)}, false})

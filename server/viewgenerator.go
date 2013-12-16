@@ -1,15 +1,20 @@
-package backend
+package server
 
 import (
 	"log"
 	"net/rpc"
 	"sync"
 
-	"mateusbraga/gotf/freestore/view"
+	"mateusbraga/freestore/comm"
+	"mateusbraga/freestore/view"
+)
+
+const (
+	LEADER_PROCESS_POSITION int = 0
 )
 
 var (
-	//TODO clean this up periodically
+	//IMPROV: clean this up periodically
 	viewGenerators   []viewGeneratorInstance
 	viewGeneratorsMu sync.Mutex
 )
@@ -32,9 +37,8 @@ func getViewGenerator(associatedView view.View, initialSeq []view.View) viewGene
 	}
 
 	vgi := viewGeneratorInstance{}
-	vgi.AssociatedView = view.New()
-	vgi.AssociatedView.Set(&associatedView)
-	vgi.jobChan = make(chan ViewGeneratorJob, 20) //TODO
+	vgi.AssociatedView = associatedView.NewCopy()
+	vgi.jobChan = make(chan ViewGeneratorJob, CHANNEL_DEFAULT_SIZE)
 	go ViewGeneratorWorker(vgi, initialSeq)
 
 	viewGenerators = append(viewGenerators, vgi)
@@ -44,8 +48,7 @@ func getViewGenerator(associatedView view.View, initialSeq []view.View) viewGene
 
 func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []view.View) {
 	// Make a copy of the vgi
-	associatedView := view.New()
-	associatedView.Set(&vgi.AssociatedView)
+	associatedView := vgi.AssociatedView.NewCopy()
 	jobChan := vgi.jobChan
 
 	var proposedSeq []view.View
@@ -94,7 +97,7 @@ func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []view.View) {
 
 						hasConflict := true
 						for _, v2 := range proposedSeq {
-							if v.Contains(&v2) || v2.Contains(&v) {
+							if v.LessUpdatedThan(&v2) || v2.LessUpdatedThan(&v) {
 								hasConflict = false
 								break
 							}
@@ -104,15 +107,14 @@ func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []view.View) {
 							log.Println("Has conflict!")
 							jobPointerMostUpdatedView := findMostUpdatedView(jobPointer.LastConvergedSeq)
 							thisProcessMostUpdatedView := findMostUpdatedView(lastConvergedSeq)
-							if jobPointerMostUpdatedView.Contains(&thisProcessMostUpdatedView) {
+							if thisProcessMostUpdatedView.LessUpdatedThan(&jobPointerMostUpdatedView) {
 								lastConvergedSeq = jobPointer.LastConvergedSeq
 							}
 
 							oldMostUpdated := findMostUpdatedView(proposedSeq)
 							receivedMostUpdated := findMostUpdatedView(jobPointer.ProposedSeq)
 
-							auxView := view.New()
-							auxView.Set(&oldMostUpdated)
+							auxView := oldMostUpdated.NewCopy()
 							auxView.Merge(&receivedMostUpdated)
 
 							proposedSeq = append(lastConvergedSeq, auxView)
@@ -177,37 +179,33 @@ func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []view.View) {
 	}
 }
 
+func assertOnlyUpdatedViews(view view.View, seq []view.View) {
+	for _, view := range seq {
+		if view.LessUpdatedThan(&view) {
+			log.Fatalf("BUG! Found an old view in view sequence: %v. view: %v\n", seq, view)
+		}
+	}
+}
+
 // we can change seq
 func generateViewSequenceWithoutConsensus(associatedView view.View, seq []view.View) {
 	log.Println("start generateViewSequenceWithoutConsensus")
-
-	// assert only updated views on seq
-	for _, view := range seq {
-		if view.LessUpdatedThan(&associatedView) {
-			log.Fatalf("BUG! Found an old view in view sequence: %v. associatedView: %v\n", seq, associatedView)
-		}
-	}
+	assertOnlyUpdatedViews(associatedView, seq)
 
 	_ = getViewGenerator(associatedView, seq)
 }
 
 func generateViewSequenceWithConsensus(associatedView view.View, seq []view.View) {
 	log.Println("start generateViewSequenceWithConsensus")
+	assertOnlyUpdatedViews(associatedView, seq)
 
-	// assert only updated views on seq
-	for _, view := range seq {
-		if view.LessUpdatedThan(&associatedView) {
-			log.Fatalf("BUG! Found an old view in view sequence: %v. associatedView: %v\n", seq, associatedView)
-		}
-	}
-
-	consensusInfo := getConsensus(currentView.NumberOfEntries())
-	if currentView.GetProcessPosition(thisProcess) == 0 {
+	consensusInstance := getConsensus(associatedView.NumberOfEntries())
+	if associatedView.GetProcessPosition(thisProcess) == LEADER_PROCESS_POSITION {
 		log.Println("CONSENSUS: leader")
-		Propose(consensusInfo, seq)
+		Propose(consensusInstance, seq)
 	}
 	log.Println("CONSENSUS: wait learn message")
-	value := <-consensusInfo.callbackLearnChan
+	value := <-consensusInstance.callbackLearnChan
 
 	result, ok := value.(*[]view.View)
 	if !ok {
@@ -258,21 +256,18 @@ func (quorumCounter *seqConvQuorumCounterType) count(newSeqConv *SeqConv, quorum
 }
 
 func findMostUpdatedView(seq []view.View) view.View {
-	for i, v := range seq {
-		isMostUpdated := true
-		for _, v2 := range seq[i+1:] {
-			if v.LessUpdatedThan(&v2) {
-				isMostUpdated = false
-				break
-			}
-		}
-		if isMostUpdated {
-			return v
+	if len(seq) == 0 {
+		log.Panicln("ERROR: Got empty seq on findLeastUpdatedView")
+	}
+
+	mostUpdatedView := seq[0]
+	for _, v := range seq[1:] {
+		if mostUpdatedView.LessUpdatedThan(&v) {
+			mostUpdatedView.Set(&v)
 		}
 	}
 
-	log.Fatalln("BUG! Could not find most updated view in: ", seq)
-	return view.New()
+	return mostUpdatedView
 }
 
 // -------- REQUESTS -----------
@@ -343,29 +338,19 @@ func init() {
 
 // -------- Send functions -----------
 func sendViewSequence(process view.Process, viewSeq ViewSeqMsg) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		return
-	}
-	defer client.Close()
-
 	var reply error
-	err = client.Call("ViewGeneratorRequest.ViewSeq", viewSeq, &reply)
+	err := comm.SendRPCRequest(process, "ViewGeneratorRequest.ViewSeq", viewSeq, &reply)
 	if err != nil {
+		log.Println("WARN sendViewSequence:", err)
 		return
 	}
 }
 
 func sendViewSequenceConv(process view.Process, seqConv SeqConvMsg) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		return
-	}
-	defer client.Close()
-
 	var reply error
-	err = client.Call("ViewGeneratorRequest.SeqConv", seqConv, &reply)
+	err := comm.SendRPCRequest(process, "ViewGeneratorRequest.SeqConv", seqConv, &reply)
 	if err != nil {
+		log.Println("WARN sendViewSequenceConv:", err)
 		return
 	}
 }

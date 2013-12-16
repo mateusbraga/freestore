@@ -1,6 +1,7 @@
-package backend
+package server
 
 import (
+	"bytes"
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -8,10 +9,8 @@ import (
 	"net/rpc"
 	"sync"
 
-	"mateusbraga/gotf/freestore/view"
-
-	"database/sql"
-	_ "github.com/mattn/go-sqlite3"
+	"mateusbraga/freestore/comm"
+	"mateusbraga/freestore/view"
 )
 
 var (
@@ -40,7 +39,7 @@ func getConsensus(id int) consensusInstance {
 	if ci, ok := consensusTable[id]; ok {
 		return ci
 	} else {
-		ci := consensusInstance{id: id, taskChan: make(chan consensusTask, 20), callbackLearnChan: make(chan interface{}, 1)}
+		ci := consensusInstance{id: id, taskChan: make(chan consensusTask, CHANNEL_DEFAULT_SIZE), callbackLearnChan: make(chan interface{}, 1)}
 		go consensusWorker(ci)
 
 		consensusTable[ci.id] = ci
@@ -49,14 +48,18 @@ func getConsensus(id int) consensusInstance {
 	}
 }
 
-//TODO implement a way to stop workers that are no longer being used
 func consensusWorker(ci consensusInstance) {
 	var acceptedProposal Proposal     // highest numbered accepted proposal
 	var lastPromiseProposalNumber int // highest numbered prepare request
 	var learnCounter int              // number of learn requests received
 
 	for {
-		taskInterface := <-ci.taskChan
+		taskInterface, ok := <-ci.taskChan
+		if !ok {
+			log.Printf("consensusInstance %v done\n", ci)
+			return
+		}
+
 		switch task := taskInterface.(type) {
 		case *Prepare:
 			log.Println("Processing prepare request")
@@ -89,14 +92,10 @@ func consensusWorker(ci consensusInstance) {
 			if learnCounter == currentView.QuorumSize() {
 				ci.callbackLearnChan <- task.Value
 			}
-		//case StopWorker:
-		//log.Println("Processing StopWorker request")
-		//return
 		default:
-			log.Fatalln("BUG in the ConsensusWorker switch")
+			log.Fatalf("BUG in the ConsensusWorker switch, got %T %v\n", task, task)
 		}
 	}
-
 }
 
 // Propose proposes the value to be agreed upon on this consensus instance. It should be run only by the leader process to guarantee termination.
@@ -128,12 +127,10 @@ func Propose(ci consensusInstance, defaultValue interface{}) {
 func prepare(proposal Proposal) (interface{}, error) {
 	resultChan := make(chan Proposal, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
 
 	// Send read request to all
 	for _, process := range currentView.GetMembers() {
-		go prepareProcess(process, proposal, resultChan, errChan, stopChan)
+		go prepareProcess(process, proposal, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -171,12 +168,10 @@ func prepare(proposal Proposal) (interface{}, error) {
 func accept(proposal Proposal) error {
 	resultChan := make(chan Proposal, currentView.N())
 	errChan := make(chan error, currentView.N())
-	stopChan := make(chan bool, currentView.N())
-	defer fillStopChan(stopChan, currentView.N())
 
 	// Send accept request to all
 	for _, process := range currentView.GetMembers() {
-		go acceptProcess(process, proposal, resultChan, errChan, stopChan)
+		go acceptProcess(process, proposal, resultChan, errChan)
 	}
 
 	// Get quorum
@@ -224,17 +219,17 @@ func CheckForChosenValue(ci consensusInstance) (interface{}, error) {
 
 // getNextProposalNumber to be used by this process. This function is a stage of the Propose funcion.
 func getNextProposalNumber(consensusId int) (proposalNumber int) {
+	if currentView.N() == 0 {
+		log.Fatalln("currentView is empty")
+	}
+
 	thisProcessPosition := currentView.GetProcessPosition(thisProcess)
 
 	lastProposalNumber, err := getLastProposalNumber(consensusId)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			proposalNumber = currentView.N() + thisProcessPosition
-		} else {
-			log.Fatal(err)
-		}
+		proposalNumber = currentView.N() + thisProcessPosition
 	} else {
-		proposalNumber = ((lastProposalNumber / currentView.N()) + 1) + thisProcessPosition
+		proposalNumber = (lastProposalNumber - (lastProposalNumber % currentView.N()) + currentView.N()) + thisProcessPosition
 	}
 
 	saveProposalNumber(consensusId, proposalNumber)
@@ -243,147 +238,113 @@ func getNextProposalNumber(consensusId int) (proposalNumber int) {
 
 // saveProposalNumber to permanent storage.
 func saveProposalNumber(consensusId int, proposalNumber int) {
-	// MODEL
-	tx, err := db.Begin()
+	proposalNumberBuffer := new(bytes.Buffer)
+	enc := gob.NewEncoder(proposalNumberBuffer)
+	err := enc.Encode(proposalNumber)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("enc.Encode failed:", err)
 	}
-	_, err = tx.Exec("insert into proposal_number(consensus_id, last_proposal_number) values (?, ?)", consensusId, proposalNumber)
+
+	err = db.Set([]byte(fmt.Sprintf("lastProposalNumber_%v", consensusId)), proposalNumberBuffer.Bytes())
 	if err != nil {
-		log.Fatal(err)
-	}
-	err = tx.Commit()
-	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("db.Set failed:", err)
 	}
 }
 
 // getLastProposalNumber from permanent storage.
 func getLastProposalNumber(consensusId int) (int, error) {
-	// MODEL
-	var proposalNumber int
-	err := db.QueryRow("select last_proposal_number from proposal_number WHERE consensus_id = ? ORDER BY last_proposal_number DESC", consensusId).Scan(&proposalNumber)
+	lastProposalNumberBytes, err := db.Get(nil, []byte(fmt.Sprintf("lastProposalNumber_%v", consensusId)))
 	if err != nil {
-		return 0, err
+		log.Fatalln(err)
+	} else if lastProposalNumberBytes == nil {
+		return 0, errors.New("Last proposal number not found")
+	} else {
+		var lastProposalNumber int
+
+		lastProposalNumberBuffer := bytes.NewBuffer(lastProposalNumberBytes)
+		dec := gob.NewDecoder(lastProposalNumberBuffer)
+
+		err := dec.Decode(&lastProposalNumber)
+		if err != nil {
+			log.Fatalln("dec.Decode failed:", err)
+		}
+
+		return lastProposalNumber, nil
 	}
 
-	return proposalNumber, nil
+	log.Fatalln("BUG! Should never execute this command on getLastProposalNumber")
+	return 0, nil
 }
 
 // saveAcceptedProposal to permanent storage.
+// needs to be tested
 func saveAcceptedProposal(consensusId int, proposal *Proposal) {
-	// TODO make this work with slices
-	//tx, err := db.Begin()
-	//if err != nil {
-	//log.Fatal(err)
-	//}
-	//_, err = tx.Exec("insert into accepted_proposal(consensus_id, accepted_proposal) values (?, ?)", consensusId, proposal.Value)
-	//if err != nil {
-	//log.Fatal(err)
-	//}
-	//err = tx.Commit()
-	//if err != nil {
-	//log.Fatal(err)
-	//}
+	proposalBuffer := new(bytes.Buffer)
+	enc := gob.NewEncoder(proposalBuffer)
+
+	err := enc.Encode(proposal)
+	if err != nil {
+		log.Fatalln("enc.Encode failed:", err)
+	}
+
+	err = db.Set([]byte(fmt.Sprintf("acceptedProposal_%v", consensusId)), proposalBuffer.Bytes())
+	if err != nil {
+		log.Fatalln("ERROR to save acceptedProposal:", err)
+	}
 }
 
 // savePrepareRequest to permanent storage
+// needs to be tested
 func savePrepareRequest(consensusId int, proposal *Prepare) {
-	tx, err := db.Begin()
+	proposalBuffer := new(bytes.Buffer)
+	enc := gob.NewEncoder(proposalBuffer)
+	err := enc.Encode(proposal)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("enc.Encode failed:", err)
 	}
-	_, err = tx.Exec("insert into prepare_request(consensus_id, highest_proposal_number) values (?, ?)", consensusId, proposal.N)
+
+	err = db.Set([]byte(fmt.Sprintf("prepareRequest_%v", consensusId)), proposalBuffer.Bytes())
 	if err != nil {
-		log.Fatal(err)
-	}
-	err = tx.Commit()
-	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("ERROR to save prepareRequest:", err)
 	}
 }
 
 // spreadAcceptance to all processes on the current view
 func spreadAcceptance(proposal Proposal) {
 	// Send acceptances to all
-	// TODO can improve: it will send too many messages
+	// Can be improved: it is currently send too many messages at once
 	for _, process := range currentView.GetMembers() {
 		go spreadAcceptanceProcess(process, proposal)
 	}
 }
 
 // prepareProcess sends a prepare proposal to process.
-func prepareProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error, stopChan chan bool) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Failure masked:", err)
-		}
-		return
-	}
-	defer client.Close()
-
+func prepareProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error) {
 	var reply Proposal
-
-	err = client.Call("ConsensusRequest.Prepare", proposal, &reply)
+	err := comm.SendRPCRequest(process, "ConsensusRequest.Prepare", proposal, &reply)
 	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Failure masked:", err)
-		}
+		errChan <- err
 		return
 	}
 
-	select {
-	case resultChan <- reply:
-	case <-stopChan:
-	}
+	resultChan <- reply
 }
 
 // acceptProcess sends a prepare proposal to process.
-func acceptProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error, stopChan chan bool) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Failure masked:", err)
-		}
-		return
-	}
-	defer client.Close()
-
+func acceptProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error) {
 	var reply Proposal
-	err = client.Call("ConsensusRequest.Accept", proposal, &reply)
+	err := comm.SendRPCRequest(process, "ConsensusRequest.Accept", proposal, &reply)
 	if err != nil {
-		select {
-		case errChan <- err:
-		case <-stopChan:
-			log.Println("Failure masked:", err)
-		}
+		errChan <- err
 		return
 	}
 
-	select {
-	case resultChan <- reply:
-	case <-stopChan:
-	}
+	resultChan <- reply
 }
 
 // spreadAcceptance sends acceptance to process.
 func spreadAcceptanceProcess(process view.Process, proposal Proposal) {
-	client, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		log.Println("WARN: spreadAcceptanceProcess:", err)
-		return
-	}
-	defer client.Close()
-
-	var reply Proposal
-	err = client.Call("ConsensusRequest.Learn", proposal, &reply)
+	err := comm.SendRPCRequest(process, "ConsensusRequest.Learn", proposal, Proposal{})
 	if err != nil {
 		log.Println("WARN: spreadAcceptanceProcess:", err)
 		return
@@ -480,12 +441,4 @@ func (e OldProposalNumberError) Error() string {
 
 func init() {
 	gob.Register(new(OldProposalNumberError))
-}
-
-// ------- Auxiliary functions -----------
-// fillStopChan send times * 'true' on stopChan. It is used to signal completion to readProcess and writeProcess.
-func fillStopChan(stopChan chan bool, times int) {
-	for i := 0; i < times; i++ {
-		stopChan <- true
-	}
 }

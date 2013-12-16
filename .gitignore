@@ -4,3 +4,6 @@ controller/controller
 
 *.test
 *.db
+
+samples/client/client
+samples/server/server
