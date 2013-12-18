@@ -10,19 +10,22 @@ MAINTAINER Mateus Braga <mateus.a.braga@gmail.com>
 # Update packages
 #RUN yum update -y
 
+# Install gcc
+RUN yum install gcc -y
 # Install golang
 RUN yum install golang -y
+# Install git
+RUN yum install git -y
 
+#set GOPATH
 ENV GOPATH /opt
 
-# Install golang
-RUN yum install git -y
 
 # install freestore server
 RUN go get github.com/mateusbraga/freestore/samples/server
 
 # Launch freestore server on port 5000
-ENTRYPOINT ["server"]
+ENTRYPOINT ["/opt/bin/server"]
 
 CMD ["-p 5000"]
 
