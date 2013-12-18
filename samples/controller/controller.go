@@ -5,9 +5,9 @@ package main
 
 import (
 	"fmt"
+	"github.com/mateusbraga/freestore/view"
 	"html/template"
 	"log"
-	"mateusbraga/freestore/view"
 	"net"
 	"net/http"
 	"net/rpc"

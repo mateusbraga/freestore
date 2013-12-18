@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/rpc"
 
-	"mateusbraga/freestore/view"
+	"github.com/mateusbraga/freestore/view"
 )
 
 type ControllerRequest int

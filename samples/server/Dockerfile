@@ -13,8 +13,13 @@ MAINTAINER Mateus Braga <mateus.a.braga@gmail.com>
 # Install golang
 RUN yum install golang -y
 
+ENV GOPATH /opt
+
+# Install golang
+RUN yum install git -y
+
 # install freestore server
-RUN go install github.com/mateusbraga/freestore
+RUN go get github.com/mateusbraga/freestore/samples/server
 
 # Launch freestore server on port 5000
 ENTRYPOINT ["server"]
