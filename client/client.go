@@ -10,8 +10,8 @@ import (
 	"errors"
 	"log"
 
-	"mateusbraga/freestore/comm"
-	"mateusbraga/freestore/view"
+	"github.com/mateusbraga/freestore/comm"
+	"github.com/mateusbraga/freestore/view"
 )
 
 var (

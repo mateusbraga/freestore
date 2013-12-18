@@ -14,7 +14,7 @@ import (
 	"runtime"
 	"time"
 
-	"mateusbraga/freestore/client"
+	"github.com/mateusbraga/freestore/client"
 )
 
 var (

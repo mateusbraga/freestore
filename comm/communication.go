@@ -1,7 +1,7 @@
 package comm
 
 import (
-	"mateusbraga/freestore/view"
+	"github.com/mateusbraga/freestore/view"
 	"net/rpc"
 )
 

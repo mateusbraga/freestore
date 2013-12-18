@@ -1,7 +1,7 @@
 package server
 
 import (
-	"mateusbraga/freestore/view"
+	"github.com/mateusbraga/freestore/view"
 	"testing"
 )
 
