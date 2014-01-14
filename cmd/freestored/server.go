@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mateusbraga/freestore/server"
+	"github.com/mateusbraga/freestore/pkg/server"
 )
 
 //var port uint

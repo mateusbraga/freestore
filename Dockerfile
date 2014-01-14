@@ -18,19 +18,19 @@ RUN yum install golang -y
 RUN yum install git -y
 
 #set GOPATH
-ENV GOPATH /opt
+ENV GOPATH /go
 
 
 # install freestore server
-RUN go get github.com/mateusbraga/freestore/samples/server
+RUN go get github.com/mateusbraga/freestore/cmd/freestored
 
 # Launch freestore server on port 5000
-ENTRYPOINT ["/opt/bin/server"]
+ENTRYPOINT ["/go/bin/freestored"]
 
 CMD ["-p 5000"]
 
 # run the server as the daemon user
-USER daemon
+USER freestored
 
 #expose freestore port
 EXPOSE 5000

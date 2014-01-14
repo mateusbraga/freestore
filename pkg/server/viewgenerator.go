@@ -5,8 +5,8 @@ import (
 	"net/rpc"
 	"sync"
 
-	"github.com/mateusbraga/freestore/comm"
-	"github.com/mateusbraga/freestore/view"
+	"github.com/mateusbraga/freestore/pkg/comm"
+	"github.com/mateusbraga/freestore/pkg/view"
 )
 
 const (

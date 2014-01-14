@@ -1,8 +1,9 @@
 package server
 
 import (
-	"github.com/mateusbraga/freestore/view"
 	"testing"
+
+	"github.com/mateusbraga/freestore/pkg/view"
 )
 
 func TestDatabaseFunctions(t *testing.T) {

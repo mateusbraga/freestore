@@ -1,8 +1,9 @@
 package comm
 
 import (
-	"github.com/mateusbraga/freestore/view"
 	"net/rpc"
+
+	"github.com/mateusbraga/freestore/pkg/view"
 )
 
 var (

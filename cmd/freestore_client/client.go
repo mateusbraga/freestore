@@ -8,7 +8,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/mateusbraga/freestore/client"
+	"github.com/mateusbraga/freestore/pkg/client"
 )
 
 func main() {

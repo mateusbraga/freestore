@@ -7,10 +7,10 @@ import (
 	"net/rpc"
 	"os"
 
-	"github.com/cznic/kv"
+	"github.com/mateusbraga/freestore/pkg/comm"
+	"github.com/mateusbraga/freestore/pkg/view"
 
-	"github.com/mateusbraga/freestore/comm"
-	"github.com/mateusbraga/freestore/view"
+	"github.com/cznic/kv"
 )
 
 var (

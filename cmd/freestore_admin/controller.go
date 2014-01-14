@@ -5,7 +5,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/mateusbraga/freestore/view"
 	"html/template"
 	"log"
 	"net"
@@ -16,6 +15,8 @@ import (
 	"path"
 	"path/filepath"
 	"time"
+
+	"github.com/mateusbraga/freestore/pkg/view"
 )
 
 var (

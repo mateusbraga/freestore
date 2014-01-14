@@ -5,7 +5,7 @@ import (
 	"net/rpc"
 	"sync"
 
-	"github.com/mateusbraga/freestore/view"
+	"github.com/mateusbraga/freestore/pkg/view"
 )
 
 // --------- External State ---------

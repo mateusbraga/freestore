@@ -4,8 +4,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/mateusbraga/freestore/comm"
-	"github.com/mateusbraga/freestore/view"
+	"github.com/mateusbraga/freestore/pkg/comm"
+	"github.com/mateusbraga/freestore/pkg/view"
 )
 
 var (
