@@ -4,6 +4,7 @@ set ns [new Simulator]
 source tb_compat.tcl
 
 set maxservers 3
+set maxclients 15
 set lanstr ""
 
 
@@ -12,17 +13,15 @@ for {set i 1} {$i <= $maxservers} {incr i} {
     set node($i) [$ns node]
     append lanstr "$node($i) "
 
-    tb-set-node-os $node($i) FEDORA15-64-STD
-    tb-set-node-tarfiles $node($i) /usr/local /proj/freestore/tarfiles/go1.1.2.linux-amd64.tar.gz
-    tb-set-node-startcmd $node($i) "/proj/freestore/start_freestore_server.sh"
+    tb-set-node-os $node($i) FEDORA15-64-STD-mab
 }
 
+for {set i 4} {$i <= $maxclients} {incr i} {
+    set node($i) [$ns node]
+    append lanstr "$node($i) "
 
-set node(4) [$ns node]
-append lanstr "$node(4) "
-tb-set-node-os $node(4) FEDORA15-64-STD
-tb-set-node-tarfiles $node(4) /usr/local /proj/freestore/tarfiles/go1.1.2.linux-amd64.tar.gz
-tb-set-node-startcmd $node(4) "/proj/freestore/start_freestore_client.sh"
+    tb-set-node-os $node($i) FEDORA15-64-STD-mab
+}
 
 
 # Lans
