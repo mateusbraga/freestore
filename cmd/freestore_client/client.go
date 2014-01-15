@@ -1,5 +1,5 @@
 /*
-This is a simple client
+Freestore_client is a sample implementation of a freestore client.
 */
 package main
 
