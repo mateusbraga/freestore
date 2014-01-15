@@ -1,11 +1,9 @@
 package server
 
 import (
-	"fmt"
 	"log"
 	"net"
 	"net/rpc"
-	"os"
 
 	"github.com/mateusbraga/freestore/pkg/comm"
 	"github.com/mateusbraga/freestore/pkg/view"
@@ -23,29 +21,38 @@ var (
 	useConsensus bool
 )
 
-func Run(bindAddr string, join bool, master string, useConsensusArg bool, numberOfServers int) {
-	var err error
-
-	listener, err = net.Listen("tcp", bindAddr)
+func Run(bindAddr string, initialView view.View, useConsensusArg bool) {
+	// init listener
+	listener, err := net.Listen("tcp", bindAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Println("Listening on address:", listener.Addr())
 
-	initThisProcess()
-	initCurrentView(master, numberOfServers)
+	// init thisProcess
+	thisProcess = view.Process{listener.Addr().String()}
+
+	// init currentView
+	currentView.Set(&initialView)
+	log.Println("Initial View:", currentView)
+
+	// init storage
 	initStorage()
 
+	// init useConsensus
 	useConsensus = useConsensusArg
 
+	// Enable operations or join View
 	if currentView.HasMember(thisProcess) {
 		register.mu.Unlock() // Enable r/w operations
 	} else {
-		if join {
-			Join()
-		}
+		// try to update currentView with the first member
+		getCurrentView(currentView.GetMembers()[0])
+		// join the view
+		Join()
 	}
 
+	// Start server
 	rpc.Accept(listener)
 }
 
@@ -57,40 +64,8 @@ func initStorage() {
 	}
 }
 
-func initThisProcess() {
-	thisProcess = view.Process{listener.Addr().String()}
-}
-
 func init() {
 	currentView = view.New()
-}
-
-func initCurrentView(master string, numberOfServers int) {
-	hostname, err := os.Hostname()
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	initialView := make(map[view.Process]bool)
-	if hostname == "MateusPc" {
-		for i := 0; i < numberOfServers; i++ {
-			initialView[view.Process{fmt.Sprintf("[::]:500%d", i)}] = true
-		}
-	} else {
-		for i := 0; i < numberOfServers; i++ {
-			initialView[view.Process{fmt.Sprintf("10.1.1.%d:5000", i+2)}] = true
-		}
-	}
-
-	if initialView[thisProcess] {
-		for process, _ := range initialView {
-			currentView.AddUpdate(view.Update{view.Join, process})
-		}
-	} else {
-		getCurrentView(view.Process{master})
-	}
-
-	log.Println("Init current view:", currentView)
 }
 
 // GetCurrentViewClient asks process for the currentView

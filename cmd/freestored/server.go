@@ -1,3 +1,6 @@
+// Freestored runs a sample implementation of a freestore server.
+//
+// Most of the work is done at github.com/mateusbraga/freestore/pkg/server.
 package main
 
 import (
@@ -10,52 +13,71 @@ import (
 	"strings"
 
 	"github.com/mateusbraga/freestore/pkg/server"
+	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-//var port uint
-var join bool
-var master string
-var bindAddr string
-var useConsensus bool
-var numberOfServers int
+// Flags
+var (
+	useConsensus    = *flag.Bool("consensus", false, "Set consensus to use consensus on reconfiguration")
+	numberOfServers = *flag.Int("n", 3, "Number of servers in the initial view")
 
+	bindAddr string
+)
+
+// Set remaining flags
 func init() {
-	flag.BoolVar(&join, "join", true, "Set join to join current view automatically")
-	flag.BoolVar(&useConsensus, "consensus", false, "Set consensus to use consensus on reconfiguration")
-	flag.IntVar(&numberOfServers, "n", 3, "Number of servers in the initial view")
-
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	if hostname == "MateusPc" {
+	switch {
+	case hostname == "MateusPc" || hostname == "bt": // dev environment
 		flag.StringVar(&bindAddr, "bind", "[::]:5000", "Set this process address")
-		flag.StringVar(&bindAddr, "b", "[::]:5000", "Set this process address")
-		flag.StringVar(&master, "master", "[::]:5000", "Set process to get first current view")
-	} else if strings.Contains(hostname, "node-") {
+
+	case strings.Contains(hostname, "node-"): // emulab.net
 		node, err := strconv.ParseInt(hostname[5:strings.Index(hostname, ".")], 10, 0)
 		if err != nil {
 			log.Fatalln(err)
 		}
 
 		flag.StringVar(&bindAddr, "bind", fmt.Sprintf("10.1.1.%v:5000", node+1), "Set this process address")
-		flag.StringVar(&bindAddr, "b", fmt.Sprintf("10.1.1.%v:5000", node+1), "Set this process address")
 
-		flag.StringVar(&master, "master", "10.1.1.2:5000", "Set process to get first current view")
-	} else if hostname == "bt" {
-		flag.StringVar(&bindAddr, "bind", "[::]:5000", "Set this process address")
-		flag.StringVar(&bindAddr, "b", "[::]:5000", "Set this process address")
-		flag.StringVar(&master, "master", "[::]:5000", "Set process to get first current view")
-	} else {
+	default:
 		log.Fatalln("invalid hostname:", hostname)
 	}
+}
 
+func init() {
+	// Allow multiprocessing
 	runtime.GOMAXPROCS(runtime.NumCPU())
 }
 
 func main() {
 	flag.Parse()
 
-	server.Run(bindAddr, join, master, useConsensus, numberOfServers)
+	hostname, err := os.Hostname()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	initialView := view.New()
+	switch {
+	case hostname == "MateusPc" || hostname == "bt": // dev environment
+		for i := 0; i < numberOfServers; i++ {
+			process := view.Process{fmt.Sprintf("[::]:500%d", i)}
+			initialView.AddUpdate(view.Update{view.Join, process})
+		}
+
+	case strings.Contains(hostname, "node-"): // emulab.net
+		for i := 0; i < numberOfServers; i++ {
+			process := view.Process{fmt.Sprintf("10.1.1.%d:5000", i+2)}
+			initialView.AddUpdate(view.Update{view.Join, process})
+		}
+
+	default:
+		log.Fatalln("invalid hostname:", hostname)
+	}
+
+	server.Run(bindAddr, initialView, useConsensus)
 }
