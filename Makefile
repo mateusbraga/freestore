@@ -1,12 +1,15 @@
+#GO_TAGS=-tags 'staticRegister'
+GO_TAGS=
+
 default: install
 
 install:
-	go install github.com/mateusbraga/freestore/pkg/view
-	go install github.com/mateusbraga/freestore/pkg/client
-	go install github.com/mateusbraga/freestore/pkg/server
-	go install github.com/mateusbraga/freestore/cmd/freestored
-	go install github.com/mateusbraga/freestore/cmd/freestore_client
-	go install github.com/mateusbraga/freestore/cmd/freestore_measures
+	go install $(GO_TAGS) github.com/mateusbraga/freestore/pkg/view
+	go install $(GO_TAGS) github.com/mateusbraga/freestore/pkg/client
+	go install $(GO_TAGS) github.com/mateusbraga/freestore/pkg/server
+	go install $(GO_TAGS) github.com/mateusbraga/freestore/cmd/freestored
+	go install $(GO_TAGS) github.com/mateusbraga/freestore/cmd/freestore_client
+	go install $(GO_TAGS) github.com/mateusbraga/freestore/cmd/freestore_measures
 
 clean:
 	go clean -i github.com/mateusbraga/freestore/pkg/view

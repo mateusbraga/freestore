@@ -1,4 +1,4 @@
-// +build !staticRegister
+// +build staticRegister
 
 package server
 
@@ -19,11 +19,6 @@ var register Value
 type ClientRequest int
 
 func (r *ClientRequest) Read(clientView view.View, reply *Value) error {
-	if !clientView.Equal(&currentView) {
-		reply.Err = view.OldViewError{NewView: currentView.NewCopy()}
-		return nil
-	}
-
 	register.mu.RLock()
 	defer register.mu.RUnlock()
 
@@ -34,11 +29,6 @@ func (r *ClientRequest) Read(clientView view.View, reply *Value) error {
 }
 
 func (r *ClientRequest) Write(value Value, reply *Value) error {
-	if !value.View.Equal(&currentView) {
-		reply.Err = view.OldViewError{NewView: currentView.NewCopy()}
-		return nil
-	}
-
 	register.mu.Lock()
 	defer register.mu.Unlock()
 
