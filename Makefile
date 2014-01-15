@@ -6,7 +6,7 @@ install:
 	go install github.com/mateusbraga/freestore/pkg/server
 	go install github.com/mateusbraga/freestore/cmd/freestored
 	go install github.com/mateusbraga/freestore/cmd/freestore_client
-	go install github.com/mateusbraga/freestore/cmd/freestore_client/freestore_client_measures
+	go install github.com/mateusbraga/freestore/cmd/freestore_measures
 
 clean:
 	go clean -i github.com/mateusbraga/freestore/pkg/view
@@ -14,7 +14,7 @@ clean:
 	go clean -i github.com/mateusbraga/freestore/pkg/server
 	go clean -i github.com/mateusbraga/freestore/cmd/freestored
 	go clean -i github.com/mateusbraga/freestore/cmd/freestore_client
-	go clean -i github.com/mateusbraga/freestore/cmd/freestore_client/freestore_client_measures
+	go clean -i github.com/mateusbraga/freestore/cmd/freestore_measures
 
 upload:
 	rsync -avz -f"- .git/" -f"+ *" --delete /run/media/mateus/Storage/arquivos/projetos/programar/freestore/ mateusbr@users.emulab.net:/proj/freestore/src/mateusbraga/freestore

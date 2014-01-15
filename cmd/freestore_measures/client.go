@@ -1,6 +1,4 @@
-/*
-This is a simple client
-*/
+// Freestore_measures is a client that measures latency and throughput of freestore.
 package main
 
 import (
@@ -18,28 +16,22 @@ import (
 )
 
 var (
-	isWrite            bool
-	size               int
-	numberOfOperations int
-	measureLatency     bool
-	measureThroughput  bool
-	totalDuration      time.Duration
+	isWrite            = *flag.Bool("write", false, "Client will measure write operations")
+	size               = *flag.Int("size", 1, "The size of the data being transfered")
+	numberOfOperations = *flag.Int("n", 1000, "Number of operations to perform (latency measurement)")
+	measureLatency     = *flag.Bool("latency", false, "Client will measure latency")
+	measureThroughput  = *flag.Bool("throughput", false, "Client will measure throughput")
+	totalDuration      = *flag.Duration("duration", 10*time.Second, "Duration to run operations (throughput measurement)")
 )
 
 var (
 	latencies []int64
-	i         int
+	ops       int
 	stopChan  <-chan time.Time
 )
 
 func init() {
-	flag.DurationVar(&totalDuration, "duration", 10*time.Second, "Duration to run operations (throughput measurement)")
-	flag.IntVar(&numberOfOperations, "n", 1000, "Number of operations to perform (latency measurement)")
-	flag.BoolVar(&isWrite, "write", false, "Client will measure write operations")
-	flag.IntVar(&size, "size", 1, "The size of the data being transfered")
-	flag.BoolVar(&measureLatency, "latency", false, "Client will measure latency")
-	flag.BoolVar(&measureThroughput, "throughput", false, "Client will measure throughput")
-
+	// Make it parallel
 	runtime.GOMAXPROCS(runtime.NumCPU())
 }
 
@@ -69,7 +61,7 @@ func latencyAndThroughput() {
 	startTime := time.Now()
 
 	if isWrite {
-		for i = 0; i < numberOfOperations; i++ {
+		for ops = 0; ops < numberOfOperations; ops++ {
 			timeBefore := time.Now()
 			err := client.Write(data)
 			timeAfter := time.Now()
@@ -85,7 +77,7 @@ func latencyAndThroughput() {
 			log.Fatalln("Initial write:", err)
 		}
 
-		for i = 0; i < numberOfOperations; i++ {
+		for ops = 0; ops < numberOfOperations; ops++ {
 			timeBefore := time.Now()
 			_, err = client.Read()
 			timeAfter := time.Now()
@@ -99,7 +91,7 @@ func latencyAndThroughput() {
 
 	endTime := time.Now()
 	totalDuration = endTime.Sub(startTime)
-	fmt.Printf("%v operations done in %v\n", i, totalDuration)
+	fmt.Printf("Partial throughput: %v operations done in %v\n", ops, totalDuration)
 	saveLatencyTimes()
 }
 
@@ -113,7 +105,7 @@ func latency() {
 	data := createFakeData()
 
 	if isWrite {
-		for i = 0; i < numberOfOperations; i++ {
+		for ops = 0; ops < numberOfOperations; ops++ {
 			timeBefore := time.Now()
 			err := client.Write(data)
 			timeAfter := time.Now()
@@ -129,7 +121,7 @@ func latency() {
 			log.Fatalln("Initial write:", err)
 		}
 
-		for i = 0; i < numberOfOperations; i++ {
+		for ops = 0; ops < numberOfOperations; ops++ {
 			timeBefore := time.Now()
 			_, err = client.Read()
 			timeAfter := time.Now()
@@ -147,9 +139,9 @@ func latency() {
 func saveLatencyTimes() {
 	var filename string
 	if isWrite {
-		filename = fmt.Sprintf("/home/mateus/write-latency-%v.txt", size)
+		filename = fmt.Sprintf("/home/mateus/write-latency-%v-%v.txt", size, time.Now().Format(time.RFC3339))
 	} else {
-		filename = fmt.Sprintf("/home/mateus/read-latency-%v.txt", size)
+		filename = fmt.Sprintf("/home/mateus/read-latency-%v-%v.txt", size, time.Now().Format(time.RFC3339))
 	}
 
 	file, err := os.Create(filename)
@@ -162,7 +154,7 @@ func saveLatencyTimes() {
 	defer w.Flush()
 
 	for _, t := range latencies {
-		if _, err := w.Write([]byte(fmt.Sprintf("%d %v\n", t))); err != nil {
+		if _, err := w.Write([]byte(fmt.Sprintf("%v\n", t))); err != nil {
 			log.Fatalln(err)
 		}
 	}
@@ -178,7 +170,7 @@ func throughput() {
 	data := createFakeData()
 
 	if isWrite {
-		for ; ; i++ {
+		for ; ; ops++ {
 			err := client.Write(data)
 			if err != nil {
 				log.Fatalln(err)
@@ -186,7 +178,7 @@ func throughput() {
 
 			select {
 			case <-stopChan:
-				fmt.Printf("%v operations done in %v\n", i, totalDuration)
+				fmt.Printf("%v operations done in %v\n", ops, totalDuration)
 				return
 			default:
 			}
@@ -197,7 +189,7 @@ func throughput() {
 			log.Fatalln("Initial write:", err)
 		}
 
-		for ; ; i++ {
+		for ; ; ops++ {
 			_, err = client.Read()
 			if err != nil {
 				log.Fatalln(err)
@@ -205,7 +197,7 @@ func throughput() {
 
 			select {
 			case <-stopChan:
-				fmt.Printf("%v operations done in %v\n", i, totalDuration)
+				fmt.Printf("%v operations done in %v\n", ops, totalDuration)
 				return
 			default:
 			}
