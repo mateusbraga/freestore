@@ -46,11 +46,11 @@ func (v View) String() string {
 	fmt.Fprintf(&b, "{")
 
 	first := true
-	for k, _ := range v.members {
+	for process, _ := range v.members {
 		if !first {
 			fmt.Fprintf(&b, ", ")
 		}
-		fmt.Fprintf(&b, "%v", k.Addr)
+		fmt.Fprintf(&b, "%v", process.Addr)
 		first = false
 	}
 
@@ -119,16 +119,16 @@ func (v *View) AddUpdate(updates ...Update) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	for _, u := range updates {
-		v.entries[u] = true
+	for _, newUpdate := range updates {
+		v.entries[newUpdate] = true
 
-		switch u.Type {
+		switch newUpdate.Type {
 		case Join:
-			if !v.entries[Update{Leave, u.Process}] {
-				v.members[u.Process] = true
+			if !v.entries[Update{Leave, newUpdate.Process}] {
+				v.members[newUpdate.Process] = true
 			}
 		case Leave:
-			delete(v.members, u.Process)
+			delete(v.members, newUpdate.Process)
 		}
 	}
 }
@@ -146,16 +146,16 @@ func (v *View) Merge(v2 View) {
 	v2.mu.RLock()
 	defer v2.mu.RUnlock()
 
-	for u, _ := range v2.entries {
-		v.entries[u] = true
+	for update, _ := range v2.entries {
+		v.entries[update] = true
 
-		switch u.Type {
+		switch update.Type {
 		case Join:
-			if !v.entries[Update{Leave, u.Process}] {
-				v.members[u.Process] = true
+			if !v.entries[Update{Leave, update.Process}] {
+				v.members[update.Process] = true
 			}
 		case Leave:
-			delete(v.members, u.Process)
+			delete(v.members, update.Process)
 		}
 	}
 }
@@ -178,22 +178,22 @@ func (v View) GetEntries() []Update {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	var l []Update
-	for k, _ := range v.entries {
-		l = append(l, k)
+	var entries []Update
+	for update, _ := range v.entries {
+		entries = append(entries, update)
 	}
-	return l
+	return entries
 }
 
 func (v View) GetMembers() []Process {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	var l []Process
-	for k, _ := range v.members {
-		l = append(l, k)
+	var members []Process
+	for process, _ := range v.members {
+		members = append(members, process)
 	}
-	return l
+	return members
 }
 
 func (v View) GetMembersAlsoIn(v2 View) []Process {
@@ -203,17 +203,17 @@ func (v View) GetMembersAlsoIn(v2 View) []Process {
 	v2.mu.RLock()
 	defer v2.mu.RUnlock()
 
-	var l []Process
-	for k, _ := range v.members {
-		l = append(l, k)
+	var members []Process
+	for process, _ := range v.members {
+		members = append(members, process)
 	}
-	for k, _ := range v2.members {
-		if !v.members[k] {
-			l = append(l, k)
+	for process, _ := range v2.members {
+		if !v.members[process] {
+			members = append(members, process)
 		}
 	}
 
-	return l
+	return members
 }
 
 func (v View) GetMembersNotIn(v2 View) []Process {
@@ -223,27 +223,27 @@ func (v View) GetMembersNotIn(v2 View) []Process {
 	v2.mu.RLock()
 	defer v2.mu.RUnlock()
 
-	var l []Process
-	for k, _ := range v.members {
-		if !v2.members[k] {
-			l = append(l, k)
+	var members []Process
+	for process, _ := range v.members {
+		if !v2.members[process] {
+			members = append(members, process)
 		}
 	}
 
-	return l
+	return members
 }
 
 func (v View) GetProcessPosition(process Process) int {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	i := 0
-	for k, _ := range v.members {
-		if k.Addr < process.Addr {
-			i++
+	position := 0
+	for process, _ := range v.members {
+		if process.Addr < process.Addr {
+			position++
 		}
 	}
-	return i
+	return position
 }
 
 func (v View) NumberOfEntries() int {
