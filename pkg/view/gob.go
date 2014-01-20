@@ -13,11 +13,12 @@ var (
 	freeBufferList = make(chan *bytes.Buffer, freeBufferListSize)
 )
 
-func getBuffer() *bytes.Buffer {
+func getEmptyBuffer() *bytes.Buffer {
 	var buf *bytes.Buffer
 	select {
 	case buf = <-freeBufferList:
-		// Got buffer; nothing more to do
+		// Got buffer; clean it up
+		buf.Reset()
 	default:
 		// None free, so allocate a new one
 		buf = new(bytes.Buffer)
@@ -42,7 +43,7 @@ func (v *View) GobEncode() ([]byte, error) {
 		defer v.mu.RUnlock()
 	}
 
-	w := getBuffer()
+	w := getEmptyBuffer()
 	defer doneWithBuffer(w)
 
 	encoder := gob.NewEncoder(w)
@@ -54,21 +55,24 @@ func (v *View) GobEncode() ([]byte, error) {
 }
 
 // GobDecode decodes the entries of the view and then initializes a new mutex and the members of the view.
-func (v *View) GobDecode(buf []byte) error {
-	r := getBuffer()
-	r.Reset()
-	n, err := r.Write(buf)
-	if n != len(buf) {
-		log.Fatalf("failed to write to buffer: got %v expected %v\n", n, len(buf))
+func (v *View) GobDecode(data []byte) error {
+	// init buffer
+	r := getEmptyBuffer()
+	defer doneWithBuffer(r)
+
+	n, err := r.Write(data)
+	if n != len(data) {
+		log.Fatalf("assert failed: write to buffer: got %v expected %v\n", n, len(data))
 	}
 
-	//r := bytes.NewBuffer(buf)
+	// get the entries
 	decoder := gob.NewDecoder(r)
 	err = decoder.Decode(&v.entries)
 	if err != nil {
 		return err
 	}
 
+	// initialize mutex and members
 	v.mu = new(sync.RWMutex)
 	v.members = make(map[Process]bool)
 
