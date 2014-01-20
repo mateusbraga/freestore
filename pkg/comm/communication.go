@@ -16,19 +16,28 @@ func init() {
 	openConnections = make(map[view.Process]*rpc.Client)
 }
 
-func SendRPCRequest(process view.Process, serviceMethod string, args interface{}, reply interface{}) error {
-	var err error
-
+func getClient(process view.Process) (*rpc.Client, error) {
 	openConnectionsMu.Lock()
+	defer openConnectionsMu.Unlock()
+
+	var err error
 	client, ok := openConnections[process]
 	if !ok {
 		client, err = rpc.Dial("tcp", process.Addr)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		openConnections[process] = client
 	}
-	openConnectionsMu.Unlock()
+
+	return client, nil
+}
+
+func SendRPCRequest(process view.Process, serviceMethod string, args interface{}, reply interface{}) error {
+	client, err := getClient(process)
+	if err != nil {
+		return nil
+	}
 
 	err = client.Call(serviceMethod, args, reply)
 	if err != nil {
