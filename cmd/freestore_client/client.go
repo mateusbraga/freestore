@@ -9,11 +9,18 @@ import (
 	"time"
 
 	"github.com/mateusbraga/freestore/pkg/client"
+
+	"net/http"
+	_ "net/http/pprof"
 )
 
 func main() {
 	var finalValue interface{}
 	var err error
+
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6061", nil))
+	}()
 
 	for {
 		startRead := time.Now()
@@ -31,6 +38,5 @@ func main() {
 		}
 
 		fmt.Printf("Read %v (%v)-> Write (%v)\n", finalValue, endRead.Sub(startRead), endWrite.Sub(startWrite))
-		time.Sleep(300 * time.Millisecond)
 	}
 }

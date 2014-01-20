@@ -283,57 +283,6 @@ func (v View) F() int {
 	return (n - 1) - (n/2 + n%2)
 }
 
-// ----- Gob -----
-
-// GobEncode encodes only the entries of the view.
-func (v *View) GobEncode() ([]byte, error) {
-	// Do not lock if not initialized: nil view will be sent
-	if v.mu != nil {
-		v.mu.RLock()
-		defer v.mu.RUnlock()
-	}
-
-	w := new(bytes.Buffer)
-	encoder := gob.NewEncoder(w)
-	err := encoder.Encode(&v.entries)
-	if err != nil {
-		return nil, err
-	}
-	return w.Bytes(), nil
-}
-
-// GobDecode decodes the entries of the view and then initializes a new mutex and the members of the view.
-func (v *View) GobDecode(buf []byte) error {
-	r := bytes.NewBuffer(buf)
-	decoder := gob.NewDecoder(r)
-	err := decoder.Decode(&v.entries)
-	if err != nil {
-		return err
-	}
-
-	v.mu = new(sync.RWMutex)
-	v.members = make(map[Process]bool)
-
-	for u, _ := range v.entries {
-		switch u.Type {
-		case Join:
-			if !v.entries[Update{Leave, u.Process}] {
-				v.members[u.Process] = true
-			}
-		case Leave:
-			delete(v.members, u.Process)
-		}
-	}
-
-	return nil
-}
-
-func init() {
-	gob.Register(new(OldViewError))
-	gob.Register(new(WriteOlderError))
-	gob.Register(new([]View))
-}
-
 // ----- ERRORS -----
 
 type OldViewError struct {
@@ -351,4 +300,10 @@ type WriteOlderError struct {
 
 func (e WriteOlderError) Error() string {
 	return fmt.Sprintf("error: write request has timestamp %v but server has more updated timestamp %v", e.WriteTimestamp, e.ServerTimestamp)
+}
+
+func init() {
+	gob.Register(new(OldViewError))
+	gob.Register(new(WriteOlderError))
+	gob.Register(new([]View))
 }

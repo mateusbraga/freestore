@@ -14,6 +14,9 @@ import (
 
 	"github.com/mateusbraga/freestore/pkg/server"
 	"github.com/mateusbraga/freestore/pkg/view"
+
+	"net/http"
+	_ "net/http/pprof"
 )
 
 // Flags
@@ -78,6 +81,10 @@ func main() {
 	default:
 		log.Fatalln("invalid hostname:", hostname)
 	}
+
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	server.Run(bindAddr, initialView, *useConsensus)
 }
