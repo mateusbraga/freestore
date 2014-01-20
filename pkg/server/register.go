@@ -20,7 +20,7 @@ type ClientRequest int
 
 func (r *ClientRequest) Read(clientView view.View, reply *Value) error {
 	if !clientView.Equal(currentView) {
-		reply.Err = view.OldViewError{NewView: currentView.NewCopy()}
+		reply.Err = view.OldViewError{NewView: currentView}
 		return nil
 	}
 
@@ -35,7 +35,7 @@ func (r *ClientRequest) Read(clientView view.View, reply *Value) error {
 
 func (r *ClientRequest) Write(value Value, reply *Value) error {
 	if !value.View.Equal(currentView) {
-		reply.Err = view.OldViewError{NewView: currentView.NewCopy()}
+		reply.Err = view.OldViewError{NewView: currentView}
 		return nil
 	}
 
@@ -51,7 +51,7 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 }
 
 func (r *ClientRequest) GetCurrentView(value int, reply *view.View) error {
-	*reply = currentView.NewCopy()
+	*reply = currentView
 	log.Println("Done GetCurrentView request")
 	return nil
 }

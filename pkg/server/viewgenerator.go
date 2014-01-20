@@ -47,8 +47,7 @@ func getViewGenerator(associatedView view.View, initialSeq []view.View) viewGene
 }
 
 func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []view.View) {
-	// Make a copy of the vgi
-	associatedView := vgi.AssociatedView.NewCopy()
+	associatedView := vgi.AssociatedView
 	jobChan := vgi.jobChan
 
 	var proposedSeq []view.View

@@ -186,10 +186,10 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 			syncState(installSeq.InstallView)
 
 			currentView.Set(installSeq.InstallView)
-			log.Println("View installed:", currentView)
+			log.Println("New view installed:", currentView)
 
 			viewInstalled := ViewInstalledMsg{}
-			viewInstalled.CurrentView = currentView.NewCopy()
+			viewInstalled.CurrentView = currentView
 
 			// Send view-installed to all
 			for _, process := range installSeq.AssociatedView.GetMembersNotIn(currentView) {
