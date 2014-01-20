@@ -237,9 +237,14 @@ func (v View) GetProcessPosition(process Process) int {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
+	if _, ok := v.members[process]; !ok {
+		return -1
+	}
+
 	position := 0
-	for process, _ := range v.members {
-		if process.Addr < process.Addr {
+	for proc, _ := range v.members {
+		fmt.Println(proc, process, position)
+		if proc.Addr < process.Addr {
 			position++
 		}
 	}

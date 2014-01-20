@@ -9,9 +9,11 @@ import (
 func TestDatabaseFunctions(t *testing.T) {
 	initStorage()
 
-	currentView.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5000"}})
-	currentView.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5001"}})
-	currentView.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5002"}})
+	initialView := view.New()
+	initialView.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5000"}})
+	initialView.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5001"}})
+	initialView.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5002"}})
+	currentView.Set(initialView)
 
 	thisProcess = view.Process{"[::]:5001"}
 
@@ -29,10 +31,10 @@ func TestDatabaseFunctions(t *testing.T) {
 	}
 
 	if proposalNumber := getNextProposalNumber(0); proposalNumber != 4 {
-		t.Errorf("getLastProposalNumber should return proposalNumber == 4, got %v", proposalNumber)
+		t.Errorf("getNextProposalNumber: expected proposalNumber == 4, got %v", proposalNumber)
 	}
 
 	if proposalNumber, err := getLastProposalNumber(0); proposalNumber != 4 || err != nil {
-		t.Errorf("getLastProposalNumber should return proposalNumber == 4 and err == nil, got %v and %v", proposalNumber, err)
+		t.Errorf("getNextProposalNumber: expted proposalNumber == 4 and err == <nil>, got %v and %v", proposalNumber, err)
 	}
 }

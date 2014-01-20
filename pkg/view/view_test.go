@@ -162,3 +162,29 @@ func TestNewCopy(t *testing.T) {
 		t.Errorf("v2 is not a copy of v1!")
 	}
 }
+
+func TestGetProcessPosition(t *testing.T) {
+	v1 := New()
+
+	v1.AddUpdate(Update{Join, Process{"1"}})
+	v1.AddUpdate(Update{Join, Process{"2"}})
+	v1.AddUpdate(Update{Join, Process{"3"}})
+
+	if position := v1.GetProcessPosition(Process{"1"}); position != 0 {
+		t.Errorf("GetProcessPosition: expected 0, got %v", position)
+	}
+
+	if position := v1.GetProcessPosition(Process{"2"}); position != 1 {
+		t.Errorf("GetProcessPosition: expected 1, got %v", position)
+	}
+
+	v1.AddUpdate(Update{Leave, Process{"1"}})
+
+	if position := v1.GetProcessPosition(Process{"1"}); position != -1 {
+		t.Errorf("GetProcessPosition: expected -1, got %v", position)
+	}
+
+	if position := v1.GetProcessPosition(Process{"2"}); position != 0 {
+		t.Errorf("GetProcessPosition: expected 0, got %v", position)
+	}
+}
