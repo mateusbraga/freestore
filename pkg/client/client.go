@@ -83,7 +83,7 @@ func basicWriteQuorum(writeMsg RegisterMsg) error {
 				switch err := resultValue.Err.(type) {
 				case *view.OldViewError:
 					log.Println("View updated during basic write quorum")
-					currentView.Set(&err.NewView)
+					currentView.Set(err.NewView)
 					return viewUpdatedErr
 				default:
 					log.Fatalf("resultValue from writeProcess returned unexpected error: %v (%T)", err, err)
@@ -181,7 +181,7 @@ func basicReadQuorum() (RegisterMsg, error) {
 				switch err := resultValue.Err.(type) {
 				case *view.OldViewError:
 					log.Println("View updated during basic read quorum")
-					currentView.Set(&err.NewView)
+					currentView.Set(err.NewView)
 					return RegisterMsg{}, viewUpdatedErr
 				default:
 					log.Fatalf("resultValue from readProcess returned unexpected error: %v (%T)", err, err)

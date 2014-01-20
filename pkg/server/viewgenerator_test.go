@@ -20,19 +20,19 @@ func TestFindMostUpdatedView(t *testing.T) {
 
 	seq = append(seq, v2)
 
-	if view := findMostUpdatedView(seq); !view.Equal(&v2) {
-		t.Errorf("got %v, expected %v\n", &view, &v2)
+	if view := findMostUpdatedView(seq); !view.Equal(v2) {
+		t.Errorf("got %v, expected %v\n", view, v2)
 	}
 
 	seq = append(seq, v3)
 
-	if view := findMostUpdatedView(seq); !view.Equal(&v3) {
-		t.Errorf("got %v, expected %v\n", &view, &v3)
+	if view := findMostUpdatedView(seq); !view.Equal(v3) {
+		t.Errorf("got %v, expected %v\n", view, v3)
 	}
 
 	seq = append(seq, v)
 
-	if view := findMostUpdatedView(seq); !view.Equal(&v3) {
-		t.Errorf("got %v, expected %v\n", &view, &v3)
+	if view := findMostUpdatedView(seq); !view.Equal(v3) {
+		t.Errorf("got %v, expected %v\n", view, v3)
 	}
 }

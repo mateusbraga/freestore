@@ -31,7 +31,7 @@ func getViewGenerator(associatedView view.View, initialSeq []view.View) viewGene
 	defer viewGeneratorsMu.Unlock()
 
 	for _, vgi := range viewGenerators {
-		if vgi.AssociatedView.Equal(&associatedView) {
+		if vgi.AssociatedView.Equal(associatedView) {
 			return vgi
 		}
 	}
@@ -86,7 +86,7 @@ func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []view.View) {
 				for _, v := range jobPointer.ProposedSeq {
 					found := false
 					for _, v2 := range proposedSeq {
-						if v.Equal(&v2) {
+						if v.Equal(v2) {
 							found = true
 							break
 						}
@@ -97,7 +97,7 @@ func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []view.View) {
 
 						hasConflict := true
 						for _, v2 := range proposedSeq {
-							if v.LessUpdatedThan(&v2) || v2.LessUpdatedThan(&v) {
+							if v.LessUpdatedThan(v2) || v2.LessUpdatedThan(v) {
 								hasConflict = false
 								break
 							}
@@ -107,7 +107,7 @@ func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []view.View) {
 							log.Println("Has conflict!")
 							jobPointerMostUpdatedView := findMostUpdatedView(jobPointer.LastConvergedSeq)
 							thisProcessMostUpdatedView := findMostUpdatedView(lastConvergedSeq)
-							if thisProcessMostUpdatedView.LessUpdatedThan(&jobPointerMostUpdatedView) {
+							if thisProcessMostUpdatedView.LessUpdatedThan(jobPointerMostUpdatedView) {
 								lastConvergedSeq = jobPointer.LastConvergedSeq
 							}
 
@@ -115,7 +115,7 @@ func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []view.View) {
 							receivedMostUpdated := findMostUpdatedView(jobPointer.ProposedSeq)
 
 							auxView := oldMostUpdated.NewCopy()
-							auxView.Merge(&receivedMostUpdated)
+							auxView.Merge(receivedMostUpdated)
 
 							proposedSeq = append(lastConvergedSeq, auxView)
 							break
@@ -181,7 +181,7 @@ func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []view.View) {
 
 func assertOnlyUpdatedViews(view view.View, seq []view.View) {
 	for _, view := range seq {
-		if view.LessUpdatedThan(&view) {
+		if view.LessUpdatedThan(view) {
 			log.Fatalf("BUG! Found an old view in view sequence: %v. view: %v\n", seq, view)
 		}
 	}
@@ -262,8 +262,8 @@ func findMostUpdatedView(seq []view.View) view.View {
 
 	mostUpdatedView := seq[0]
 	for _, v := range seq[1:] {
-		if mostUpdatedView.LessUpdatedThan(&v) {
-			mostUpdatedView.Set(&v)
+		if mostUpdatedView.LessUpdatedThan(v) {
+			mostUpdatedView.Set(v)
 		}
 	}
 
@@ -285,7 +285,7 @@ func (seqConv SeqConv) Equal(seqConv2 SeqConv) bool {
 		return false
 	}
 	for i, _ := range seqConv.Seq {
-		if !seqConv.Seq[i].Equal(&seqConv2.Seq[i]) {
+		if !seqConv.Seq[i].Equal(seqConv2.Seq[i]) {
 			return false
 		}
 	}
@@ -308,7 +308,7 @@ func (viewSeq ViewSeq) Equal(viewSeq2 ViewSeq) bool {
 	}
 
 	for i, _ := range viewSeq.ProposedSeq {
-		if !viewSeq.ProposedSeq[i].Equal(&viewSeq2.ProposedSeq[i]) {
+		if !viewSeq.ProposedSeq[i].Equal(viewSeq2.ProposedSeq[i]) {
 			return false
 		}
 	}

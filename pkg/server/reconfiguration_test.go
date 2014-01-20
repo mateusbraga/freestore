@@ -20,19 +20,19 @@ func TestFindLeastUpdatedView(t *testing.T) {
 
 	seq = append(seq, v2)
 
-	if view := findLeastUpdatedView(seq); !view.Equal(&v2) {
-		t.Errorf("got %v, expected %v\n", &view, &v2)
+	if view := findLeastUpdatedView(seq); !view.Equal(v2) {
+		t.Errorf("got %v, expected %v\n", view, v2)
 	}
 
 	seq = append(seq, v3)
 
-	if view := findLeastUpdatedView(seq); !view.Equal(&v2) {
-		t.Errorf("got %v, expected %v\n", &view, &v2)
+	if view := findLeastUpdatedView(seq); !view.Equal(v2) {
+		t.Errorf("got %v, expected %v\n", view, v2)
 	}
 
 	seq = append(seq, v)
 
-	if view := findLeastUpdatedView(seq); !view.Equal(&v) {
-		t.Errorf("got %v, expected %v\n", &view, &v)
+	if view := findLeastUpdatedView(seq); !view.Equal(v) {
+		t.Errorf("got %v, expected %v\n", view, v)
 	}
 }

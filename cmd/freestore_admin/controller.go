@@ -273,7 +273,7 @@ func sendGetCurrentView(process view.Process) {
 		log.Fatal(err)
 	}
 
-	currentView.Set(&newView)
-	systemStatus.CurrentView.Set(&newView)
+	currentView.Set(newView)
+	systemStatus.CurrentView.Set(newView)
 	fmt.Println("New Current View:", currentView)
 }

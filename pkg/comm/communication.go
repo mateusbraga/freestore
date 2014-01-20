@@ -2,12 +2,14 @@ package comm
 
 import (
 	"net/rpc"
+	"sync"
 
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
 var (
-	openConnections map[view.Process]*rpc.Client
+	openConnections   map[view.Process]*rpc.Client
+	openConnectionsMu sync.Mutex
 )
 
 func init() {
@@ -15,6 +17,9 @@ func init() {
 }
 
 func SendRPCRequest(process view.Process, serviceMethod string, args interface{}, reply interface{}) error {
+	openConnectionsMu.Lock()
+	defer openConnectionsMu.Unlock()
+
 	var err error
 	client, ok := openConnections[process]
 	if !ok {

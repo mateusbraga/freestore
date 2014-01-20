@@ -36,6 +36,6 @@ func getCurrentView(process view.Process) {
 		return
 	}
 
-	log.Printf("Updating view from %v to %v\n", &currentView, &newView)
-	currentView.Set(&newView)
+	log.Printf("Updating view from %v to %v\n", currentView, newView)
+	currentView.Set(newView)
 }

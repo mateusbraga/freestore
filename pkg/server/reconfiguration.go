@@ -70,8 +70,8 @@ func findLeastUpdatedView(seq []view.View) view.View {
 
 	leastUpdatedView := seq[0]
 	for _, v := range seq[1:] {
-		if v.LessUpdatedThan(&leastUpdatedView) {
-			leastUpdatedView.Set(&v)
+		if v.LessUpdatedThan(leastUpdatedView) {
+			leastUpdatedView.Set(v)
 		}
 	}
 
@@ -87,13 +87,13 @@ func viewSeqProcessingLoop() {
 
 		// create installSeq to send
 		installSeq := InstallSeqMsg{}
-		installSeq.AssociatedView = &seq.AssociatedView
-		installSeq.InstallView = &leastUpdatedView
+		installSeq.AssociatedView = seq.AssociatedView
+		installSeq.InstallView = leastUpdatedView
 		installSeq.ViewSeq = seq.ViewSeq
 		installSeq.Sender = &thisProcess
 
 		// Send install-seq to all from old and new view
-		for _, process := range seq.AssociatedView.GetMembersAlsoIn(&leastUpdatedView) {
+		for _, process := range seq.AssociatedView.GetMembersAlsoIn(leastUpdatedView) {
 			go sendInstallSeq(process, installSeq)
 		}
 	}
@@ -192,14 +192,14 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 			viewInstalled.CurrentView = currentView.NewCopy()
 
 			// Send view-installed to all
-			for _, process := range installSeq.AssociatedView.GetMembersNotIn(&currentView) {
+			for _, process := range installSeq.AssociatedView.GetMembersNotIn(currentView) {
 				go sendViewInstalled(process, viewInstalled)
 			}
 
 			var newSeq []view.View
 			cvIsMostUpdated := true
 			for _, v := range installSeq.ViewSeq {
-				if currentView.LessUpdatedThan(&v) {
+				if currentView.LessUpdatedThan(v) {
 					newSeq = append(newSeq, v)
 
 					cvIsMostUpdated = false
@@ -231,7 +231,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 			for {
 				viewInstalled := <-newViewInstalledChan
 
-				if installSeq.InstallView.Equal(&viewInstalled.CurrentView) {
+				if installSeq.InstallView.Equal(viewInstalled.CurrentView) {
 					counter++
 					if counter == installSeq.InstallView.QuorumSize() {
 						break
@@ -251,7 +251,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 // --------------------- State Update -----------------------
 
 type stateUpdateQuorumType struct {
-	associatedView *view.View
+	associatedView view.View
 	finalValue     *Value
 	recv           map[view.Update]bool
 
@@ -261,7 +261,7 @@ type stateUpdateQuorumType struct {
 }
 
 type getCallbackStateUpdateRequest struct {
-	associatedView *view.View
+	associatedView view.View
 	returnChan     chan chan *stateUpdateQuorumType
 }
 
@@ -272,7 +272,7 @@ func stateUpdateProcessingLoop() {
 	for {
 		select {
 		case stateUpdate := <-stateUpdateProcessingChan:
-			if stateUpdate.AssociatedView.LessUpdatedThan(&currentView) {
+			if stateUpdate.AssociatedView.LessUpdatedThan(currentView) {
 				log.Println("Old stateUpdate ignored")
 				continue
 			}
@@ -350,13 +350,13 @@ func stateUpdateProcessingLoop() {
 	}
 }
 
-func syncState(installView *view.View) {
+func syncState(installView view.View) {
 	log.Println("start syncState")
 
 	var callbackRequest getCallbackStateUpdateRequest
 	returnChan := make(chan chan *stateUpdateQuorumType)
 	newView := currentView.NewCopy()
-	callbackRequest.associatedView = &newView
+	callbackRequest.associatedView = newView
 	callbackRequest.returnChan = returnChan
 
 	// Request the chan that has the quorumState
@@ -503,9 +503,9 @@ type ReconfigMsg struct {
 }
 
 type InstallSeq struct {
-	InstallView    *view.View
+	InstallView    view.View
 	ViewSeq        []view.View
-	AssociatedView *view.View
+	AssociatedView view.View
 }
 
 func (installSeq InstallSeq) Equal(installSeq2 InstallSeq) bool {
@@ -516,7 +516,7 @@ func (installSeq InstallSeq) Equal(installSeq2 InstallSeq) bool {
 		if installSeq.AssociatedView.Equal(installSeq2.AssociatedView) {
 
 			for i, v := range installSeq.ViewSeq {
-				if !v.Equal(&installSeq2.ViewSeq[i]) {
+				if !v.Equal(installSeq2.ViewSeq[i]) {
 					return false
 				}
 			}
@@ -534,7 +534,7 @@ type InstallSeqMsg struct {
 }
 
 func (installSeq InstallSeqMsg) String() string {
-	return fmt.Sprintf("Sender: %v\nInstallView: %v\nAssociatedView: %v\nViewSeq: %v", *(installSeq.Sender), *(installSeq.InstallView), *(installSeq.AssociatedView), installSeq.ViewSeq)
+	return fmt.Sprintf("Sender: %v\nInstallView: %v\nAssociatedView: %v\nViewSeq: %v", *(installSeq.Sender), installSeq.InstallView, installSeq.AssociatedView, installSeq.ViewSeq)
 }
 
 func (installSeqMsg InstallSeqMsg) Equal(installSeqMsg2 InstallSeqMsg) bool {
@@ -549,7 +549,7 @@ type StateUpdateMsg struct {
 	Value          interface{}
 	Timestamp      int
 	Recv           map[view.Update]bool
-	AssociatedView *view.View
+	AssociatedView view.View
 }
 
 type ViewInstalledMsg struct {
@@ -557,7 +557,7 @@ type ViewInstalledMsg struct {
 }
 
 func (r *ReconfigurationRequest) Reconfig(arg ReconfigMsg, reply *error) error {
-	if arg.CurrentView.Equal(&currentView) {
+	if arg.CurrentView.Equal(currentView) {
 		if !currentView.HasUpdate(arg.Update) {
 			recvMutex.Lock()
 			defer recvMutex.Unlock()

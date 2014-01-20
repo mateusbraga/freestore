@@ -33,7 +33,7 @@ func Run(bindAddr string, initialView view.View, useConsensusArg bool) {
 	thisProcess = view.Process{listener.Addr().String()}
 
 	// init currentView
-	currentView.Set(&initialView)
+	currentView.Set(initialView)
 	log.Println("Initial View:", currentView)
 
 	// init storage
@@ -77,5 +77,5 @@ func getCurrentView(process view.Process) {
 		return
 	}
 
-	currentView.Set(&newView)
+	currentView.Set(newView)
 }

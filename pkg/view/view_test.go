@@ -8,7 +8,7 @@ func TestViewEqual(t *testing.T) {
 	v1 := New()
 	v2 := New()
 
-	if !v1.Equal(&v2) {
+	if !v1.Equal(v2) {
 		t.Fatalf("Empty views v1 and v2 should be equal")
 	}
 
@@ -17,7 +17,7 @@ func TestViewEqual(t *testing.T) {
 	v1.AddUpdate(Update{Join, Process{"3"}})
 	v1.AddUpdate(Update{Leave, Process{"1"}})
 
-	if v1.Equal(&v2) {
+	if v1.Equal(v2) {
 		t.Fatalf("Views v1 and v2 should be different")
 	}
 
@@ -26,13 +26,13 @@ func TestViewEqual(t *testing.T) {
 	v2.AddUpdate(Update{Join, Process{"3"}})
 	v2.AddUpdate(Update{Leave, Process{"1"}})
 
-	if !v1.Equal(&v2) {
+	if !v1.Equal(v2) {
 		t.Fatalf("Views v1 and v2 should be equal")
 	}
 
 	v2.AddUpdate(Update{Leave, Process{"2"}})
 
-	if v1.Equal(&v2) {
+	if v1.Equal(v2) {
 		t.Fatalf("Views v1 and v2 should be different")
 	}
 }
@@ -50,9 +50,9 @@ func TestViewSet(t *testing.T) {
 		t.Fatalf("v1 should have 2 members")
 	}
 
-	v2.Set(&v1)
+	v2.Set(v1)
 
-	if !v1.Equal(&v2) {
+	if !v1.Equal(v2) {
 		t.Fatalf("Views v1 and v2 should be equal")
 	}
 }
@@ -123,28 +123,28 @@ func TestViewLessUpdatedThan(t *testing.T) {
 
 	v2.AddUpdate(Update{Join, Process{"1"}})
 
-	if v1.LessUpdatedThan(&v2) {
+	if v1.LessUpdatedThan(v2) {
 		t.Errorf("v1 is not less updated than v2!")
 	}
 
-	if !v2.LessUpdatedThan(&v1) {
+	if !v2.LessUpdatedThan(v1) {
 		t.Errorf("v2 is less updated than v1!")
 	}
 
 	v2.AddUpdate(Update{Join, Process{"3"}})
 
-	if !v1.LessUpdatedThan(&v2) {
+	if !v1.LessUpdatedThan(v2) {
 		t.Errorf("v1 is less updated than v2!")
 	}
 
-	if !v2.LessUpdatedThan(&v1) {
+	if !v2.LessUpdatedThan(v1) {
 		t.Errorf("v2 is less updated than v1!")
 	}
 
 	v1.AddUpdate(Update{Join, Process{"3"}})
 	v2.AddUpdate(Update{Join, Process{"2"}})
 
-	if v2.LessUpdatedThan(&v1) {
+	if v2.LessUpdatedThan(v1) {
 		t.Errorf("v2 is not less updated than v1!")
 	}
 }
@@ -158,7 +158,7 @@ func TestNewCopy(t *testing.T) {
 	v1.AddUpdate(Update{Leave, Process{"1"}})
 
 	v2 := v1.NewCopy()
-	if !v1.Equal(&v2) {
+	if !v1.Equal(v2) {
 		t.Errorf("v2 is not a copy of v1!")
 	}
 }
