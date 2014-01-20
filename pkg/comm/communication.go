@@ -9,7 +9,7 @@ import (
 
 var (
 	openConnections   map[view.Process]*rpc.Client
-	openConnectionsMu sync.Mutex
+	openConnectionsMu sync.RWMutex
 )
 
 func init() {
@@ -17,17 +17,19 @@ func init() {
 }
 
 func getClient(process view.Process) (*rpc.Client, error) {
-	openConnectionsMu.Lock()
-	defer openConnectionsMu.Unlock()
-
 	var err error
+
+	openConnectionsMu.RLock()
 	client, ok := openConnections[process]
+	openConnectionsMu.RUnlock()
 	if !ok {
 		client, err = rpc.Dial("tcp", process.Addr)
 		if err != nil {
 			return nil, err
 		}
+		openConnectionsMu.Lock()
 		openConnections[process] = client
+		openConnectionsMu.Unlock()
 	}
 
 	return client, nil
