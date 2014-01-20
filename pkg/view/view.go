@@ -288,8 +288,11 @@ func (v View) F() int {
 
 // GobEncode encodes only the entries of the view.
 func (v *View) GobEncode() ([]byte, error) {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
+	// Do not lock if not initialized: nil view will be sent
+	if v.mu != nil {
+		v.mu.RLock()
+		defer v.mu.RUnlock()
+	}
 
 	w := new(bytes.Buffer)
 	encoder := gob.NewEncoder(w)
