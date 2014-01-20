@@ -18,8 +18,8 @@ import (
 
 // Flags
 var (
-	useConsensus    = *flag.Bool("consensus", false, "Set consensus to use consensus on reconfiguration")
-	numberOfServers = *flag.Int("n", 3, "Number of servers in the initial view")
+	useConsensus    = flag.Bool("consensus", false, "Set consensus to use consensus on reconfiguration")
+	numberOfServers = flag.Int("n", 3, "Number of servers in the initial view")
 
 	bindAddr string
 )
@@ -64,13 +64,13 @@ func main() {
 	initialView := view.New()
 	switch {
 	case hostname == "MateusPc" || hostname == "bt": // dev environment
-		for i := 0; i < numberOfServers; i++ {
+		for i := 0; i < *numberOfServers; i++ {
 			process := view.Process{fmt.Sprintf("[::]:500%d", i)}
 			initialView.AddUpdate(view.Update{view.Join, process})
 		}
 
 	case strings.Contains(hostname, "node-"): // emulab.net
-		for i := 0; i < numberOfServers; i++ {
+		for i := 0; i < *numberOfServers; i++ {
 			process := view.Process{fmt.Sprintf("10.1.1.%d:5000", i+2)}
 			initialView.AddUpdate(view.Update{view.Join, process})
 		}
@@ -79,5 +79,5 @@ func main() {
 		log.Fatalln("invalid hostname:", hostname)
 	}
 
-	server.Run(bindAddr, initialView, useConsensus)
+	server.Run(bindAddr, initialView, *useConsensus)
 }

@@ -16,12 +16,12 @@ import (
 )
 
 var (
-	isWrite            = *flag.Bool("write", false, "Client will measure write operations")
-	size               = *flag.Int("size", 1, "The size of the data being transfered")
-	numberOfOperations = *flag.Int("n", 1000, "Number of operations to perform (latency measurement)")
-	measureLatency     = *flag.Bool("latency", false, "Client will measure latency")
-	measureThroughput  = *flag.Bool("throughput", false, "Client will measure throughput")
-	totalDuration      = *flag.Duration("duration", 10*time.Second, "Duration to run operations (throughput measurement)")
+	isWrite            = flag.Bool("write", false, "Client will measure write operations")
+	size               = flag.Int("size", 1, "The size of the data being transfered")
+	numberOfOperations = flag.Int("n", 1000, "Number of operations to perform (latency measurement)")
+	measureLatency     = flag.Bool("latency", false, "Client will measure latency")
+	measureThroughput  = flag.Bool("throughput", false, "Client will measure throughput")
+	totalDuration      = flag.Duration("duration", 10*time.Second, "Duration to run operations (throughput measurement)")
 )
 
 var (
@@ -38,11 +38,11 @@ func init() {
 func main() {
 	flag.Parse()
 
-	stopChan = time.After(totalDuration)
+	stopChan = time.After(*totalDuration)
 
-	if measureLatency {
+	if *measureLatency {
 		latency()
-	} else if measureThroughput {
+	} else if *measureThroughput {
 		throughput()
 	} else {
 		latencyAndThroughput()
@@ -50,18 +50,18 @@ func main() {
 }
 
 func latencyAndThroughput() {
-	if isWrite {
-		log.Printf("Measuring throughput and latency of write operations with size %vB\n", size)
+	if *isWrite {
+		log.Printf("Measuring throughput and latency of write operations with size %vB\n", *size)
 	} else {
-		log.Printf("Measuring throughput and latency of read operations with size %vB\n", size)
+		log.Printf("Measuring throughput and latency of read operations with size %vB\n", *size)
 	}
 
 	data := createFakeData()
 
 	startTime := time.Now()
 
-	if isWrite {
-		for ops = 0; ops < numberOfOperations; ops++ {
+	if *isWrite {
+		for ops = 0; ops < *numberOfOperations; ops++ {
 			timeBefore := time.Now()
 			err := client.Write(data)
 			timeAfter := time.Now()
@@ -77,7 +77,7 @@ func latencyAndThroughput() {
 			log.Fatalln("Initial write:", err)
 		}
 
-		for ops = 0; ops < numberOfOperations; ops++ {
+		for ops = 0; ops < *numberOfOperations; ops++ {
 			timeBefore := time.Now()
 			_, err = client.Read()
 			timeAfter := time.Now()
@@ -90,22 +90,22 @@ func latencyAndThroughput() {
 	}
 
 	endTime := time.Now()
-	totalDuration = endTime.Sub(startTime)
-	fmt.Printf("Partial throughput: %v operations done in %v\n", ops, totalDuration)
+	duration := endTime.Sub(startTime)
+	fmt.Printf("Partial throughput: %v operations done in %v\n", ops, duration)
 	saveLatencyTimes()
 }
 
 func latency() {
-	if isWrite {
-		log.Printf("Measuring latency of write operations with size %vB\n", size)
+	if *isWrite {
+		log.Printf("Measuring latency of write operations with size %vB\n", *size)
 	} else {
-		log.Printf("Measuring latency of read operations with size %vB\n", size)
+		log.Printf("Measuring latency of read operations with size %vB\n", *size)
 	}
 
 	data := createFakeData()
 
-	if isWrite {
-		for ops = 0; ops < numberOfOperations; ops++ {
+	if *isWrite {
+		for ops = 0; ops < *numberOfOperations; ops++ {
 			timeBefore := time.Now()
 			err := client.Write(data)
 			timeAfter := time.Now()
@@ -121,7 +121,7 @@ func latency() {
 			log.Fatalln("Initial write:", err)
 		}
 
-		for ops = 0; ops < numberOfOperations; ops++ {
+		for ops = 0; ops < *numberOfOperations; ops++ {
 			timeBefore := time.Now()
 			_, err = client.Read()
 			timeAfter := time.Now()
@@ -138,10 +138,10 @@ func latency() {
 
 func saveLatencyTimes() {
 	var filename string
-	if isWrite {
-		filename = fmt.Sprintf("/home/mateus/write-latency-%v-%v.txt", size, time.Now().Format(time.RFC3339))
+	if *isWrite {
+		filename = fmt.Sprintf("/home/mateus/write-latency-%v-%v.txt", *size, time.Now().Format(time.RFC3339))
 	} else {
-		filename = fmt.Sprintf("/home/mateus/read-latency-%v-%v.txt", size, time.Now().Format(time.RFC3339))
+		filename = fmt.Sprintf("/home/mateus/read-latency-%v-%v.txt", *size, time.Now().Format(time.RFC3339))
 	}
 
 	file, err := os.Create(filename)
@@ -161,15 +161,15 @@ func saveLatencyTimes() {
 }
 
 func throughput() {
-	if isWrite {
-		log.Printf("Measuring throughput of write operations with size %vB for %v\n", size, totalDuration)
+	if *isWrite {
+		log.Printf("Measuring throughput of write operations with size %vB for %v\n", *size, *totalDuration)
 	} else {
-		log.Printf("Measuring throughput of read operations with size %vB for %v\n", size, totalDuration)
+		log.Printf("Measuring throughput of read operations with size %vB for %v\n", *size, *totalDuration)
 	}
 
 	data := createFakeData()
 
-	if isWrite {
+	if *isWrite {
 		for ; ; ops++ {
 			err := client.Write(data)
 			if err != nil {
@@ -178,7 +178,7 @@ func throughput() {
 
 			select {
 			case <-stopChan:
-				fmt.Printf("%v operations done in %v\n", ops, totalDuration)
+				fmt.Printf("%v operations done in %v\n", ops, *totalDuration)
 				return
 			default:
 			}
@@ -197,7 +197,7 @@ func throughput() {
 
 			select {
 			case <-stopChan:
-				fmt.Printf("%v operations done in %v\n", ops, totalDuration)
+				fmt.Printf("%v operations done in %v\n", ops, *totalDuration)
 				return
 			default:
 			}
@@ -207,7 +207,7 @@ func throughput() {
 }
 
 func createFakeData() []byte {
-	data := make([]byte, size)
+	data := make([]byte, *size)
 
 	n, err := io.ReadFull(rand.Reader, data)
 	if n != len(data) || err != nil {
