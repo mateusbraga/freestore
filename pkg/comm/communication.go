@@ -17,10 +17,9 @@ func init() {
 }
 
 func SendRPCRequest(process view.Process, serviceMethod string, args interface{}, reply interface{}) error {
-	openConnectionsMu.Lock()
-	defer openConnectionsMu.Unlock()
-
 	var err error
+
+	openConnectionsMu.Lock()
 	client, ok := openConnections[process]
 	if !ok {
 		client, err = rpc.Dial("tcp", process.Addr)
@@ -29,6 +28,7 @@ func SendRPCRequest(process view.Process, serviceMethod string, args interface{}
 		}
 		openConnections[process] = client
 	}
+	openConnectionsMu.Unlock()
 
 	err = client.Call(serviceMethod, args, reply)
 	if err != nil {
