@@ -233,6 +233,7 @@ func (v View) GetMembersNotIn(v2 View) []Process {
 	return members
 }
 
+// GetProcessPosition returns an unique number for the process in the view. Returns -1 if process is not a member of the view.
 func (v View) GetProcessPosition(process Process) int {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
@@ -241,6 +242,7 @@ func (v View) GetProcessPosition(process Process) int {
 		return -1
 	}
 
+	// Position will be the position of the process in an ordered list of the members.
 	position := 0
 	for proc, _ := range v.members {
 		fmt.Println(proc, process, position)
