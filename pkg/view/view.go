@@ -245,7 +245,6 @@ func (v View) GetProcessPosition(process Process) int {
 	// Position will be the position of the process in an ordered list of the members.
 	position := 0
 	for proc, _ := range v.members {
-		fmt.Println(proc, process, position)
 		if proc.Addr < process.Addr {
 			position++
 		}
