@@ -1,6 +1,7 @@
 package comm
 
 import (
+	"fmt"
 	"net/rpc"
 	"sync"
 
@@ -22,6 +23,9 @@ func getClient(process view.Process) (*rpc.Client, error) {
 	openConnectionsMu.RLock()
 	client, ok := openConnections[process]
 	openConnectionsMu.RUnlock()
+	if !ok {
+		fmt.Println("creating ", process)
+	}
 	if !ok {
 		client, err = rpc.Dial("tcp", process.Addr)
 		if err != nil {
