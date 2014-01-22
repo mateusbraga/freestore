@@ -9,12 +9,11 @@ import (
 )
 
 var (
-	currentView *view.View
+	currentView = view.New()
 )
 
+// get current view
 func init() {
-	currentView = view.New()
-
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Fatalln(err)

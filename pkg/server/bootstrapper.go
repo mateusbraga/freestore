@@ -12,9 +12,10 @@ import (
 )
 
 var (
+	currentView = view.New()
+
 	listener    net.Listener
 	thisProcess view.Process
-	currentView *view.View
 
 	db *kv.DB
 
@@ -62,10 +63,6 @@ func initStorage() {
 	if err != nil {
 		log.Fatalln("initStorage error:", err)
 	}
-}
-
-func init() {
-	currentView = view.New()
 }
 
 // GetCurrentViewClient asks process for the currentView
