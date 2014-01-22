@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	consensusTable   map[int]consensusInstance
+	consensusTable   = make(map[int]consensusInstance)
 	consensusTableMu sync.RWMutex
 
 	oldProposalNumberErr OldProposalNumberError
@@ -27,10 +27,6 @@ type consensusInstance struct {
 }
 
 type consensusTask interface{}
-
-func init() {
-	consensusTable = make(map[int]consensusInstance)
-}
 
 func getConsensus(id int) consensusInstance {
 	consensusTableMu.Lock()
@@ -428,8 +424,7 @@ func (r *ConsensusRequest) Learn(arg Proposal, reply *Proposal) error {
 }
 
 func init() {
-	consensusRequest := new(ConsensusRequest)
-	rpc.Register(consensusRequest)
+	rpc.Register(new(ConsensusRequest))
 }
 
 // ------- ERRORS -----------

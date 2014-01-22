@@ -55,6 +55,5 @@ func (r *ControllerRequest) Consensus(arg int, reply *int) error {
 }
 
 func init() {
-	controllerRequest := new(ControllerRequest)
-	rpc.Register(controllerRequest)
+	rpc.Register(new(ControllerRequest))
 }

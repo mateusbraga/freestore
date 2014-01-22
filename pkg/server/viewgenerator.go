@@ -331,8 +331,7 @@ func (r *ViewGeneratorRequest) SeqConv(arg SeqConvMsg, reply *error) error {
 }
 
 func init() {
-	viewGeneratorRequest := new(ViewGeneratorRequest)
-	rpc.Register(viewGeneratorRequest)
+	rpc.Register(new(ViewGeneratorRequest))
 }
 
 // -------- Send functions -----------

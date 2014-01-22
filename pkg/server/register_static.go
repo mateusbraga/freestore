@@ -18,7 +18,7 @@ var register Value
 //  ---------- Interface -------------
 type ClientRequest int
 
-func (r *ClientRequest) Read(clientView view.View, reply *Value) error {
+func (r *ClientRequest) Read(clientView *view.View, reply *Value) error {
 	register.mu.RLock()
 	defer register.mu.RUnlock()
 
@@ -51,9 +51,10 @@ func init() {
 	register.mu.Lock() // The register starts locked
 	register.Value = nil
 	register.Timestamp = 0
+}
 
-	clientRequest := new(ClientRequest)
-	rpc.Register(clientRequest)
+func init() {
+	rpc.Register(new(ClientRequest))
 }
 
 // --------- Types ---------
@@ -61,7 +62,7 @@ type Value struct {
 	Value     interface{}
 	Timestamp int
 
-	View view.View
+	View *view.View
 	Err  error
 
 	mu sync.RWMutex

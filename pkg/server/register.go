@@ -61,9 +61,10 @@ func init() {
 	register.mu.Lock() // The register starts locked
 	register.Value = nil
 	register.Timestamp = 0
+}
 
-	clientRequest := new(ClientRequest)
-	rpc.Register(clientRequest)
+func init() {
+	rpc.Register(new(ClientRequest))
 }
 
 // --------- Types ---------

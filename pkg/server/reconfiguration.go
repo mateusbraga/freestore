@@ -18,34 +18,23 @@ const (
 )
 
 var (
-	recv      map[view.Update]bool
+	recv      = make(map[view.Update]bool)
 	recvMutex sync.RWMutex
-
-	viewSeqProcessingChan              chan newViewSeq
-	installSeqProcessingChan           chan InstallSeqMsg
-	stateUpdateProcessingChan          chan StateUpdateMsg
-	callbackChanStateUpdateRequestChan chan getCallbackStateUpdateRequest
-	newViewInstalledChan               chan ViewInstalledMsg
-
-	resetTimer chan bool
-)
-
-// ---------- Bootstrapping ------------
-func init() {
-	recv = make(map[view.Update]bool)
 
 	viewSeqProcessingChan = make(chan newViewSeq)
 	installSeqProcessingChan = make(chan InstallSeqMsg, CHANNEL_DEFAULT_SIZE)
 	stateUpdateProcessingChan = make(chan StateUpdateMsg, CHANNEL_DEFAULT_SIZE)
-
-	newViewInstalledChan = make(chan ViewInstalledMsg, CHANNEL_DEFAULT_SIZE)
 	callbackChanStateUpdateRequestChan = make(chan getCallbackStateUpdateRequest, CHANNEL_DEFAULT_SIZE)
+	newViewInstalledChan = make(chan ViewInstalledMsg, CHANNEL_DEFAULT_SIZE)
 
+	resetTimer = make(chan bool, 5)
+)
+
+// ---------- Bootstrapping ------------
+func init() {
 	go viewSeqProcessingLoop()
 	go installSeqProcessingLoop()
 	go stateUpdateProcessingLoop()
-
-	resetTimer = make(chan bool, 5)
 	go resetTimerLoop()
 }
 
@@ -588,8 +577,7 @@ func (r *ReconfigurationRequest) ViewInstalled(arg ViewInstalledMsg, reply *erro
 }
 
 func init() {
-	reconfigurationRequest := new(ReconfigurationRequest)
-	rpc.Register(reconfigurationRequest)
+	rpc.Register(new(ReconfigurationRequest))
 }
 
 // -------- Send functions -----------
