@@ -20,13 +20,13 @@ var (
 )
 
 type viewGeneratorInstance struct {
-	AssociatedView view.View //Id
+	AssociatedView *view.View //Id
 	jobChan        chan ViewGeneratorJob
 }
 
 type ViewGeneratorJob interface{}
 
-func getViewGenerator(associatedView view.View, initialSeq []view.View) viewGeneratorInstance {
+func getViewGenerator(associatedView *view.View, initialSeq []*view.View) viewGeneratorInstance {
 	viewGeneratorsMu.Lock()
 	defer viewGeneratorsMu.Unlock()
 
@@ -46,12 +46,12 @@ func getViewGenerator(associatedView view.View, initialSeq []view.View) viewGene
 	return vgi
 }
 
-func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []view.View) {
+func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []*view.View) {
 	associatedView := vgi.AssociatedView
 	jobChan := vgi.jobChan
 
-	var proposedSeq []view.View
-	var lastConvergedSeq []view.View
+	var proposedSeq []*view.View
+	var lastConvergedSeq []*view.View
 	var viewSeqQuorumCounter viewSeqQuorumCounterType
 	var seqConvQuorumCounter seqConvQuorumCounterType
 
@@ -75,7 +75,7 @@ func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []view.View) {
 		case *ViewSeq:
 			log.Println("new ViewSeq")
 			log.Println(jobPointer)
-			var addToProposedSeq []view.View
+			var addToProposedSeq []*view.View
 
 			hasChanges := false
 			if proposedSeq == nil {
@@ -178,7 +178,7 @@ func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []view.View) {
 	}
 }
 
-func assertOnlyUpdatedViews(view view.View, seq []view.View) {
+func assertOnlyUpdatedViews(view *view.View, seq []*view.View) {
 	for _, view := range seq {
 		if view.LessUpdatedThan(view) {
 			log.Fatalf("BUG! Found an old view in view sequence: %v. view: %v\n", seq, view)
@@ -187,14 +187,14 @@ func assertOnlyUpdatedViews(view view.View, seq []view.View) {
 }
 
 // we can change seq
-func generateViewSequenceWithoutConsensus(associatedView view.View, seq []view.View) {
+func generateViewSequenceWithoutConsensus(associatedView *view.View, seq []*view.View) {
 	log.Println("start generateViewSequenceWithoutConsensus")
 	assertOnlyUpdatedViews(associatedView, seq)
 
 	_ = getViewGenerator(associatedView, seq)
 }
 
-func generateViewSequenceWithConsensus(associatedView view.View, seq []view.View) {
+func generateViewSequenceWithConsensus(associatedView *view.View, seq []*view.View) {
 	log.Println("start generateViewSequenceWithConsensus")
 	assertOnlyUpdatedViews(associatedView, seq)
 
@@ -206,7 +206,7 @@ func generateViewSequenceWithConsensus(associatedView view.View, seq []view.View
 	log.Println("CONSENSUS: wait learn message")
 	value := <-consensusInstance.callbackLearnChan
 
-	result, ok := value.(*[]view.View)
+	result, ok := value.(*[]*view.View)
 	if !ok {
 		log.Fatalf("FATAL: consensus on generateViewSequenceWithConsensus got %T %v\n", value, value)
 	}
@@ -254,7 +254,7 @@ func (quorumCounter *seqConvQuorumCounterType) count(newSeqConv *SeqConv, quorum
 	return (1 == quorumSize)
 }
 
-func findMostUpdatedView(seq []view.View) view.View {
+func findMostUpdatedView(seq []*view.View) *view.View {
 	if len(seq) == 0 {
 		log.Panicln("ERROR: Got empty seq on findLeastUpdatedView")
 	}
@@ -271,11 +271,11 @@ func findMostUpdatedView(seq []view.View) view.View {
 
 // -------- REQUESTS -----------
 type SeqConv struct {
-	Seq []view.View
+	Seq []*view.View
 }
 
 type SeqConvMsg struct {
-	AssociatedView view.View
+	AssociatedView *view.View
 	SeqConv
 }
 
@@ -292,12 +292,12 @@ func (seqConv SeqConv) Equal(seqConv2 SeqConv) bool {
 }
 
 type ViewSeq struct {
-	ProposedSeq      []view.View
-	LastConvergedSeq []view.View
+	ProposedSeq      []*view.View
+	LastConvergedSeq []*view.View
 }
 
 type ViewSeqMsg struct {
-	AssociatedView view.View
+	AssociatedView *view.View
 	ViewSeq
 }
 

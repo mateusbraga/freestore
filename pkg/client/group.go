@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	currentView view.View
+	currentView *view.View
 )
 
 func init() {
@@ -29,7 +29,7 @@ func init() {
 
 // getCurrentView asks process for the currentView
 func getCurrentView(process view.Process) {
-	var newView view.View
+	var newView *view.View
 	err := comm.SendRPCRequest(process, "ClientRequest.GetCurrentView", 0, &newView)
 	if err != nil {
 		log.Fatalln("ERROR getCurrentView:", err)
@@ -40,6 +40,6 @@ func getCurrentView(process view.Process) {
 	currentView.Set(newView)
 }
 
-func updateCurrentView(view view.View) {
+func updateCurrentView(view *view.View) {
 	currentView.Set(view)
 }

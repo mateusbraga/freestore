@@ -18,7 +18,7 @@ var register Value
 //  ---------- Interface -------------
 type ClientRequest int
 
-func (r *ClientRequest) Read(clientView view.View, reply *Value) error {
+func (r *ClientRequest) Read(clientView *view.View, reply *Value) error {
 	if !clientView.Equal(currentView) {
 		reply.Err = view.OldViewError{NewView: currentView}
 		return nil
@@ -51,7 +51,7 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 }
 
 func (r *ClientRequest) GetCurrentView(value int, reply *view.View) error {
-	*reply = currentView
+	reply = currentView
 	log.Println("Done GetCurrentView request")
 	return nil
 }
@@ -71,7 +71,7 @@ type Value struct {
 	Value     interface{}
 	Timestamp int
 
-	View view.View
+	View *view.View
 	Err  error
 
 	mu sync.RWMutex

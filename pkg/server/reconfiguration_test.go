@@ -16,7 +16,7 @@ func TestFindLeastUpdatedView(t *testing.T) {
 	v3 := v2.NewCopy()
 	v3.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5002"}})
 
-	var seq []view.View
+	var seq []*view.View
 
 	seq = append(seq, v2)
 

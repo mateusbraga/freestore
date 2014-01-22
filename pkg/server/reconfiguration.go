@@ -59,11 +59,11 @@ func resetTimerLoop() {
 
 // ---------- Others ------------
 type newViewSeq struct {
-	ViewSeq        []view.View
-	AssociatedView view.View
+	ViewSeq        []*view.View
+	AssociatedView *view.View
 }
 
-func findLeastUpdatedView(seq []view.View) view.View {
+func findLeastUpdatedView(seq []*view.View) *view.View {
 	if len(seq) == 0 {
 		log.Panicln("ERROR: Got empty seq on findLeastUpdatedView")
 	}
@@ -196,7 +196,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 				go sendViewInstalled(process, viewInstalled)
 			}
 
-			var newSeq []view.View
+			var newSeq []*view.View
 			cvIsMostUpdated := true
 			for _, v := range installSeq.ViewSeq {
 				if currentView.LessUpdatedThan(v) {
@@ -251,7 +251,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 // --------------------- State Update -----------------------
 
 type stateUpdateQuorumType struct {
-	associatedView view.View
+	associatedView *view.View
 	finalValue     *Value
 	recv           map[view.Update]bool
 
@@ -261,7 +261,7 @@ type stateUpdateQuorumType struct {
 }
 
 type getCallbackStateUpdateRequest struct {
-	associatedView view.View
+	associatedView *view.View
 	returnChan     chan chan *stateUpdateQuorumType
 }
 
@@ -350,7 +350,7 @@ func stateUpdateProcessingLoop() {
 	}
 }
 
-func syncState(installView view.View) {
+func syncState(installView *view.View) {
 	log.Println("start syncState")
 
 	var callbackRequest getCallbackStateUpdateRequest
@@ -389,7 +389,7 @@ func initReconfiguration() {
 
 	if len(recv) != 0 {
 		log.Println("Reconfiguration from currentView:", currentView)
-		var seq []view.View
+		var seq []*view.View
 		newView := currentView.NewCopy()
 
 		for update, _ := range recv {
@@ -499,13 +499,13 @@ type ReconfigurationRequest int
 
 type ReconfigMsg struct {
 	Update      view.Update
-	CurrentView view.View
+	CurrentView *view.View
 }
 
 type InstallSeq struct {
-	InstallView    view.View
-	ViewSeq        []view.View
-	AssociatedView view.View
+	InstallView    *view.View
+	ViewSeq        []*view.View
+	AssociatedView *view.View
 }
 
 func (installSeq InstallSeq) Equal(installSeq2 InstallSeq) bool {
@@ -549,11 +549,11 @@ type StateUpdateMsg struct {
 	Value          interface{}
 	Timestamp      int
 	Recv           map[view.Update]bool
-	AssociatedView view.View
+	AssociatedView *view.View
 }
 
 type ViewInstalledMsg struct {
-	CurrentView view.View
+	CurrentView *view.View
 }
 
 func (r *ReconfigurationRequest) Reconfig(arg ReconfigMsg, reply *error) error {

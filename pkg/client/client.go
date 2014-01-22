@@ -16,14 +16,13 @@ import (
 
 var (
 	diffResultsErr = errors.New("Read Divergence")
-	viewUpdatedErr = errors.New("View Updated")
 )
 
 type RegisterMsg struct {
 	Value     interface{}
 	Timestamp int
 
-	View view.View
+	View *view.View
 
 	Err error
 }
@@ -66,7 +65,7 @@ func Write(v interface{}) error {
 // basicWriteQuorum writes v to all processes on the view and returns when it gets confirmation from a quorum
 //
 // If the view needs to be updated, it will return the new view in a *view.OldViewError.
-func basicWriteQuorum(view view.View, writeMsg RegisterMsg) error {
+func basicWriteQuorum(view *view.View, writeMsg RegisterMsg) error {
 	resultChan := make(chan RegisterMsg, view.N())
 	errChan := make(chan error, view.N())
 
@@ -144,7 +143,7 @@ func Read() (interface{}, error) {
 	return readMsg.Value, nil
 }
 
-func read2ndPhase(immutableCurrentView view.View, readMsg RegisterMsg) (interface{}, error) {
+func read2ndPhase(immutableCurrentView *view.View, readMsg RegisterMsg) (interface{}, error) {
 	err := basicWriteQuorum(immutableCurrentView, readMsg)
 	if err != nil {
 		if oldViewError, ok := err.(*view.OldViewError); ok {
@@ -162,7 +161,7 @@ func read2ndPhase(immutableCurrentView view.View, readMsg RegisterMsg) (interfac
 //
 // If the view needs to be updated, it will update the view in a *view.OldViewError.
 // If values returned by the processes differ, it will return diffResultsErr
-func basicReadQuorum(view view.View) (RegisterMsg, error) {
+func basicReadQuorum(view *view.View) (RegisterMsg, error) {
 	resultChan := make(chan RegisterMsg, view.N())
 	errChan := make(chan error, view.N())
 
@@ -216,7 +215,7 @@ func basicReadQuorum(view view.View) (RegisterMsg, error) {
 }
 
 // readProcess sends a read request to process and return an err through errChan or a result through resultChan
-func readProcess(process view.Process, immutableCurrentView view.View, resultChan chan RegisterMsg, errChan chan error) {
+func readProcess(process view.Process, immutableCurrentView *view.View, resultChan chan RegisterMsg, errChan chan error) {
 	var reply RegisterMsg
 	err := comm.SendRPCRequest(process, "ClientRequest.Read", immutableCurrentView, &reply)
 	if err != nil {

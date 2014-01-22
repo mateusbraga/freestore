@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	currentView  view.View
+	currentView  *view.View
 	systemStatus Status = Status{}
 )
 
@@ -147,7 +147,7 @@ func init() {
 	currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5001"}})
 	currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5002"}})
 
-	*systemStatus.CurrentView = (currentView.NewCopy())
+	systemStatus.CurrentView = (currentView.NewCopy())
 	// Init systemStatus
 	for i := 5000; i < 5020; i++ {
 		systemStatus.ProcessStatus = append(systemStatus.ProcessStatus, &ProcessStatus{view.Process{fmt.Sprintf("[::]:%v", i)}, false})
@@ -267,7 +267,7 @@ func sendGetCurrentView(process view.Process) {
 	}
 	defer client.Close()
 
-	var newView view.View
+	var newView *view.View
 	client.Call("ClientRequest.GetCurrentView", 0, &newView)
 	if err != nil {
 		log.Fatal(err)

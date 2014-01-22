@@ -14,14 +14,14 @@ import (
 var (
 	listener    net.Listener
 	thisProcess view.Process
-	currentView view.View
+	currentView *view.View
 
 	db *kv.DB
 
 	useConsensus bool
 )
 
-func Run(bindAddr string, initialView view.View, useConsensusArg bool) {
+func Run(bindAddr string, initialView *view.View, useConsensusArg bool) {
 	// init listener
 	listener, err := net.Listen("tcp", bindAddr)
 	if err != nil {
@@ -70,7 +70,7 @@ func init() {
 
 // GetCurrentViewClient asks process for the currentView
 func getCurrentView(process view.Process) {
-	var newView view.View
+	var newView *view.View
 	err := comm.SendRPCRequest(process, "ClientRequest.GetCurrentView", 0, &newView)
 	if err != nil {
 		log.Fatalln("ERROR: getCurrentView:", err)
