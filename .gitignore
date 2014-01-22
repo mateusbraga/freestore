@@ -8,3 +8,4 @@ coverage.out
 
 samples/client/client
 samples/server/server
+cmd/freestore_client/freestore_client
