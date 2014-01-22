@@ -52,7 +52,7 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 
 func (r *ClientRequest) GetCurrentView(value int, reply *view.View) error {
 	*reply = *currentView
-    log.Println("Done GetCurrentView request", reply)
+	log.Println("Done GetCurrentView request")
 	return nil
 }
 
