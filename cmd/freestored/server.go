@@ -35,7 +35,7 @@ func init() {
 	}
 
 	switch {
-	case hostname == "MateusPc" || hostname == "bt": // dev environment
+	case hostname == "mabr" || hostname == "bt": // dev environment
 		flag.StringVar(&bindAddr, "bind", "[::]:5000", "Set this process address")
 
 	case strings.Contains(hostname, "node-"): // emulab.net
@@ -66,7 +66,7 @@ func main() {
 
 	initialView := view.New()
 	switch {
-	case hostname == "MateusPc" || hostname == "bt": // dev environment
+	case hostname == "mabr" || hostname == "bt": // dev environment
 		for i := 0; i < *numberOfServers; i++ {
 			process := view.Process{fmt.Sprintf("[::]:500%d", i)}
 			initialView.AddUpdate(view.Update{view.Join, process})

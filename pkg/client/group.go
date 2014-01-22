@@ -20,7 +20,7 @@ func init() {
 		log.Fatalln(err)
 	}
 
-	if hostname == "MateusPc" {
+	if hostname == "mabr" {
 		getCurrentView(view.Process{"[::]:5000"})
 	} else {
 		getCurrentView(view.Process{"10.1.1.2:5000"})
@@ -29,15 +29,15 @@ func init() {
 
 // getCurrentView asks process for the currentView
 func getCurrentView(process view.Process) {
-	var newView *view.View
+	var newView view.View
 	err := comm.SendRPCRequest(process, "ClientRequest.GetCurrentView", 0, &newView)
 	if err != nil {
 		log.Fatalln("ERROR getCurrentView:", err)
 		return
 	}
 
-	log.Printf("Updating view from %v to %v\n", currentView, newView)
-	currentView.Set(newView)
+	log.Printf("Updating view from %v to %v\n", currentView, &newView)
+	currentView.Set(&newView)
 }
 
 func updateCurrentView(view *view.View) {
