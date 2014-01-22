@@ -8,47 +8,87 @@ import (
 )
 
 var (
-	openConnections   map[view.Process]*rpc.Client
-	openConnectionsMu sync.RWMutex
+	rpcClientWorkers   = make(map[view.Process]rpcClientInstance)
+	rpcClientWorkersMu sync.Mutex
 )
 
-func init() {
-	openConnections = make(map[view.Process]*rpc.Client)
+type rpcClientJob struct {
+	serviceMethod string
+	args          interface{}
+	reply         interface{}
+	errorCh       chan error
 }
 
-func getClient(process view.Process) (*rpc.Client, error) {
+type rpcClientInstance struct {
+	process view.Process
+	jobChan chan rpcClientJob
+}
+
+// TODO code when we terminate the workers
+func rpcClientWorker(rci rpcClientInstance) {
+	process := rci.process
+	jobChan := rci.jobChan
+
+	var client *rpc.Client
 	var err error
 
-	openConnectionsMu.RLock()
-	client, ok := openConnections[process]
-	openConnectionsMu.RUnlock()
-	if !ok {
-		client, err = rpc.Dial("tcp", process.Addr)
-		if err != nil {
-			return nil, err
+	for {
+		job, ok := <-jobChan
+		if !ok {
+			// terminate goroutine if jobChan is closed
+			return
 		}
-		openConnectionsMu.Lock()
-		openConnections[process] = client
-		openConnectionsMu.Unlock()
-	}
 
-	return client, nil
+		// make sure client is not null
+		if client == nil {
+			client, err = rpc.Dial("tcp", process.Addr)
+			if err != nil {
+				job.errorCh <- err
+				continue
+			}
+		}
+
+		err = client.Call(job.serviceMethod, job.args, job.reply)
+		if err != nil {
+			if err == rpc.ErrShutdown {
+				client, err = rpc.Dial("tcp", process.Addr)
+				if err != nil {
+					job.errorCh <- err
+					continue
+				}
+
+				// retry this job
+				go func() { jobChan <- job }()
+
+			} else {
+				job.errorCh <- err
+			}
+		}
+		job.errorCh <- nil
+	}
+}
+
+func getRpcClientInstance(process view.Process) rpcClientInstance {
+	rpcClientWorkersMu.Lock()
+	defer rpcClientWorkersMu.Unlock()
+
+	rci, ok := rpcClientWorkers[process]
+	if !ok {
+		// worker does not exist, create one
+		rci = rpcClientInstance{process: process, jobChan: make(chan rpcClientJob, 20)}
+		rpcClientWorkers[process] = rci
+		go rpcClientWorker(rci)
+	}
+	return rci
 }
 
 func SendRPCRequest(process view.Process, serviceMethod string, args interface{}, reply interface{}) error {
-	client, err := getClient(process)
-	if err != nil {
-		return nil
-	}
+	rci := getRpcClientInstance(process)
 
-	err = client.Call(serviceMethod, args, reply)
-	if err != nil {
-		if err == rpc.ErrShutdown {
-			return SendRPCRequest(process, serviceMethod, args, reply)
-		} else {
-			return err
-		}
-	}
+	errorCh := make(chan error)
+	rcj := rpcClientJob{serviceMethod: serviceMethod, args: args, reply: reply, errorCh: errorCh}
+	rci.jobChan <- rcj
 
-	return nil
+	err := <-errorCh
+	return err
 }
