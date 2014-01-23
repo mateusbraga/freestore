@@ -24,7 +24,8 @@ type rpcClientInstance struct {
 	jobChan chan rpcClientJob
 }
 
-// TODO code when we terminate the workers
+// rpcClientWorker is responsable for maintaining a rpc.Client.
+// Currently, rpcClientWorker never ends so we can keep it simpler for now.
 func rpcClientWorker(rci rpcClientInstance) {
 	process := rci.process
 	jobChan := rci.jobChan
@@ -33,11 +34,7 @@ func rpcClientWorker(rci rpcClientInstance) {
 	var err error
 
 	for {
-		job, ok := <-jobChan
-		if !ok {
-			// terminate goroutine if jobChan is closed
-			return
-		}
+		job := <-jobChan
 
 		// make sure client is not null
 		if client == nil {
