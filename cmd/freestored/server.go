@@ -52,7 +52,7 @@ func init() {
 }
 
 func init() {
-	// Allow multiprocessing
+	// Make it parallel
 	runtime.GOMAXPROCS(runtime.NumCPU())
 }
 
