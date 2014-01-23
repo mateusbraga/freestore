@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mateusbraga/freestore/pkg/client"
+	"github.com/mateusbraga/gostat"
 )
 
 var (
@@ -22,6 +23,10 @@ var (
 	measureLatency     = flag.Bool("latency", false, "Client will measure latency")
 	measureThroughput  = flag.Bool("throughput", false, "Client will measure throughput")
 	totalDuration      = flag.Duration("duration", 10*time.Second, "Duration to run operations (throughput measurement)")
+)
+
+const (
+	resultFile = "/home/mateus/freestoreResults.txt"
 )
 
 var (
@@ -74,7 +79,7 @@ func latencyAndThroughput() {
 	} else {
 		err := client.Write(data)
 		if err != nil {
-			log.Fatalln("Initial write:", err)
+			log.Fatalln("ERROR initial write:", err)
 		}
 
 		for ops = 0; ops < *numberOfOperations; ops++ {
@@ -91,8 +96,41 @@ func latencyAndThroughput() {
 
 	endTime := time.Now()
 	duration := endTime.Sub(startTime)
-	fmt.Printf("Partial throughput: %v operations done in %v\n", ops, duration)
-	saveLatencyTimes()
+
+	gostat.TakeExtremes(latencies)
+	latenciesMean := gostat.Mean(latencies)
+	latenciesStandardDeviation := gostat.StandardDeviation(latencies)
+
+	latenciesMeanDuration := time.Duration(int64(latenciesMean))
+	latenciesStandardDeviationDuration := time.Duration(int64(latenciesStandardDeviation))
+
+	opsPerSecond := float64(ops) / duration.Seconds()
+
+	fmt.Printf("Result: latency %v (%v) - throughput %v [%v in %v]\n", latenciesMeanDuration, latenciesStandardDeviationDuration, int64(opsPerSecond), ops, duration.Seconds())
+	saveResults(int64(latenciesMean), int64(latenciesStandardDeviation), int64(opsPerSecond), ops)
+}
+
+func saveResults(latenciesMean int64, latenciesStandardDeviation int64, opsPerSecond int64, opsTotal int) {
+	var operation string
+
+	if *isWrite {
+		operation = "write"
+	} else {
+		operation = "read"
+	}
+
+	file, err := os.OpenFile(resultFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer file.Close()
+
+	w := bufio.NewWriter(file)
+	defer w.Flush()
+
+	if _, err = w.Write([]byte(fmt.Sprintf("%v %v %v %v %v %v\n", latenciesMean, latenciesStandardDeviation, opsPerSecond, opsTotal, operation, time.Now().Format(time.RFC3339)))); err != nil {
+		log.Fatalln(err)
+	}
 }
 
 func latency() {
@@ -133,31 +171,15 @@ func latency() {
 		}
 	}
 
-	saveLatencyTimes()
-}
+	gostat.TakeExtremes(latencies)
+	latenciesMean := gostat.Mean(latencies)
+	latenciesStandardDeviation := gostat.StandardDeviation(latencies)
 
-func saveLatencyTimes() {
-	var filename string
-	if *isWrite {
-		filename = fmt.Sprintf("/home/mateus/write-latency-%v-%v.txt", *size, time.Now().Format(time.RFC3339))
-	} else {
-		filename = fmt.Sprintf("/home/mateus/read-latency-%v-%v.txt", *size, time.Now().Format(time.RFC3339))
-	}
+	latenciesMeanDuration := time.Duration(int64(latenciesMean))
+	latenciesStandardDeviationDuration := time.Duration(int64(latenciesStandardDeviation))
 
-	file, err := os.Create(filename)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	defer file.Close()
-
-	w := bufio.NewWriter(file)
-	defer w.Flush()
-
-	for _, t := range latencies {
-		if _, err := w.Write([]byte(fmt.Sprintf("%v\n", t))); err != nil {
-			log.Fatalln(err)
-		}
-	}
+	fmt.Printf("Result: latency %v (%v) - %v ops\n", latenciesMeanDuration, latenciesStandardDeviationDuration, ops)
+	saveResults(int64(latenciesMean), int64(latenciesStandardDeviation), 0, ops)
 }
 
 func throughput() {
@@ -178,8 +200,7 @@ func throughput() {
 
 			select {
 			case <-stopChan:
-				fmt.Printf("%v operations done in %v\n", ops, *totalDuration)
-				return
+				goto RESULT
 			default:
 			}
 		}
@@ -197,13 +218,17 @@ func throughput() {
 
 			select {
 			case <-stopChan:
-				fmt.Printf("%v operations done in %v\n", ops, *totalDuration)
-				return
+				goto RESULT
 			default:
 			}
 		}
 	}
 
+RESULT:
+	opsPerSecond := float64(ops) / totalDuration.Seconds()
+
+	fmt.Printf("Result: throughput %v [%v in %v]\n", int64(opsPerSecond), ops, totalDuration.Seconds())
+	saveResults(0, 0, int64(opsPerSecond), ops)
 }
 
 func createFakeData() []byte {
