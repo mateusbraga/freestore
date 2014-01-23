@@ -1,8 +1,6 @@
 /*
 client is how clients should access the system
 
-
-IMPROV: Because we send so many requests at once using threads, we may have problems having buffer overflow on the socket buffer.  We could limit the number of concurrent threads sending a request.
 */
 package client
 
@@ -33,10 +31,13 @@ func Write(v interface{}) error {
 
 	readValue, err := basicReadQuorum(immutableCurrentView)
 	if err != nil {
-		// Expected: oldViewError or diffResultsErr
+		// Special cases:
+		//  oldViewError: currentView is old, update it and retry
+		//  diffResultsErr: can be ignored
 		if oldViewError, ok := err.(*view.OldViewError); ok {
+			log.Println("View updated during basic read quorum of Write op")
 			updateCurrentView(oldViewError.NewView)
-			Write(v)
+			return Write(v)
 		} else if err == diffResultsErr {
 			// Do nothing - we will write a new value anyway
 		} else {
@@ -47,11 +48,12 @@ func Write(v interface{}) error {
 	writeMsg := RegisterMsg{}
 	writeMsg.Value = v
 	writeMsg.Timestamp = readValue.Timestamp + 1
+	writeMsg.View = immutableCurrentView
 
 	err = basicWriteQuorum(immutableCurrentView, writeMsg)
 	if err != nil {
 		if oldViewError, ok := err.(*view.OldViewError); ok {
-			log.Println("View updated during basic write quorum")
+			log.Println("View updated during basic write quorum of Write op")
 			updateCurrentView(oldViewError.NewView)
 			return Write(v)
 		} else {
@@ -68,8 +70,6 @@ func Write(v interface{}) error {
 func basicWriteQuorum(view *view.View, writeMsg RegisterMsg) error {
 	resultChan := make(chan RegisterMsg, view.N())
 	errChan := make(chan error, view.N())
-
-	writeMsg.View = view
 
 	// Send write request to all
 	for _, process := range view.GetMembers() {
@@ -95,15 +95,11 @@ func basicWriteQuorum(view *view.View, writeMsg RegisterMsg) error {
 			log.Println("+1 error on write:", err)
 			failedTotal++
 
-			// view.F() needs an updated View, and we know we have an updated view when successTotal > 0
-			if successTotal > 0 {
-				if failedTotal > view.F() {
-					return errors.New("failedTotal to get write quorun")
-				}
-			} else {
-				if failedTotal == view.N() {
-					return errors.New("failedTotal to get write quorun")
-				}
+			allFailed := failedTotal == view.N()
+			mostFailed := failedTotal > view.F()
+
+			if mostFailed || allFailed {
+				return errors.New("failedTotal to get write quorun")
 			}
 		}
 	}
@@ -129,7 +125,7 @@ func Read() (interface{}, error) {
 	if err != nil {
 		// Expected: oldViewError (will retry) or diffResultsErr (will write most current value to view).
 		if oldViewError, ok := err.(*view.OldViewError); ok {
-			log.Println("View updated during basic read quorum")
+			log.Println("View updated during basic read quorum of Read op")
 			updateCurrentView(oldViewError.NewView)
 			return Read()
 		} else if err == diffResultsErr {
@@ -147,7 +143,7 @@ func read2ndPhase(immutableCurrentView *view.View, readMsg RegisterMsg) (interfa
 	err := basicWriteQuorum(immutableCurrentView, readMsg)
 	if err != nil {
 		if oldViewError, ok := err.(*view.OldViewError); ok {
-			log.Println("View updated during basic write quorum")
+			log.Println("View updated during basic write quorum of Read op (2nd phase)")
 			updateCurrentView(oldViewError.NewView)
 			return Read()
 		} else {
@@ -200,15 +196,11 @@ func basicReadQuorum(view *view.View) (RegisterMsg, error) {
 			log.Println("+1 error on read:", err)
 			failedTotal++
 
-			// view.F() needs an updated View, and we know we have an updated view when len(resultArray) > 0
-			if len(resultArray) > 0 {
-				if failedTotal > view.F() {
-					return RegisterMsg{}, errors.New("Failed to get read quorun")
-				}
-			} else {
-				if failedTotal == view.N() {
-					return RegisterMsg{}, errors.New("Failed to get read quorun")
-				}
+			allFailed := failedTotal == view.N()
+			mostFailed := failedTotal > view.F()
+
+			if mostFailed || allFailed {
+				return RegisterMsg{}, errors.New("Failed to get read quorun")
 			}
 		}
 	}
