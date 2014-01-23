@@ -262,8 +262,12 @@ func (v *View) QuorumSize() int {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	n := len(v.Members) + 1
-	return n/2 + n%2
+	return v.quorumSize()
+}
+
+func (v *View) quorumSize() int {
+	membersTotal := len(v.Members)
+	return (membersTotal+1)/2 + (membersTotal+1)%2
 }
 
 func (v *View) N() int {
@@ -277,9 +281,8 @@ func (v *View) F() int {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	n := len(v.Members) + 1
-	// N() - QuorumSize()
-	return (n - 1) - (n/2 + n%2)
+	membersTotal := len(v.Members)
+	return membersTotal - v.quorumSize()
 }
 
 // ----- ERRORS -----
