@@ -10,9 +10,6 @@ import (
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-// --------- External State ---------
-
-// --------- Internal State ---------
 var register Value
 
 //  ---------- Interface -------------
@@ -37,12 +34,6 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 		register.Timestamp = value.Timestamp
 	}
 
-	return nil
-}
-
-func (r *ClientRequest) GetCurrentView(value int, reply *view.View) error {
-	*reply = currentView
-	log.Println("Done GetCurrentView request")
 	return nil
 }
 
