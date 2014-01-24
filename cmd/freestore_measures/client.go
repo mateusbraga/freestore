@@ -128,7 +128,7 @@ func saveResults(latenciesMean int64, latenciesStandardDeviation int64, opsPerSe
 	w := bufio.NewWriter(file)
 	defer w.Flush()
 
-	if _, err = w.Write([]byte(fmt.Sprintf("%v %v %v %v %v %v\n", latenciesMean, latenciesStandardDeviation, opsPerSecond, opsTotal, operation, time.Now().Format(time.RFC3339)))); err != nil {
+	if _, err = w.Write([]byte(fmt.Sprintf("%v %v %v %v %v %v %v\n", latenciesMean, latenciesStandardDeviation, opsPerSecond, opsTotal, operation, *size, time.Now().Format(time.RFC3339)))); err != nil {
 		log.Fatalln(err)
 	}
 }
