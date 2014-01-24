@@ -130,6 +130,9 @@ func Read() (interface{}, error) {
 			return Read()
 		} else if err == diffResultsErr {
 			log.Println("Found divergence: Going to 2nd phase of read protocol")
+
+			readMsg.View = immutableCurrentView
+
 			return read2ndPhase(immutableCurrentView, readMsg)
 		} else {
 			return 0, err
