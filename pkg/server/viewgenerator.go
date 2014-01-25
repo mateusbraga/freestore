@@ -21,12 +21,10 @@ var (
 
 type viewGeneratorInstance struct {
 	AssociatedView *view.View //Id
-	jobChan        chan ViewGeneratorJob
+	jobChan        chan interface{}
 }
 
-type ViewGeneratorJob interface{}
-
-func getViewGenerator(associatedView *view.View, initialSeq []*view.View) viewGeneratorInstance {
+func getViewGenerator(associatedView *view.View, initialSeq ViewSeq) viewGeneratorInstance {
 	viewGeneratorsMu.Lock()
 	defer viewGeneratorsMu.Unlock()
 
@@ -38,139 +36,128 @@ func getViewGenerator(associatedView *view.View, initialSeq []*view.View) viewGe
 
 	vgi := viewGeneratorInstance{}
 	vgi.AssociatedView = associatedView.NewCopy()
-	vgi.jobChan = make(chan ViewGeneratorJob, CHANNEL_DEFAULT_SIZE)
-	go ViewGeneratorWorker(vgi, initialSeq)
-
+	vgi.jobChan = make(chan interface{}, CHANNEL_DEFAULT_SIZE)
 	viewGenerators = append(viewGenerators, vgi)
-	log.Println("Created vgi", vgi)
+
+	go viewGeneratorWorker(vgi, initialSeq)
+
 	return vgi
 }
 
-func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []*view.View) {
+func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
+	log.Printf("Starting new viewGeneratorWorker with initialSeq: %v\n", initialSeq)
+
 	associatedView := vgi.AssociatedView
 	jobChan := vgi.jobChan
 
-	var proposedSeq []*view.View
-	var lastConvergedSeq []*view.View
+	var lastProposedSeq ViewSeq
+	var lastConvergedSeq ViewSeq
 	var viewSeqQuorumCounter viewSeqQuorumCounterType
 	var seqConvQuorumCounter seqConvQuorumCounterType
 
-	if seq != nil {
-		proposedSeq = seq
-		log.Println("proposedSeq is:", seq)
-
-		// Send viewSeq to all
-		viewSeq := ViewSeqMsg{}
-		viewSeq.ProposedSeq = proposedSeq
-		viewSeq.LastConvergedSeq = nil
-		viewSeq.AssociatedView = associatedView
+	if len(initialSeq) != 0 {
+		// Send viewSeqMsg to all
+		viewSeqMsg := ViewSeqMsg{}
+		viewSeqMsg.ProposedSeq = initialSeq
+		viewSeqMsg.LastConvergedSeq = nil
+		viewSeqMsg.AssociatedView = associatedView
 		for _, process := range associatedView.GetMembers() {
-			go sendViewSequence(process, viewSeq)
+			go sendViewSequence(process, viewSeqMsg)
 		}
+
+		lastProposedSeq = initialSeq
 	}
 
 	for {
 		job := <-jobChan
 		switch jobPointer := job.(type) {
-		case *ViewSeq:
-			log.Println("new ViewSeq")
-			log.Println(jobPointer)
-			var addToProposedSeq []*view.View
+		case ViewSeqMsg:
+			receivedViewSeqMsg := jobPointer
+			log.Println("new ViewSeqMsg:", receivedViewSeqMsg)
+
+			var newProposeSeq ViewSeq
 
 			hasChanges := false
-			if proposedSeq == nil {
-				proposedSeq = jobPointer.ProposedSeq
+			hasConflict := false
+
+		OuterLoop:
+			for _, v := range receivedViewSeqMsg.ProposedSeq {
+				if lastProposedSeq.HasView(v) {
+					continue
+				}
+
+				log.Printf("New view received: %v\n", v)
 				hasChanges = true
-			} else {
-				for _, v := range jobPointer.ProposedSeq {
-					found := false
-					for _, v2 := range proposedSeq {
-						if v.Equal(v2) {
-							found = true
-							break
-						}
-					}
-					if !found { // v is a new view
-						hasChanges = true
-						log.Println("New view received:", v)
 
-						hasConflict := true
-						for _, v2 := range proposedSeq {
-							if v.LessUpdatedThan(v2) || v2.LessUpdatedThan(v) {
-								hasConflict = false
-								break
-							}
-						}
-
-						if hasConflict {
-							log.Println("Has conflict!")
-							jobPointerMostUpdatedView := findMostUpdatedView(jobPointer.LastConvergedSeq)
-							thisProcessMostUpdatedView := findMostUpdatedView(lastConvergedSeq)
-							if thisProcessMostUpdatedView.LessUpdatedThan(jobPointerMostUpdatedView) {
-								lastConvergedSeq = jobPointer.LastConvergedSeq
-							}
-
-							oldMostUpdated := findMostUpdatedView(proposedSeq)
-							receivedMostUpdated := findMostUpdatedView(jobPointer.ProposedSeq)
-
-							auxView := oldMostUpdated.NewCopy()
-							auxView.Merge(receivedMostUpdated)
-
-							proposedSeq = append(lastConvergedSeq, auxView)
-							break
-						} else {
-							log.Println("Added to proposedSeq")
-							addToProposedSeq = append(addToProposedSeq, v)
-						}
+				// check if v conflicts with any view from lastProposedSeq
+				for _, v2 := range lastProposedSeq {
+					if !v.LessUpdatedThan(v2) && !v2.LessUpdatedThan(v) {
+						log.Printf("Has conflict between %v and %v!\n", v, v2)
+						hasConflict = true
+						break OuterLoop
 					}
 				}
 			}
 
 			if hasChanges {
-				for _, v := range addToProposedSeq {
-					proposedSeq = append(proposedSeq, v)
+				if hasConflict {
+					// set lastConvergedSeq to the one with the most updated view
+					receivedLastConvergedSeqMostUpdatedView := receivedViewSeqMsg.LastConvergedSeq.GetMostUpdatedView()
+					thisProcessLastConvergedSeqMostUpdatedView := lastConvergedSeq.GetMostUpdatedView()
+					if thisProcessLastConvergedSeqMostUpdatedView.LessUpdatedThan(receivedLastConvergedSeqMostUpdatedView) {
+						lastConvergedSeq = receivedViewSeqMsg.LastConvergedSeq
+					}
+
+					oldMostUpdated := lastProposedSeq.GetMostUpdatedView()
+					receivedMostUpdated := receivedViewSeqMsg.ProposedSeq.GetMostUpdatedView()
+
+					auxView := oldMostUpdated.NewCopy()
+					auxView.Merge(receivedMostUpdated)
+
+					newProposeSeq = append(lastConvergedSeq, auxView)
+					break
+				} else {
+					newProposeSeq = append(lastProposedSeq, receivedViewSeqMsg.ProposedSeq...)
 				}
 
-				log.Println("done merge")
-
-				viewSeqAux := ViewSeqMsg{}
-				viewSeqAux.AssociatedView = associatedView
-				viewSeqAux.ProposedSeq = proposedSeq
-				viewSeqAux.LastConvergedSeq = lastConvergedSeq
+				viewSeqMsg := ViewSeqMsg{}
+				viewSeqMsg.AssociatedView = associatedView
+				viewSeqMsg.ProposedSeq = newProposeSeq
+				viewSeqMsg.LastConvergedSeq = lastConvergedSeq
 
 				// Send seq-view to all
 				for _, process := range associatedView.GetMembers() {
-					go sendViewSequence(process, viewSeqAux)
+					go sendViewSequence(process, viewSeqMsg)
 				}
+
+				lastProposedSeq = newProposeSeq
 			}
 
 			// Quorum check
-			if viewSeqQuorumCounter.count(jobPointer, associatedView.QuorumSize()) {
-				lastConvergedSeq = jobPointer.ProposedSeq
+			if viewSeqQuorumCounter.count(&receivedViewSeqMsg, associatedView.QuorumSize()) {
+				newConvergedSeq := receivedViewSeqMsg.ProposedSeq
 
-				seqConv := SeqConvMsg{}
-				seqConv.AssociatedView = associatedView
-				seqConv.Seq = jobPointer.ProposedSeq
+				log.Printf("New Converged Seq: %v\n", newConvergedSeq)
+				lastConvergedSeq = newConvergedSeq
 
-				log.Println("Got seqConv quorum!")
-				log.Println(seqConv)
+				seqConvMsg := SeqConvMsg{}
+				seqConvMsg.AssociatedView = associatedView
+				seqConvMsg.Seq = newConvergedSeq
+
 				// Send seq-conv to all
 				for _, process := range associatedView.GetMembers() {
-					go sendViewSequenceConv(process, seqConv)
+					go sendViewSequenceConv(process, seqConvMsg)
 				}
 			}
 
 		case *SeqConv:
-			log.Println("new SeqConv")
-			log.Println(jobPointer)
+			receivedSeqConvMsg := jobPointer
+			log.Println("new SeqConvMsg:", receivedSeqConvMsg)
 
 			// Quorum check
-			if seqConvQuorumCounter.count(jobPointer, associatedView.QuorumSize()) {
-				viewSeqProcessingChan <- newViewSeq{jobPointer.Seq, associatedView}
+			if seqConvQuorumCounter.count(receivedSeqConvMsg, associatedView.QuorumSize()) {
+				generatedViewSeqChan <- generatedViewSeq{ViewSeq: receivedSeqConvMsg.Seq, AssociatedView: associatedView}
 			}
-
-		//case StopWorker:
-		//return
 		default:
 			log.Fatalln("Something is wrong with the switch statement")
 		}
@@ -178,57 +165,58 @@ func ViewGeneratorWorker(vgi viewGeneratorInstance, seq []*view.View) {
 	}
 }
 
-func assertOnlyUpdatedViews(view *view.View, seq []*view.View) {
-	for _, view := range seq {
-		if view.LessUpdatedThan(view) {
-			log.Fatalf("BUG! Found an old view in view sequence: %v. view: %v\n", seq, view)
+// assertOnlyUpdatedViews exits the program if any view from seq is less updated than view.
+func assertOnlyUpdatedViews(baseView *view.View, seq ViewSeq) {
+	for _, loopView := range seq {
+		if loopView.LessUpdatedThan(baseView) {
+			log.Fatalf("BUG! Found an old view in view sequence %v: %v\n", seq, loopView)
 		}
 	}
 }
 
 // we can change seq
-func generateViewSequenceWithoutConsensus(associatedView *view.View, seq []*view.View) {
-	log.Println("start generateViewSequenceWithoutConsensus")
+func generateViewSequenceWithoutConsensus(associatedView *view.View, seq ViewSeq) {
+	log.Println("Running generateViewSequenceWithoutConsensus")
 	assertOnlyUpdatedViews(associatedView, seq)
 
 	_ = getViewGenerator(associatedView, seq)
 }
 
-func generateViewSequenceWithConsensus(associatedView *view.View, seq []*view.View) {
+func generateViewSequenceWithConsensus(associatedView *view.View, seq ViewSeq) {
 	log.Println("start generateViewSequenceWithConsensus")
 	assertOnlyUpdatedViews(associatedView, seq)
 
 	consensusInstance := getConsensus(associatedView.NumberOfEntries())
 	if associatedView.GetProcessPosition(thisProcess) == LEADER_PROCESS_POSITION {
 		log.Println("CONSENSUS: leader")
-		Propose(consensusInstance, seq)
+		Propose(consensusInstance, &seq)
 	}
 	log.Println("CONSENSUS: wait learn message")
 	value := <-consensusInstance.callbackLearnChan
 
-	result, ok := value.(*[]*view.View)
+	result, ok := value.(*ViewSeq)
 	if !ok {
 		log.Fatalf("FATAL: consensus on generateViewSequenceWithConsensus got %T %v\n", value, value)
 	}
-	viewSeqProcessingChan <- newViewSeq{*result, associatedView}
+	generatedViewSeqChan <- generatedViewSeq{*result, associatedView}
 	log.Println("end generateViewSequenceWithConsensus")
 }
 
 type viewSeqQuorumCounterType struct {
-	list    []*ViewSeq
+	list    []*ViewSeqMsg
 	counter []int
 }
 
-func (quorumCounter *viewSeqQuorumCounterType) count(newViewSeq *ViewSeq, quorumSize int) bool {
+func (quorumCounter *viewSeqQuorumCounterType) count(newViewSeqMsg *ViewSeqMsg, quorumSize int) bool {
 	for i, _ := range quorumCounter.list {
-		if quorumCounter.list[i].Equal(*newViewSeq) {
+		if quorumCounter.list[i].Equal(*newViewSeqMsg) {
 			quorumCounter.counter[i]++
 
 			return quorumCounter.counter[i] == quorumSize
 		}
 	}
 
-	quorumCounter.list = append(quorumCounter.list, newViewSeq)
+	quorumCounter.list = append(quorumCounter.list, newViewSeqMsg)
 	quorumCounter.counter = append(quorumCounter.counter, 1)
 
 	return (1 == quorumSize)
@@ -254,24 +242,9 @@ func (quorumCounter *seqConvQuorumCounterType) count(newSeqConv *SeqConv, quorum
 	return (1 == quorumSize)
 }
 
-func findMostUpdatedView(seq []*view.View) *view.View {
-	if len(seq) == 0 {
-		log.Panicln("ERROR: Got empty seq on findLeastUpdatedView")
-	}
-
-	mostUpdatedView := seq[0]
-	for _, v := range seq[1:] {
-		if mostUpdatedView.LessUpdatedThan(v) {
-			mostUpdatedView.Set(v)
-		}
-	}
-
-	return mostUpdatedView
-}
-
 // -------- REQUESTS -----------
 type SeqConv struct {
-	Seq []*view.View
+	Seq ViewSeq
 }
 
 type SeqConvMsg struct {
@@ -291,34 +264,33 @@ func (seqConv SeqConv) Equal(seqConv2 SeqConv) bool {
 	return true
 }
 
-type ViewSeq struct {
-	ProposedSeq      []*view.View
-	LastConvergedSeq []*view.View
-}
-
 type ViewSeqMsg struct {
-	AssociatedView *view.View
-	ViewSeq
+	AssociatedView   *view.View
+	ProposedSeq      ViewSeq
+	LastConvergedSeq ViewSeq
 }
 
-func (viewSeq ViewSeq) Equal(viewSeq2 ViewSeq) bool {
-	if len(viewSeq.ProposedSeq) != len(viewSeq2.ProposedSeq) {
+func (thisViewSeqMsg ViewSeqMsg) Equal(otherViewSeqMsg ViewSeqMsg) bool {
+	if !thisViewSeqMsg.AssociatedView.Equal(otherViewSeqMsg.AssociatedView) {
 		return false
 	}
 
-	for i, _ := range viewSeq.ProposedSeq {
-		if !viewSeq.ProposedSeq[i].Equal(viewSeq2.ProposedSeq[i]) {
-			return false
-		}
+	if !thisViewSeqMsg.ProposedSeq.Equal(otherViewSeqMsg.ProposedSeq) {
+		return false
 	}
+
+	if !thisViewSeqMsg.LastConvergedSeq.Equal(otherViewSeqMsg.LastConvergedSeq) {
+		return false
+	}
+
 	return true
 }
 
 type ViewGeneratorRequest int
 
-func (r *ViewGeneratorRequest) ViewSeq(arg ViewSeqMsg, reply *error) error {
+func (r *ViewGeneratorRequest) ProposeSeqView(arg ViewSeqMsg, reply *error) error {
 	vgi := getViewGenerator(arg.AssociatedView, nil)
-	vgi.jobChan <- &arg.ViewSeq
+	vgi.jobChan <- arg
 
 	return nil
 }
@@ -337,7 +309,7 @@ func init() {
 // -------- Send functions -----------
 func sendViewSequence(process view.Process, viewSeq ViewSeqMsg) {
 	var reply error
-	err := comm.SendRPCRequest(process, "ViewGeneratorRequest.ViewSeq", viewSeq, &reply)
+	err := comm.SendRPCRequest(process, "ViewGeneratorRequest.ProposeSeqView", viewSeq, &reply)
 	if err != nil {
 		log.Println("WARN sendViewSequence:", err)
 		return

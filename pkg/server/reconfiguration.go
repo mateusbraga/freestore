@@ -14,76 +14,62 @@ import (
 )
 
 const (
-	CHANNEL_DEFAULT_SIZE int = 20
+	CHANNEL_DEFAULT_SIZE              int = 20
+	reconfigurationPeriod                 = 1 * time.Minute
+	firstReconfigurationTimerDuration     = 10 * time.Second
 )
 
 var (
 	recv      = make(map[view.Update]bool)
 	recvMutex sync.RWMutex
 
-	viewSeqProcessingChan = make(chan newViewSeq)
-	installSeqProcessingChan = make(chan InstallSeqMsg, CHANNEL_DEFAULT_SIZE)
-	stateUpdateProcessingChan = make(chan StateUpdateMsg, CHANNEL_DEFAULT_SIZE)
-	callbackChanStateUpdateRequestChan = make(chan getCallbackStateUpdateRequest, CHANNEL_DEFAULT_SIZE)
-	newViewInstalledChan = make(chan ViewInstalledMsg, CHANNEL_DEFAULT_SIZE)
+	generatedViewSeqChan       = make(chan generatedViewSeq)
+	installSeqProcessingChan   = make(chan InstallSeqMsg, CHANNEL_DEFAULT_SIZE)
+	stateUpdateProcessingChan  = make(chan StateUpdateMsg, CHANNEL_DEFAULT_SIZE)
+	stateUpdateChanRequestChan = make(chan stateUpdateChanRequest, CHANNEL_DEFAULT_SIZE)
+	newViewInstalledChan       = make(chan ViewInstalledMsg, CHANNEL_DEFAULT_SIZE)
 
-	resetTimer = make(chan bool, 5)
+	resetReconfigurationTimer = make(chan bool, 5)
 )
 
 // ---------- Bootstrapping ------------
 func init() {
-	go viewSeqProcessingLoop()
+	go generatedViewSeqProcessingLoop()
 	go installSeqProcessingLoop()
 	go stateUpdateProcessingLoop()
 	go resetTimerLoop()
 }
 
 func resetTimerLoop() {
-	timer := time.AfterFunc(10*time.Second, initReconfiguration)
+	timer := time.AfterFunc(firstReconfigurationTimerDuration, startReconfiguration)
 	for {
-		<-resetTimer
-		timer.Reset(1 * time.Minute)
+		<-resetReconfigurationTimer
+		timer.Reset(reconfigurationPeriod)
 	}
 }
 
 // ---------- Others ------------
-type newViewSeq struct {
-	ViewSeq        []*view.View
+type generatedViewSeq struct {
+	ViewSeq        ViewSeq
 	AssociatedView *view.View
 }
 
-func findLeastUpdatedView(seq []*view.View) *view.View {
-	if len(seq) == 0 {
-		log.Panicln("ERROR: Got empty seq on findLeastUpdatedView")
-	}
-
-	leastUpdatedView := seq[0]
-	for _, v := range seq[1:] {
-		if v.LessUpdatedThan(leastUpdatedView) {
-			leastUpdatedView.Set(v)
-		}
-	}
-
-	return leastUpdatedView
-}
-
-func viewSeqProcessingLoop() {
+func generatedViewSeqProcessingLoop() {
 	for {
-		seq := <-viewSeqProcessingChan
-		log.Println("New view sequence is:", seq)
+		newGeneratedViewSeq := <-generatedViewSeqChan
+		log.Println("New generated view sequence:", newGeneratedViewSeq)
 
-		leastUpdatedView := findLeastUpdatedView(seq.ViewSeq)
+		leastUpdatedView := newGeneratedViewSeq.ViewSeq.GetLeastUpdatedView()
 
-		// create installSeq to send
-		installSeq := InstallSeqMsg{}
-		installSeq.AssociatedView = seq.AssociatedView
-		installSeq.InstallView = leastUpdatedView
-		installSeq.ViewSeq = seq.ViewSeq
-		installSeq.Sender = &thisProcess
+		installSeqMsg := InstallSeqMsg{}
+		installSeqMsg.AssociatedView = newGeneratedViewSeq.AssociatedView
+		installSeqMsg.InstallView = leastUpdatedView
+		installSeqMsg.ViewSeq = newGeneratedViewSeq.ViewSeq
+		installSeqMsg.Sender = thisProcess
 
 		// Send install-seq to all from old and new view
-		for _, process := range seq.AssociatedView.GetMembersAlsoIn(leastUpdatedView) {
-			go sendInstallSeq(process, installSeq)
+		for _, process := range newGeneratedViewSeq.AssociatedView.GetMembersAlsoIn(leastUpdatedView) {
+			go sendInstallSeq(process, installSeqMsg)
 		}
 	}
 }
@@ -110,15 +96,15 @@ func (quorumCounter *installSeqQuorumCounterType) count(newInstallSeq *InstallSe
 
 func installSeqProcessingLoop() {
 	processToInstallSeqMsgMap := make(map[view.Process]*InstallSeqMsg)
-	//IMPROV: clean up quorum counter old views
+	// ENHANCEMENT: clean up quorum counter old views
 	var installSeqQuorumCounter installSeqQuorumCounterType
 
 	for {
 		installSeqMsg := <-installSeqProcessingChan
 
 		// Check for duplicate
-		previousInstallSeq, ok := processToInstallSeqMsgMap[*installSeqMsg.Sender]
-		processToInstallSeqMsgMap[*installSeqMsg.Sender] = &installSeqMsg
+		previousInstallSeq, ok := processToInstallSeqMsgMap[installSeqMsg.Sender]
+		processToInstallSeqMsgMap[installSeqMsg.Sender] = &installSeqMsg
 		if ok && previousInstallSeq.Equal(installSeqMsg) {
 			// It's a duplicate
 			continue
@@ -137,125 +123,147 @@ func installSeqProcessingLoop() {
 }
 
 func gotInstallSeqQuorum(installSeq InstallSeq) {
-	log.Println("start gotInstallSeqQuorum")
+	log.Println("Running gotInstallSeqQuorum")
 
 	startTime := time.Now()
 
 	cvIsLessUpdatedThanInstallView := currentView.LessUpdatedThan(installSeq.InstallView)
 
-	if cvIsLessUpdatedThanInstallView && installSeq.AssociatedView.HasMember(thisProcess) {
-		// disable r/w
-		register.mu.Lock()
-		log.Println("R/W operations disabled")
-	}
+	// don't matter if installView is old, send state if server was a member of the associated view
+	if installSeq.AssociatedView.HasMember(thisProcess) {
+		// if installView is not old, disable r/w
+		if cvIsLessUpdatedThanInstallView {
+			register.mu.Lock()
+			log.Println("R/W operations disabled")
+		}
 
-	if installSeq.AssociatedView.HasMember(thisProcess) { // If the thisProcess was on the old view
-
-		state := StateUpdateMsg{}
-		state.Value = register.Value
-		state.Timestamp = register.Timestamp
+		stateMsg := StateUpdateMsg{}
+		stateMsg.Value = register.Value
+		stateMsg.Timestamp = register.Timestamp
 		recvMutex.RLock()
-		state.Recv = make(map[view.Update]bool)
+		stateMsg.Recv = make(map[view.Update]bool)
 		for update, _ := range recv {
-			state.Recv[update] = true
+			stateMsg.Recv[update] = true
 		}
 		recvMutex.RUnlock()
-		state.AssociatedView = installSeq.AssociatedView
+		stateMsg.AssociatedView = installSeq.AssociatedView
 
 		// Send state-update request to all
 		for _, process := range installSeq.InstallView.GetMembers() {
-			go sendStateUpdate(process, state)
+			go sendStateUpdate(process, stateMsg)
 		}
 
 		log.Println("State sent!")
 	}
 
-	if cvIsLessUpdatedThanInstallView {
-		if installSeq.InstallView.HasMember(thisProcess) { // If thisProcess is on the new view
-			syncState(installSeq.InstallView)
+	// stop here if installView is old
+	if !cvIsLessUpdatedThanInstallView {
+		return
+	}
 
-			currentView.Set(installSeq.InstallView)
-			log.Println("New view installed:", currentView)
+	if installSeq.InstallView.HasMember(thisProcess) {
+		// Process is on the new view
+		syncState(installSeq)
 
-			viewInstalled := ViewInstalledMsg{}
-			viewInstalled.CurrentView = currentView
+		currentView.Set(installSeq.InstallView)
+		log.Println("New view installed:", currentView)
 
-			// Send view-installed to all
-			for _, process := range installSeq.AssociatedView.GetMembersNotIn(currentView) {
-				go sendViewInstalled(process, viewInstalled)
+		viewInstalledMsg := ViewInstalledMsg{}
+		viewInstalledMsg.CurrentView = currentView
+
+		// Send view-installed to all
+		for _, process := range installSeq.AssociatedView.GetMembersNotIn(currentView) {
+			go sendViewInstalled(process, viewInstalledMsg)
+		}
+
+		var newSeq ViewSeq
+		cvIsMostUpdated := true
+		for _, v := range installSeq.ViewSeq {
+			if currentView.LessUpdatedThan(v) {
+				newSeq = append(newSeq, v)
+
+				cvIsMostUpdated = false
 			}
+		}
 
-			var newSeq []*view.View
-			cvIsMostUpdated := true
-			for _, v := range installSeq.ViewSeq {
-				if currentView.LessUpdatedThan(v) {
-					newSeq = append(newSeq, v)
+		if cvIsMostUpdated {
+			register.mu.Unlock()
+			log.Println("R/W operations enabled")
 
-					cvIsMostUpdated = false
-				}
-			}
+			endTime := time.Now()
+			log.Printf("Reconfiguration completed, the system was unavailable for %v.\n", endTime.Sub(startTime))
 
-			if cvIsMostUpdated {
-				register.mu.Unlock()
-				log.Println("R/W operations enabled")
+			resetReconfigurationTimer <- true
+		} else {
+			currentViewCopy := currentView.NewCopy()
 
-				endTime := time.Now()
-				log.Printf("Reconfiguration COMPLETED, took %v.\n", endTime.Sub(startTime))
-
-				resetTimer <- true
+			log.Println("Generate next view sequence with:", newSeq)
+			if useConsensus {
+				go generateViewSequenceWithConsensus(currentViewCopy, newSeq)
 			} else {
-				currentViewCopy := currentView.NewCopy()
+				go generateViewSequenceWithoutConsensus(currentViewCopy, newSeq)
+			}
+		}
+	} else {
+		// thisProcess is NOT on the new view
+		var counter int
 
-				log.Println("Generate next view sequence with:", newSeq)
-				if useConsensus {
-					go generateViewSequenceWithConsensus(currentViewCopy, newSeq)
-				} else {
-					go generateViewSequenceWithoutConsensus(currentViewCopy, newSeq)
+		log.Println("Waiting for view-installed quorum")
+		for {
+			viewInstalled := <-newViewInstalledChan
+
+			if installSeq.InstallView.Equal(viewInstalled.CurrentView) {
+				counter++
+				if counter == installSeq.InstallView.QuorumSize() {
+					break
 				}
 			}
-		} else { // If thisProcess is NOT on the new view
-			var counter int
+		}
 
-			log.Println("Wait for view-installed quorum")
-			for {
-				viewInstalled := <-newViewInstalledChan
-
-				if installSeq.InstallView.Equal(viewInstalled.CurrentView) {
-					counter++
-					if counter == installSeq.InstallView.QuorumSize() {
-						break
-					}
-				}
-			}
-
-			log.Println("Terminating...")
-			err := listener.Close()
-			if err != nil {
-				log.Panic(err)
-			}
+		log.Println("Terminating...")
+		err := listener.Close()
+		if err != nil {
+			log.Panic(err)
 		}
 	}
 }
 
 // --------------------- State Update -----------------------
 
-type stateUpdateQuorumType struct {
-	associatedView *view.View
-	finalValue     *Value
-	recv           map[view.Update]bool
-
-	counter int
-
-	callbackChan chan *stateUpdateQuorumType
+type State struct {
+	finalValue *Value
+	recv       map[view.Update]bool
 }
 
-type getCallbackStateUpdateRequest struct {
+type stateUpdateQuorumType struct {
 	associatedView *view.View
-	returnChan     chan chan *stateUpdateQuorumType
+
+	State
+	counter int
+
+	resultChan chan State
+}
+
+type stateUpdateChanRequest struct {
+	associatedView *view.View
+	returnChan     chan chan State
+}
+
+func getStateUpdateQuorumCounter(stateUpdateQuorumCounterList *list.List, associatedView *view.View) (*stateUpdateQuorumType, bool) {
+	for quorumCounter := stateUpdateQuorumCounterList.Front(); quorumCounter != nil; quorumCounter = quorumCounter.Next() {
+		stateUpdateQuorum := quorumCounter.Value.(*stateUpdateQuorumType)
+		if !stateUpdateQuorum.associatedView.Equal(associatedView) {
+			continue
+		}
+
+		return stateUpdateQuorum, true
+	}
+
+	return nil, false
 }
 
 func stateUpdateProcessingLoop() {
-	//IMPROV: clean up quorum counter old views
+	// ENHANCEMENT: clean up quorum counter old views
 	stateUpdateQuorumCounterList := list.New()
 
 	for {
@@ -268,134 +276,93 @@ func stateUpdateProcessingLoop() {
 
 			log.Println("processing stateUpdate:", stateUpdate)
 
-			quorumSize := stateUpdate.AssociatedView.QuorumSize()
-			found := false
-			// Quorum check
-			for quorumCounter := stateUpdateQuorumCounterList.Front(); quorumCounter != nil; quorumCounter = quorumCounter.Next() {
-				stateUpdateQuorum := quorumCounter.Value.(*stateUpdateQuorumType)
-
-				if stateUpdateQuorum.associatedView.Equal(stateUpdate.AssociatedView) {
-					stateUpdateQuorum.counter++
-
-					if stateUpdateQuorum.counter > quorumSize {
-						//Ignore after quorum
-						found = true
-						break
-					}
-
-					for update, _ := range stateUpdate.Recv {
-						stateUpdateQuorum.recv[update] = true
-					}
-
-					if stateUpdateQuorum.finalValue.Timestamp < stateUpdate.Timestamp {
-						stateUpdateQuorum.finalValue.Value = stateUpdate.Value
-						stateUpdateQuorum.finalValue.Timestamp = stateUpdate.Timestamp
-					}
-
-					if stateUpdateQuorum.counter == quorumSize {
-						// send stateUpdateQuorum through its channel
-						go func(stateUpdate *stateUpdateQuorumType) {
-							stateUpdate.callbackChan <- stateUpdate
-							close(stateUpdate.callbackChan)
-						}(stateUpdateQuorum)
-					}
-					found = true
-					break
-				}
-			}
-			if found {
-				continue
+			stateUpdateQuorum, ok := getStateUpdateQuorumCounter(stateUpdateQuorumCounterList, stateUpdate.AssociatedView)
+			if !ok {
+				stateUpdateQuorum = &stateUpdateQuorumType{associatedView: stateUpdate.AssociatedView, State: State{&Value{Timestamp: -1}, make(map[view.Update]bool)}, counter: 0, resultChan: make(chan State, 1)}
+				stateUpdateQuorumCounterList.PushBack(stateUpdateQuorum)
 			}
 
-			newCallbackChan := make(chan *stateUpdateQuorumType)
-			newStateUpdateQuorum := stateUpdateQuorumType{stateUpdate.AssociatedView, &Value{Value: stateUpdate.Value, Timestamp: stateUpdate.Timestamp}, make(map[view.Update]bool), 1, newCallbackChan}
+			stateUpdateQuorum.counter++
 
-			if quorumSize == 1 {
-				go func(stateUpdate *stateUpdateQuorumType) { stateUpdate.callbackChan <- stateUpdate }(&newStateUpdateQuorum)
-			} else {
-				stateUpdateQuorumCounterList.PushBack(&newStateUpdateQuorum)
-			}
-		case callbackRequest := <-callbackChanStateUpdateRequestChan:
-			found := false
-			for quorumCounter := stateUpdateQuorumCounterList.Front(); quorumCounter != nil; quorumCounter = quorumCounter.Next() {
-				stateUpdateQuorum := quorumCounter.Value.(*stateUpdateQuorumType)
-
-				if stateUpdateQuorum.associatedView.Equal(callbackRequest.associatedView) {
-					callbackRequest.returnChan <- stateUpdateQuorum.callbackChan
-
-					found = true
-					break
-				}
-			}
-			if found {
-				continue
+			// merge recv
+			for update, _ := range stateUpdate.Recv {
+				stateUpdateQuorum.recv[update] = true
 			}
 
-			newCallbackChan := make(chan *stateUpdateQuorumType)
-			newStateUpdateQuorum := stateUpdateQuorumType{callbackRequest.associatedView, &Value{Timestamp: -1}, make(map[view.Update]bool), 0, newCallbackChan}
-			stateUpdateQuorumCounterList.PushBack(&newStateUpdateQuorum)
-			callbackRequest.returnChan <- newStateUpdateQuorum.callbackChan
+			// update register value if necessary
+			if stateUpdateQuorum.finalValue.Timestamp < stateUpdate.Timestamp {
+				stateUpdateQuorum.finalValue.Value = stateUpdate.Value
+				stateUpdateQuorum.finalValue.Timestamp = stateUpdate.Timestamp
+			}
+
+			if stateUpdateQuorum.counter == stateUpdate.AssociatedView.QuorumSize() {
+				stateUpdateQuorum.resultChan <- stateUpdateQuorum.State
+			}
+		case chanRequest := <-stateUpdateChanRequestChan:
+			stateUpdateQuorum, ok := getStateUpdateQuorumCounter(stateUpdateQuorumCounterList, chanRequest.associatedView)
+			if !ok {
+				stateUpdateQuorum = &stateUpdateQuorumType{associatedView: chanRequest.associatedView, State: State{&Value{Timestamp: -1}, make(map[view.Update]bool)}, counter: 0, resultChan: make(chan State, 1)}
+				stateUpdateQuorumCounterList.PushBack(stateUpdateQuorum)
+			}
+
+			chanRequest.returnChan <- stateUpdateQuorum.resultChan
 		}
 	}
 }
 
-func syncState(installView *view.View) {
-	log.Println("start syncState")
+func syncState(installSeq InstallSeq) {
+	log.Println("Running syncState")
 
-	var callbackRequest getCallbackStateUpdateRequest
-	returnChan := make(chan chan *stateUpdateQuorumType)
-	newView := currentView.NewCopy()
-	callbackRequest.associatedView = newView
-	callbackRequest.returnChan = returnChan
+	chanRequest := stateUpdateChanRequest{associatedView: installSeq.AssociatedView, returnChan: make(chan chan State)}
 
-	// Request the chan that has the quorumState
-	callbackChanStateUpdateRequestChan <- callbackRequest
-	// Receive the chan that has the quorumState
-	quorumStateChan := <-returnChan
-	// Get the quorumState
-	stateUpdateQuorum := <-quorumStateChan
+	// Request the chan in which the state will be sent
+	stateUpdateChanRequestChan <- chanRequest
+	// Receive the chan in which the state will be sent
+	stateChan := <-chanRequest.returnChan
+
+	// get state
+	state := <-stateChan
 
 	recvMutex.Lock()
 	defer recvMutex.Unlock()
 
-	for update, _ := range stateUpdateQuorum.recv {
+	for update, _ := range state.recv {
 		recv[update] = true
 	}
 
-	register.Value = stateUpdateQuorum.finalValue.Value
-	register.Timestamp = stateUpdateQuorum.finalValue.Timestamp
+	register.Value = state.finalValue.Value
+	register.Timestamp = state.finalValue.Timestamp
 
-	for _, update := range installView.GetEntries() {
+	for _, update := range installSeq.InstallView.GetEntries() {
 		delete(recv, update)
 	}
 
-	log.Println("end syncState")
+	log.Println("State synced")
 }
 
-func initReconfiguration() {
+func startReconfiguration() {
 	recvMutex.Lock()
 	defer recvMutex.Unlock()
 
-	if len(recv) != 0 {
-		log.Println("Reconfiguration from currentView:", currentView)
-		var seq []*view.View
-		newView := currentView.NewCopy()
+	if len(recv) == 0 {
+		// No configuration changes, restart reconfiguration timer
+		resetReconfigurationTimer <- true
+		return
+	}
 
-		for update, _ := range recv {
-			newView.AddUpdate(update)
-		}
+	log.Println("Start reconfiguration of currentView:", currentView)
 
-		seq = append(seq, newView)
-		currentViewCopy := currentView.NewCopy()
+	newView := currentView.NewCopy()
+	for update, _ := range recv {
+		newView.AddUpdate(update)
+	}
+	initialViewSeq := ViewSeq{newView}
+	currentViewCopy := currentView.NewCopy()
 
-		if useConsensus {
-			go generateViewSequenceWithConsensus(currentViewCopy, seq)
-		} else {
-			go generateViewSequenceWithoutConsensus(currentViewCopy, seq)
-		}
+	if useConsensus {
+		go generateViewSequenceWithConsensus(currentViewCopy, initialViewSeq)
 	} else {
-		log.Println("Reconfiguration is not necessary! Restart timer.")
-		resetTimer <- true
+		go generateViewSequenceWithoutConsensus(currentViewCopy, initialViewSeq)
 	}
 }
 
@@ -493,7 +460,7 @@ type ReconfigMsg struct {
 
 type InstallSeq struct {
 	InstallView    *view.View
-	ViewSeq        []*view.View
+	ViewSeq        ViewSeq
 	AssociatedView *view.View
 }
 
@@ -518,16 +485,16 @@ func (installSeq InstallSeq) Equal(installSeq2 InstallSeq) bool {
 }
 
 type InstallSeqMsg struct {
-	Sender *view.Process
+	Sender view.Process
 	InstallSeq
 }
 
 func (installSeq InstallSeqMsg) String() string {
-	return fmt.Sprintf("Sender: %v\nInstallView: %v\nAssociatedView: %v\nViewSeq: %v", *(installSeq.Sender), installSeq.InstallView, installSeq.AssociatedView, installSeq.ViewSeq)
+	return fmt.Sprintf("Sender: %v\nInstallView: %v\nAssociatedView: %v\nViewSeq: %v", installSeq.Sender, installSeq.InstallView, installSeq.AssociatedView, installSeq.ViewSeq)
 }
 
 func (installSeqMsg InstallSeqMsg) Equal(installSeqMsg2 InstallSeqMsg) bool {
-	if *(installSeqMsg.Sender) == *(installSeqMsg2.Sender) {
+	if installSeqMsg.Sender == installSeqMsg2.Sender {
 		return installSeqMsg.InstallSeq.Equal(installSeqMsg2.InstallSeq)
 	}
 
@@ -546,18 +513,23 @@ type ViewInstalledMsg struct {
 }
 
 func (r *ReconfigurationRequest) Reconfig(arg ReconfigMsg, reply *error) error {
-	if arg.CurrentView.Equal(currentView) {
-		if !currentView.HasUpdate(arg.Update) {
-			recvMutex.Lock()
-			defer recvMutex.Unlock()
-
-			recv[arg.Update] = true
-			log.Printf("%v added to recv\n", arg.Update)
-		}
-	} else {
+	if !arg.CurrentView.Equal(currentView) {
+		log.Printf("Reconfig request with old view: %v\n", arg.CurrentView)
 		*reply = view.OldViewError{NewView: currentView.NewCopy()}
-		log.Printf("Reconfig with old view: %v.\n", arg.CurrentView)
+		return nil
 	}
+
+	if currentView.HasUpdate(arg.Update) {
+		log.Printf("Reconfig request's Update %v already in currentView\n", arg.Update)
+		return nil
+	}
+
+	recvMutex.Lock()
+	defer recvMutex.Unlock()
+	recv[arg.Update] = true
+
+	log.Printf("%v added to next reconfiguration\n", arg.Update)
+
 	return nil
 }
 

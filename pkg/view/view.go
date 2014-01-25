@@ -307,5 +307,4 @@ func (e WriteOlderError) Error() string {
 func init() {
 	gob.Register(new(OldViewError))
 	gob.Register(new(WriteOlderError))
-	gob.Register(new([]*View))
 }

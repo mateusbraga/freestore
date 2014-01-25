@@ -340,7 +340,8 @@ func acceptProcess(process view.Process, proposal Proposal, resultChan chan Prop
 
 // spreadAcceptance sends acceptance to process.
 func spreadAcceptanceProcess(process view.Process, proposal Proposal) {
-	err := comm.SendRPCRequest(process, "ConsensusRequest.Learn", proposal, Proposal{})
+	var reply int
+	err := comm.SendRPCRequest(process, "ConsensusRequest.Learn", proposal, &reply)
 	if err != nil {
 		log.Println("WARN: spreadAcceptanceProcess:", err)
 		return
@@ -411,7 +412,7 @@ func (r *ConsensusRequest) Accept(arg Proposal, reply *Proposal) error {
 }
 
 // Learn Request
-func (r *ConsensusRequest) Learn(arg Proposal, reply *Proposal) error {
+func (r *ConsensusRequest) Learn(arg Proposal, reply *int) error {
 	log.Println("New Learn Request")
 	ci := getConsensus(arg.ConsensusId)
 
