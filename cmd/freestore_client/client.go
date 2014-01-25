@@ -21,6 +21,8 @@ var (
 )
 
 func main() {
+	flag.Parse()
+
 	var finalValue interface{}
 	var err error
 
@@ -43,6 +45,6 @@ func main() {
 			log.Fatalln(err)
 		}
 
-		fmt.Printf("Read %v (%v)-> Write (%v)\n", finalValue, endRead.Sub(startRead), endWrite.Sub(startWrite))
+		fmt.Printf("%v: Read %v (%v)-> Write (%v)\n", i, finalValue, endRead.Sub(startRead), endWrite.Sub(startWrite))
 	}
 }
