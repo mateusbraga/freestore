@@ -68,8 +68,19 @@ func TestViewGetMembers(t *testing.T) {
 	processes := v1.GetMembers()
 	processes2 := []Process{Process{"2"}, Process{"3"}}
 
-	for i, p := range processes {
-		if p != processes2[i] {
+	if len(processes) != len(processes2) {
+		t.Fatalf("Array of processes should be equal")
+	}
+
+	for _, p := range processes {
+		found := false
+		for _, p2 := range processes2 {
+			if p == p2 {
+				found = true
+				break
+			}
+		}
+		if !found {
 			t.Fatalf("Array of processes should be equal")
 		}
 	}
