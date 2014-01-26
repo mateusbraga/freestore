@@ -28,20 +28,19 @@ type consensusInstance struct {
 
 type consensusTask interface{}
 
-func getConsensus(id int) consensusInstance {
+func getConsensus(consensusId int) consensusInstance {
 	consensusTableMu.Lock()
 	defer consensusTableMu.Unlock()
 
-	if ci, ok := consensusTable[id]; ok {
-		return ci
-	} else {
-		ci := consensusInstance{id: id, taskChan: make(chan consensusTask, CHANNEL_DEFAULT_SIZE), callbackLearnChan: make(chan interface{}, 1)}
-		go consensusWorker(ci)
-
+	ci, ok := consensusTable[consensusId]
+	if !ok {
+		ci = consensusInstance{id: consensusId, taskChan: make(chan consensusTask, CHANNEL_DEFAULT_SIZE), callbackLearnChan: make(chan interface{}, 1)}
 		consensusTable[ci.id] = ci
-		log.Println("Created consensusInstance:", ci)
-		return ci
+		log.Println("Created consensus instance:", ci)
+
+		go consensusWorker(ci)
 	}
+	return ci
 }
 
 func consensusWorker(ci consensusInstance) {
@@ -52,41 +51,49 @@ func consensusWorker(ci consensusInstance) {
 	for {
 		taskInterface, ok := <-ci.taskChan
 		if !ok {
-			log.Printf("consensusInstance %v done\n", ci)
+			log.Printf("consensus instance %v done\n", ci)
 			return
 		}
 
 		switch task := taskInterface.(type) {
 		case *Prepare:
-			log.Println("Processing prepare request")
-			if task.N > lastPromiseProposalNumber {
+			//log.Println("Processing prepare request")
+			receivedPrepareRequest := task
+
+			if receivedPrepareRequest.N > lastPromiseProposalNumber {
 				//setLastPromiseProposalNumber
-				savePrepareRequest(ci.id, task)
-				lastPromiseProposalNumber = task.N
+				savePrepareRequest(ci.id, receivedPrepareRequest)
+				lastPromiseProposalNumber = receivedPrepareRequest.N
 
-				task.reply.N = acceptedProposal.N
-				task.reply.Value = acceptedProposal.Value
+				receivedPrepareRequest.reply.N = acceptedProposal.N
+				receivedPrepareRequest.reply.Value = acceptedProposal.Value
 			} else {
-				task.reply.Err = oldProposalNumberErr
+				receivedPrepareRequest.reply.Err = oldProposalNumberErr
 			}
-			task.returnChan <- true
+
+			receivedPrepareRequest.returnChan <- true
 		case *Accept:
-			log.Println("Processing accept request")
-			if task.N >= lastPromiseProposalNumber {
-				//setAcceptedProposal
-				saveAcceptedProposal(ci.id, task.Proposal)
-				acceptedProposal = *task.Proposal
+			//log.Println("Processing accept request")
+			receivedAcceptRequest := task
 
-				go spreadAcceptance(*task.Proposal)
+			if receivedAcceptRequest.N >= lastPromiseProposalNumber {
+				//setAcceptedProposal
+				saveAcceptedProposal(ci.id, receivedAcceptRequest.Proposal)
+				acceptedProposal = *receivedAcceptRequest.Proposal
+
+				go spreadAcceptance(*receivedAcceptRequest.Proposal)
 			} else {
-				task.reply.Err = oldProposalNumberErr
+				receivedAcceptRequest.reply.Err = oldProposalNumberErr
 			}
-			task.returnChan <- true
+
+			receivedAcceptRequest.returnChan <- true
 		case *Learn:
-			log.Println("Processing learn request")
+			//log.Println("Processing learn request")
+			receivedLearnRequest := task
+
 			learnCounter++
 			if learnCounter == currentView.QuorumSize() {
-				ci.callbackLearnChan <- task.Value
+				ci.callbackLearnChan <- receivedLearnRequest.Value
 			}
 		default:
 			log.Fatalf("BUG in the ConsensusWorker switch, got %T %v\n", task, task)
@@ -96,14 +103,15 @@ func consensusWorker(ci consensusInstance) {
 
 // Propose proposes the value to be agreed upon on this consensus instance. It should be run only by the leader process to guarantee termination.
 func Propose(ci consensusInstance, defaultValue interface{}) {
-	log.Println("Got in propose")
-	proposalNumber := getNextProposalNumber(ci.id)
+	log.Println("Running propose with:", defaultValue)
 
+	proposalNumber := getNextProposalNumber(ci.id)
 	proposal := Proposal{N: proposalNumber, ConsensusId: ci.id}
+
 	value, err := prepare(proposal)
 	if err != nil {
 		// Could not get quorum or old proposal number
-		log.Println("WARN: Failed to propose. Could not pass prepare phase: ", err)
+		log.Println("Failed to propose. Could not pass prepare phase: ", err)
 		return
 	}
 
@@ -114,7 +122,7 @@ func Propose(ci consensusInstance, defaultValue interface{}) {
 	proposal.Value = value
 	if err := accept(proposal); err != nil {
 		// Could not get quorum or old proposal number
-		log.Println("WARN: Failed to propose. Could not pass accept phase: ", err)
+		log.Println("Failed to propose. Could not pass accept phase: ", err)
 		return
 	}
 }
@@ -130,7 +138,7 @@ func prepare(proposal Proposal) (interface{}, error) {
 	}
 
 	// Get quorum
-	var failed int
+	var failedTotal int
 	var success int
 	var highestNumberedAcceptedProposal Proposal
 	for {
@@ -150,10 +158,13 @@ func prepare(proposal Proposal) (interface{}, error) {
 				return highestNumberedAcceptedProposal.Value, nil
 			}
 		case err := <-errChan:
-			log.Println("+1 failure to prepare:", err)
-			failed++
+			log.Println("+1 error to prepare:", err)
+			failedTotal++
 
-			if failed > currentView.F() {
+			allFailed := failedTotal == currentView.N()
+			mostFailedInspiteSomeSuccess := success > 0 && failedTotal > currentView.F()
+
+			if mostFailedInspiteSomeSuccess || allFailed {
 				return Value{}, errors.New("Failed to get prepare quorun")
 			}
 		}
@@ -171,7 +182,7 @@ func accept(proposal Proposal) error {
 	}
 
 	// Get quorum
-	var failed int
+	var failedTotal int
 	var success int
 	for {
 		select {
@@ -187,10 +198,13 @@ func accept(proposal Proposal) error {
 				return nil
 			}
 		case err := <-errChan:
-			log.Println("+1 failure to accept:", err)
-			failed++
+			log.Println("+1 error to accept:", err)
+			failedTotal++
 
-			if failed > currentView.F() {
+			allFailed := failedTotal == currentView.N()
+			mostFailedInspiteSomeSuccess := success > 0 && failedTotal > currentView.F()
+
+			if mostFailedInspiteSomeSuccess || allFailed {
 				return errors.New("Failed to get accept quorun")
 			}
 		}
@@ -343,7 +357,7 @@ func spreadAcceptanceProcess(process view.Process, proposal Proposal) {
 	var reply int
 	err := comm.SendRPCRequest(process, "ConsensusRequest.Learn", proposal, &reply)
 	if err != nil {
-		log.Println("WARN: spreadAcceptanceProcess:", err)
+		log.Println("+1 error to spread acceptance: spreadAcceptanceProcess:", err)
 		return
 	}
 }

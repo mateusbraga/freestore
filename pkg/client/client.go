@@ -96,9 +96,9 @@ func basicWriteQuorum(view *view.View, writeMsg RegisterMsg) error {
 			failedTotal++
 
 			allFailed := failedTotal == view.N()
-			mostFailed := failedTotal > view.F()
+			mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > currentView.F()
 
-			if mostFailed || allFailed {
+			if mostFailedInspiteSomeSuccess || allFailed {
 				return errors.New("failedTotal to get write quorun")
 			}
 		}
@@ -200,9 +200,9 @@ func basicReadQuorum(view *view.View) (RegisterMsg, error) {
 			failedTotal++
 
 			allFailed := failedTotal == view.N()
-			mostFailed := failedTotal > view.F()
+			mostFailedInspiteSomeSuccess := len(resultArray) > 0 && failedTotal > currentView.F()
 
-			if mostFailed || allFailed {
+			if mostFailedInspiteSomeSuccess || allFailed {
 				return RegisterMsg{}, errors.New("Failed to get read quorun")
 			}
 		}

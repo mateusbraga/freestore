@@ -48,7 +48,34 @@ func resetTimerLoop() {
 	}
 }
 
+func startReconfiguration() {
+	recvMutex.Lock()
+	defer recvMutex.Unlock()
+
+	if len(recv) == 0 {
+		// No configuration changes, restart reconfiguration timer
+		resetReconfigurationTimer <- true
+		return
+	}
+
+	log.Println("Start reconfiguration of currentView:", currentView)
+
+	newView := currentView.NewCopy()
+	for update, _ := range recv {
+		newView.AddUpdate(update)
+	}
+	initialViewSeq := ViewSeq{newView}
+	currentViewCopy := currentView.NewCopy()
+
+	if useConsensus {
+		go generateViewSequenceWithConsensus(currentViewCopy, initialViewSeq)
+	} else {
+		go generateViewSequenceWithoutConsensus(currentViewCopy, initialViewSeq)
+	}
+}
+
 // ---------- Others ------------
+
 type generatedViewSeq struct {
 	ViewSeq        ViewSeq
 	AssociatedView *view.View
@@ -340,40 +367,7 @@ func syncState(installSeq InstallSeq) {
 	log.Println("State synced")
 }
 
-func startReconfiguration() {
-	recvMutex.Lock()
-	defer recvMutex.Unlock()
-
-	if len(recv) == 0 {
-		// No configuration changes, restart reconfiguration timer
-		resetReconfigurationTimer <- true
-		return
-	}
-
-	log.Println("Start reconfiguration of currentView:", currentView)
-
-	newView := currentView.NewCopy()
-	for update, _ := range recv {
-		newView.AddUpdate(update)
-	}
-	initialViewSeq := ViewSeq{newView}
-	currentViewCopy := currentView.NewCopy()
-
-	if useConsensus {
-		go generateViewSequenceWithConsensus(currentViewCopy, initialViewSeq)
-	} else {
-		go generateViewSequenceWithoutConsensus(currentViewCopy, initialViewSeq)
-	}
-}
-
-type SimpleQuorumCounter struct {
-	counter int
-}
-
-func (quorumCounter *SimpleQuorumCounter) count(quorumSize int) bool {
-	quorumCounter.counter++
-	return quorumCounter.counter == quorumSize
-}
+// ------------- Join and Leave ---------------------
 
 func Join() error {
 	resultChan := make(chan error, currentView.N())
@@ -553,6 +547,7 @@ func init() {
 }
 
 // -------- Send functions -----------
+
 func sendViewInstalled(process view.Process, viewInstalled ViewInstalledMsg) {
 	var reply error
 	err := comm.SendRPCRequest(process, "ReconfigurationRequest.ViewInstalled", viewInstalled, &reply)
