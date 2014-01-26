@@ -63,12 +63,6 @@ func main() {
 
 	initialView := view.New()
 	switch {
-	case hostname == "mabr" || hostname == "bt": // dev environment
-		for i := 0; i < *numberOfServers; i++ {
-			process := view.Process{fmt.Sprintf("[::]:500%d", i)}
-			initialView.AddUpdate(view.Update{view.Join, process})
-		}
-
 	case strings.Contains(hostname, "node-"): // emulab.net
 		for i := 0; i < *numberOfServers; i++ {
 			process := view.Process{fmt.Sprintf("10.1.1.%d:5000", i+2)}
@@ -76,7 +70,10 @@ func main() {
 		}
 
 	default:
-		log.Fatalln("invalid hostname:", hostname)
+		for i := 0; i < *numberOfServers; i++ {
+			process := view.Process{fmt.Sprintf("[::]:500%d", i)}
+			initialView.AddUpdate(view.Update{view.Join, process})
+		}
 	}
 
 	go func() {
