@@ -262,6 +262,18 @@ type State struct {
 	recv       map[view.Update]bool
 }
 
+func (thisState State) NewCopy() State {
+	stateCopy := State{finalValue: &Value{}}
+	stateCopy.finalValue.Value = thisState.finalValue.Value
+	stateCopy.finalValue.Timestamp = thisState.finalValue.Timestamp
+	stateCopy.recv = make(map[view.Update]bool, len(thisState.recv))
+
+	for update, _ := range thisState.recv {
+		stateCopy.recv[update] = true
+	}
+	return stateCopy
+}
+
 type stateUpdateQuorumType struct {
 	associatedView *view.View
 
@@ -323,7 +335,7 @@ func stateUpdateProcessingLoop() {
 			}
 
 			if stateUpdateQuorum.counter == stateUpdate.AssociatedView.QuorumSize() {
-				stateUpdateQuorum.resultChan <- stateUpdateQuorum.State
+				stateUpdateQuorum.resultChan <- stateUpdateQuorum.State.NewCopy()
 			}
 		case chanRequest := <-stateUpdateChanRequestChan:
 			stateUpdateQuorum, ok := getStateUpdateQuorumCounter(stateUpdateQuorumCounterList, chanRequest.associatedView)
