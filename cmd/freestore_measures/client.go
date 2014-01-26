@@ -23,10 +23,7 @@ var (
 	measureLatency     = flag.Bool("latency", false, "Client will measure latency")
 	measureThroughput  = flag.Bool("throughput", false, "Client will measure throughput")
 	totalDuration      = flag.Duration("duration", 10*time.Second, "Duration to run operations (throughput measurement)")
-)
-
-const (
-	resultFile = "/home/mateus/freestoreResults.txt"
+	resultFile         = flag.String("o", "/proj/freestore/results.txt", "Result file filename")
 )
 
 var (
@@ -119,7 +116,7 @@ func saveResults(latenciesMean int64, latenciesStandardDeviation int64, opsPerSe
 		operation = "read"
 	}
 
-	file, err := os.OpenFile(resultFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
+	file, err := os.OpenFile(*resultFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
 	if err != nil {
 		log.Fatalln(err)
 	}
