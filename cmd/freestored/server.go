@@ -35,9 +35,6 @@ func init() {
 	}
 
 	switch {
-	case hostname == "mabr" || hostname == "bt": // dev environment
-		flag.StringVar(&bindAddr, "bind", "[::]:5000", "Set this process address")
-
 	case strings.Contains(hostname, "node-"): // emulab.net
 		node, err := strconv.ParseInt(hostname[5:strings.Index(hostname, ".")], 10, 0)
 		if err != nil {
@@ -47,7 +44,7 @@ func init() {
 		flag.StringVar(&bindAddr, "bind", fmt.Sprintf("10.1.1.%v:5000", node+1), "Set this process address")
 
 	default:
-		log.Fatalln("invalid hostname:", hostname)
+		flag.StringVar(&bindAddr, "bind", "[::]:5000", "Set this process address")
 	}
 }
 
