@@ -16,7 +16,6 @@ RUN yum install -y gcc golang git
 #set GOPATH
 ENV GOPATH /go
 
-
 # install freestore server
 RUN go get github.com/mateusbraga/freestore/...
 
