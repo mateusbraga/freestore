@@ -23,30 +23,8 @@ import (
 var (
 	useConsensus    = flag.Bool("consensus", false, "Set consensus to use consensus on reconfiguration")
 	numberOfServers = flag.Int("n", 3, "Number of servers in the initial view")
-
-	bindAddr string
+	bindAddr        = flag.String("bind", "[::]:5000", "Set this process address")
 )
-
-// Set remaining flags
-func init() {
-	hostname, err := os.Hostname()
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	switch {
-	case strings.Contains(hostname, "node-"): // emulab.net
-		node, err := strconv.ParseInt(hostname[5:strings.Index(hostname, ".")], 10, 0)
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-		flag.StringVar(&bindAddr, "bind", fmt.Sprintf("10.1.1.%v:5000", node+1), "Set this process address")
-
-	default:
-		flag.StringVar(&bindAddr, "bind", "[::]:5000", "Set this process address")
-	}
-}
 
 func init() {
 	// Make it parallel
