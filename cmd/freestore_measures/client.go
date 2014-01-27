@@ -10,9 +10,11 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/mateusbraga/freestore/pkg/client"
+	"github.com/mateusbraga/freestore/pkg/view"
 	"github.com/mateusbraga/gostat"
 )
 
@@ -27,14 +29,18 @@ var (
 )
 
 var (
-	latencies []int64
-	ops       int
-	stopChan  <-chan time.Time
+	latencies       []int64
+	ops             int
+	stopChan        <-chan time.Time
+	freestoreClient *client.Client
 )
 
 func init() {
 	// Make it parallel
 	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	initialView := getInitialView()
+	freestoreClient = client.New(initialView)
 }
 
 func main() {
@@ -65,7 +71,7 @@ func latencyAndThroughput() {
 	if *isWrite {
 		for ops = 0; ops < *numberOfOperations; ops++ {
 			timeBefore := time.Now()
-			err := client.Write(data)
+			err := freestoreClient.Write(data)
 			timeAfter := time.Now()
 			if err != nil {
 				log.Fatalln(err)
@@ -74,14 +80,14 @@ func latencyAndThroughput() {
 			latencies = append(latencies, timeAfter.Sub(timeBefore).Nanoseconds())
 		}
 	} else {
-		err := client.Write(data)
+		err := freestoreClient.Write(data)
 		if err != nil {
 			log.Fatalln("ERROR initial write:", err)
 		}
 
 		for ops = 0; ops < *numberOfOperations; ops++ {
 			timeBefore := time.Now()
-			_, err = client.Read()
+			_, err = freestoreClient.Read()
 			timeAfter := time.Now()
 			if err != nil {
 				log.Fatalln(err)
@@ -142,7 +148,7 @@ func latency() {
 	if *isWrite {
 		for ops = 0; ops < *numberOfOperations; ops++ {
 			timeBefore := time.Now()
-			err := client.Write(data)
+			err := freestoreClient.Write(data)
 			timeAfter := time.Now()
 			if err != nil {
 				log.Fatalln(err)
@@ -151,14 +157,14 @@ func latency() {
 			latencies = append(latencies, timeAfter.Sub(timeBefore).Nanoseconds())
 		}
 	} else {
-		err := client.Write(data)
+		err := freestoreClient.Write(data)
 		if err != nil {
 			log.Fatalln("Initial write:", err)
 		}
 
 		for ops = 0; ops < *numberOfOperations; ops++ {
 			timeBefore := time.Now()
-			_, err = client.Read()
+			_, err = freestoreClient.Read()
 			timeAfter := time.Now()
 			if err != nil {
 				log.Fatalln(err)
@@ -190,7 +196,7 @@ func throughput() {
 
 	if *isWrite {
 		for ; ; ops++ {
-			err := client.Write(data)
+			err := freestoreClient.Write(data)
 			if err != nil {
 				log.Fatalln(err)
 			}
@@ -202,13 +208,13 @@ func throughput() {
 			}
 		}
 	} else {
-		err := client.Write(data)
+		err := freestoreClient.Write(data)
 		if err != nil {
 			log.Fatalln("Initial write:", err)
 		}
 
 		for ; ; ops++ {
-			_, err = client.Read()
+			_, err = freestoreClient.Read()
 			if err != nil {
 				log.Fatalln(err)
 			}
@@ -236,4 +242,25 @@ func createFakeData() []byte {
 		log.Fatalln("error to generate data:", err)
 	}
 	return data
+}
+
+func getInitialView() *view.View {
+	hostname, err := os.Hostname()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	var process view.Process
+	switch {
+	case strings.Contains(hostname, "node-"): // emulab.net
+		process = view.Process{"10.1.1.2:5000"}
+	default:
+		process = view.Process{"[::]:5000"}
+	}
+
+	initialView, err := client.GetCurrentView(process)
+	if err != nil {
+		log.Fatalln("Failed to get current view of process %v: %v\n", process, err)
+	}
+	return initialView
 }
