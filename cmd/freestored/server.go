@@ -9,7 +9,6 @@ import (
 	"log"
 	"os"
 	"runtime"
-	"strconv"
 	"strings"
 
 	"github.com/mateusbraga/freestore/pkg/server"
@@ -58,5 +57,5 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	server.Run(bindAddr, initialView, *useConsensus)
+	server.Run(*bindAddr, initialView, *useConsensus)
 }
