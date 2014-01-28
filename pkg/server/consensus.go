@@ -11,6 +11,8 @@ import (
 
 	"github.com/mateusbraga/freestore/pkg/comm"
 	"github.com/mateusbraga/freestore/pkg/view"
+
+	"github.com/cznic/kv"
 )
 
 var (
@@ -18,6 +20,8 @@ var (
 	consensusTableMu sync.RWMutex
 
 	oldProposalNumberErr OldProposalNumberError
+
+	database *kv.DB
 )
 
 type consensusInstance struct {
@@ -255,15 +259,15 @@ func saveProposalNumber(consensusId int, proposalNumber int) {
 		log.Fatalln("enc.Encode failed:", err)
 	}
 
-	err = db.Set([]byte(fmt.Sprintf("lastProposalNumber_%v", consensusId)), proposalNumberBuffer.Bytes())
+	err = database.Set([]byte(fmt.Sprintf("lastProposalNumber_%v", consensusId)), proposalNumberBuffer.Bytes())
 	if err != nil {
-		log.Fatalln("db.Set failed:", err)
+		log.Fatalln("database.Set failed:", err)
 	}
 }
 
 // getLastProposalNumber from permanent storage.
 func getLastProposalNumber(consensusId int) (int, error) {
-	lastProposalNumberBytes, err := db.Get(nil, []byte(fmt.Sprintf("lastProposalNumber_%v", consensusId)))
+	lastProposalNumberBytes, err := database.Get(nil, []byte(fmt.Sprintf("lastProposalNumber_%v", consensusId)))
 	if err != nil {
 		log.Fatalln(err)
 	} else if lastProposalNumberBytes == nil {
@@ -297,7 +301,7 @@ func saveAcceptedProposal(consensusId int, proposal *Proposal) {
 		log.Fatalln("enc.Encode failed:", err)
 	}
 
-	err = db.Set([]byte(fmt.Sprintf("acceptedProposal_%v", consensusId)), proposalBuffer.Bytes())
+	err = database.Set([]byte(fmt.Sprintf("acceptedProposal_%v", consensusId)), proposalBuffer.Bytes())
 	if err != nil {
 		log.Fatalln("ERROR to save acceptedProposal:", err)
 	}
@@ -313,7 +317,7 @@ func savePrepareRequest(consensusId int, proposal *Prepare) {
 		log.Fatalln("enc.Encode failed:", err)
 	}
 
-	err = db.Set([]byte(fmt.Sprintf("prepareRequest_%v", consensusId)), proposalBuffer.Bytes())
+	err = database.Set([]byte(fmt.Sprintf("prepareRequest_%v", consensusId)), proposalBuffer.Bytes())
 	if err != nil {
 		log.Fatalln("ERROR to save prepareRequest:", err)
 	}
@@ -440,6 +444,18 @@ func (r *ConsensusRequest) Learn(arg Proposal, reply *int) error {
 
 func init() {
 	rpc.Register(new(ConsensusRequest))
+}
+
+func initDatabase() {
+	var err error
+	database, err = kv.CreateMem(new(kv.Options))
+	if err != nil {
+		log.Fatalln("initDatabase error:", err)
+	}
+}
+
+func init() {
+	initDatabase()
 }
 
 // ------- ERRORS -----------

@@ -17,7 +17,7 @@ func TestDatabaseFunctions(t *testing.T) {
 
 	thisProcess = view.Process{"[::]:5001"}
 
-	if key, value, _ := db.First(); key != nil && value != nil {
+	if key, value, _ := database.First(); key != nil && value != nil {
 		t.Errorf("Database is not empty or unitinialized")
 	}
 

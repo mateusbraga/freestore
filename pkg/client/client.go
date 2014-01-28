@@ -26,6 +26,7 @@ func New(initialView *view.View) *Client {
 	return newClient
 }
 
+// SetView sets newView as the client's view.
 func (thisClient *Client) SetView(newView *view.View) {
 	log.Printf("Updating client view from %v to %v\n", thisClient.view, newView)
 	thisClient.view.Set(newView)

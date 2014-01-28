@@ -11,12 +11,9 @@ import (
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-// --------- External State ---------
-
-// --------- Internal State ---------
 var register Value
 
-//  ---------- Interface -------------
+//  ---------- RPC Requests -------------
 type ClientRequest int
 
 func (r *ClientRequest) Read(clientView *view.View, reply *Value) error {
@@ -58,7 +55,7 @@ func (r *ClientRequest) GetCurrentView(value int, reply *view.View) error {
 	return nil
 }
 
-// --------- Bootstrapping ---------
+// --------- Init ---------
 func init() {
 	register.mu.Lock() // The register starts locked
 	register.Value = nil

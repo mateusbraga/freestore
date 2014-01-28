@@ -7,40 +7,30 @@ import (
 
 	"github.com/mateusbraga/freestore/pkg/comm"
 	"github.com/mateusbraga/freestore/pkg/view"
-
-	"github.com/cznic/kv"
 )
 
 var (
-	currentView = view.New()
-
-	listener    net.Listener
-	thisProcess view.Process
-
-	db *kv.DB
-
+	listener     net.Listener
+	thisProcess  view.Process
 	useConsensus bool
+
+	// currentView of this server cluster.
+	currentView = view.New()
 )
 
 func Run(bindAddr string, initialView *view.View, useConsensusArg bool) {
-	// init listener
+	// init global variables
 	listener, err := net.Listen("tcp", bindAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Println("Listening on address:", listener.Addr())
 
-	// init thisProcess
 	thisProcess = view.Process{listener.Addr().String()}
 
-	// init currentView
+	log.Println("Initial View:", initialView)
 	currentView.Set(initialView)
-	log.Println("Initial View:", currentView)
 
-	// init storage
-	initStorage()
-
-	// init useConsensus
 	useConsensus = useConsensusArg
 
 	// Enable operations or join View
@@ -50,19 +40,14 @@ func Run(bindAddr string, initialView *view.View, useConsensusArg bool) {
 		// try to update currentView with the first member
 		getCurrentView(currentView.GetMembers()[0])
 		// join the view
-		Join()
+		err := Join()
+		if err != nil {
+			log.Println("Join:", err)
+		}
 	}
 
-	// Start server
+	// Accept connections forever
 	rpc.Accept(listener)
-}
-
-func initStorage() {
-	var err error
-	db, err = kv.CreateMem(new(kv.Options))
-	if err != nil {
-		log.Fatalln("initStorage error:", err)
-	}
 }
 
 // GetCurrentViewClient asks process for the currentView

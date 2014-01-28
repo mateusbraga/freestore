@@ -5,6 +5,7 @@ import (
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
+// GetCurrentView asks process for the its current view and returns it.
 func GetCurrentView(process view.Process) (*view.View, error) {
 	return sendGetCurrentView(process)
 }
