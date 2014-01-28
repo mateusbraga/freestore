@@ -18,9 +18,23 @@ type Process struct {
 	Addr string
 }
 
+func (thisProcess Process) Less(otherProcess Process) bool {
+	return thisProcess.Addr < otherProcess.Addr
+}
+
 type Update struct {
 	Type    updateType
 	Process Process
+}
+
+func (thisUpdate Update) Less(otherUpdate Update) bool {
+	if thisUpdate.Type < otherUpdate.Type {
+		return true
+	} else if thisUpdate.Type == otherUpdate.Type {
+		return thisUpdate.Process.Less(otherUpdate.Process)
+	} else {
+		return false
+	}
 }
 
 type View struct {
