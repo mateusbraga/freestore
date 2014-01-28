@@ -7,7 +7,7 @@ import (
 )
 
 func TestDatabaseFunctions(t *testing.T) {
-	initStorage()
+	initDatabase()
 
 	initialView := view.New()
 	initialView.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5000"}})
