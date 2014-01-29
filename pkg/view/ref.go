@@ -11,16 +11,33 @@ type ViewRef struct {
 	digest [sha1.Size]byte
 }
 
-func viewToViewRef(view *View) ViewRef {
-	buf := new(bytes.Buffer)
-	encoder := gob.NewEncoder(buf)
+func ViewToViewRef(v *View) *ViewRef {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 
 	var updates ByUpdate
-	updates = view.GetEntries()
+	updates = v.getEntries()
 	sort.Sort(updates)
+
+	buf := new(bytes.Buffer)
+	encoder := gob.NewEncoder(buf)
 	encoder.Encode(updates)
 
-	return ViewRef{sha1.Sum(buf.Bytes())}
+	v.viewRef = &ViewRef{sha1.Sum(buf.Bytes())}
+	return v.viewRef
+}
+
+// viewToViewRef computes view's ViewRef. Caller must lock mutex before calling viewToViewRef.
+func viewToViewRef(view *View) *ViewRef {
+	var updates ByUpdate
+	updates = view.getEntries()
+	sort.Sort(updates)
+
+	buf := new(bytes.Buffer)
+	encoder := gob.NewEncoder(buf)
+	encoder.Encode(updates)
+
+	return &ViewRef{sha1.Sum(buf.Bytes())}
 }
 
 type ByUpdate []Update

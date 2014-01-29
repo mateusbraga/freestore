@@ -37,11 +37,14 @@ func (thisUpdate Update) Less(otherUpdate Update) bool {
 	}
 }
 
+// -------- View type -----------
+
 type View struct {
 	Entries map[Update]bool
 	mu      sync.RWMutex
 
 	Members map[Process]bool // Cache
+	viewRef *ViewRef         // Cache
 }
 
 func New() *View {
@@ -77,6 +80,8 @@ func (v *View) Set(v2 *View) {
 
 	v2.mu.RLock()
 	defer v2.mu.RUnlock()
+
+	v.viewRef = v2.viewRef
 
 	v.Entries = make(map[Update]bool, len(v2.Entries))
 	v.Members = make(map[Process]bool, len(v2.Members))
@@ -132,6 +137,8 @@ func (v *View) AddUpdate(updates ...Update) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
+	v.viewRef = nil
+
 	for _, newUpdate := range updates {
 		v.Entries[newUpdate] = true
 
@@ -158,6 +165,8 @@ func (v *View) Merge(v2 *View) {
 
 	v2.mu.RLock()
 	defer v2.mu.RUnlock()
+
+	v.viewRef = nil
 
 	for update, _ := range v2.Entries {
 		v.Entries[update] = true
@@ -191,6 +200,10 @@ func (v *View) GetEntries() []Update {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
+	return v.getEntries()
+}
+
+func (v *View) getEntries() []Update {
 	var entries []Update
 	for update, _ := range v.Entries {
 		entries = append(entries, update)
@@ -210,8 +223,8 @@ func (v *View) GetMembers() []Process {
 }
 
 func (v *View) GetMembersAlsoIn(v2 *View) []Process {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	v.mu.RLock()
+	defer v.mu.RUnlock()
 
 	v2.mu.RLock()
 	defer v2.mu.RUnlock()
@@ -230,8 +243,8 @@ func (v *View) GetMembersAlsoIn(v2 *View) []Process {
 }
 
 func (v *View) GetMembersNotIn(v2 *View) []Process {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	v.mu.RLock()
+	defer v.mu.RUnlock()
 
 	v2.mu.RLock()
 	defer v2.mu.RUnlock()
@@ -297,6 +310,16 @@ func (v *View) F() int {
 
 	membersTotal := len(v.Members)
 	return membersTotal - v.quorumSize()
+}
+
+func (v *View) GetViewRef() ViewRef {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
+	if v.viewRef == nil {
+		v.viewRef = viewToViewRef(v)
+	}
+	return *v.viewRef
 }
 
 // ----- ERRORS -----
