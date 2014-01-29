@@ -8,10 +8,11 @@ import (
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-// readQuorum reads a RegisterMsg from all members of the view, returning the most recent one. It decides which is the most recent value as soon as it gets a quorum
-//
-// If the view needs to be updated, it will update the view in a *view.OldViewError.
-// If values returned by the processes differ, it will return diffResultsErr
+// diffResultsErr is returned by readQuorum if not all answers from the servers were the same. Returned to indicate that Read() should do 2nd phase of the read protocol.
+var diffResultsErr = errors.New("Read Divergence")
+
+// readQuorum asks for the register value from all members of the view, returning the most recent one after it receives answers from a majority.
+// If the view needs to be updated, it will return a *view.OldViewError.  If values returned by the processes differ, it will return diffResultsErr.
 func readQuorum(view *view.View) (RegisterMsg, error) {
 	resultChan := make(chan RegisterMsg, view.N())
 	errChan := make(chan error, view.N())
@@ -61,8 +62,7 @@ func readQuorum(view *view.View) (RegisterMsg, error) {
 	}
 }
 
-// writeQuorum writes v to all processes on the view and returns when it gets confirmation from a quorum
-//
+// writeQuorum tries to write the value in writeMsg to the register of all processes on the view, returning when it gets confirmation from a majority.
 // If the view needs to be updated, it will return the new view in a *view.OldViewError.
 func writeQuorum(view *view.View, writeMsg RegisterMsg) error {
 	resultChan := make(chan RegisterMsg, view.N())

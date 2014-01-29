@@ -4,15 +4,9 @@ Package client implements a Freestore client
 package client
 
 import (
-	"errors"
 	"log"
 
 	"github.com/mateusbraga/freestore/pkg/view"
-)
-
-var (
-	// diffResultsErr is returned by readQuorum if not all answers from the servers were the same
-	diffResultsErr = errors.New("Read Divergence")
 )
 
 type Client struct {
