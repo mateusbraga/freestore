@@ -43,7 +43,11 @@ func main() {
 			log.Fatalln(err)
 		}
 
-		fmt.Printf("%v: Read %v (%v)-> Write (%v)\n", i, finalValue, endRead.Sub(startRead), endWrite.Sub(startWrite))
+		if i%100000 == 0 {
+			fmt.Printf("%v: Read %v (%v)-> Write (%v)\n", i, finalValue, endRead.Sub(startRead), endWrite.Sub(startWrite))
+		} else {
+			fmt.Printf(".")
+		}
 	}
 }
 
