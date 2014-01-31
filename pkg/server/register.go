@@ -40,8 +40,8 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 	register.mu.Lock()
 	defer register.mu.Unlock()
 
-	// Two writes with the same timestamp -> give preference to later one.
-	if value.Timestamp >= register.Timestamp {
+	// Two writes with the same timestamp -> give preference to first one. This makes the Write operation idempotent and still read/write coherent.
+	if value.Timestamp > register.Timestamp {
 		register.Value = value.Value
 		register.Timestamp = value.Timestamp
 	}
