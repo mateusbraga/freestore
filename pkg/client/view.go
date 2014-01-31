@@ -7,9 +7,10 @@ import (
 
 // GetCurrentView asks process for the its current view and returns it.
 func GetCurrentView(process ...view.Process) (*view.View, error) {
+	var newView *view.View
 	var err error
 	for _, loopProcess := range process {
-		newView, err := sendGetCurrentView(loopProcess)
+		newView, err = sendGetCurrentView(loopProcess)
 		if err != nil {
 			continue
 		}
