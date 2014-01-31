@@ -40,17 +40,17 @@ func (thisUpdate Update) Less(otherUpdate Update) bool {
 // -------- View type -----------
 
 type View struct {
-	Entries map[Update]bool
+	entries map[Update]bool
 	mu      sync.RWMutex
 
-	Members map[Process]bool // Cache
+	members map[Process]bool // Cache
 	viewRef *ViewRef         // Cache
 }
 
 func New() *View {
 	v := View{}
-	v.Entries = make(map[Update]bool)
-	v.Members = make(map[Process]bool)
+	v.entries = make(map[Update]bool)
+	v.members = make(map[Process]bool)
 	return &v
 }
 
@@ -62,7 +62,7 @@ func (v *View) String() string {
 	fmt.Fprintf(&b, "{")
 
 	first := true
-	for process, _ := range v.Members {
+	for process, _ := range v.members {
 		if !first {
 			fmt.Fprintf(&b, ", ")
 		}
@@ -83,14 +83,14 @@ func (v *View) Set(v2 *View) {
 
 	v.viewRef = v2.viewRef
 
-	v.Entries = make(map[Update]bool, len(v2.Entries))
-	v.Members = make(map[Process]bool, len(v2.Members))
+	v.entries = make(map[Update]bool, len(v2.entries))
+	v.members = make(map[Process]bool, len(v2.members))
 
-	for update, _ := range v2.Entries {
-		v.Entries[update] = true
+	for update, _ := range v2.entries {
+		v.entries[update] = true
 	}
-	for process, _ := range v2.Members {
-		v.Members[process] = true
+	for process, _ := range v2.members {
+		v.members[process] = true
 	}
 }
 
@@ -101,12 +101,12 @@ func (v *View) LessUpdatedThan(v2 *View) bool {
 	v2.mu.RLock()
 	defer v2.mu.RUnlock()
 
-	if len(v2.Entries) > len(v.Entries) {
+	if len(v2.entries) > len(v.entries) {
 		return true
 	}
 
-	for k2, _ := range v2.Entries {
-		if _, ok := v.Entries[k2]; !ok {
+	for k2, _ := range v2.entries {
+		if _, ok := v.entries[k2]; !ok {
 			return true
 		}
 	}
@@ -121,12 +121,12 @@ func (v *View) Equal(v2 *View) bool {
 	v2.mu.RLock()
 	defer v2.mu.RUnlock()
 
-	if len(v.Entries) != len(v2.Entries) {
+	if len(v.entries) != len(v2.entries) {
 		return false
 	}
 
-	for k2, _ := range v2.Entries {
-		if _, ok := v.Entries[k2]; !ok {
+	for k2, _ := range v2.entries {
+		if _, ok := v.entries[k2]; !ok {
 			return false
 		}
 	}
@@ -140,15 +140,15 @@ func (v *View) AddUpdate(updates ...Update) {
 	v.viewRef = nil
 
 	for _, newUpdate := range updates {
-		v.Entries[newUpdate] = true
+		v.entries[newUpdate] = true
 
 		switch newUpdate.Type {
 		case Join:
-			if !v.Entries[Update{Leave, newUpdate.Process}] {
-				v.Members[newUpdate.Process] = true
+			if !v.entries[Update{Leave, newUpdate.Process}] {
+				v.members[newUpdate.Process] = true
 			}
 		case Leave:
-			delete(v.Members, newUpdate.Process)
+			delete(v.members, newUpdate.Process)
 		}
 	}
 }
@@ -168,16 +168,16 @@ func (v *View) Merge(v2 *View) {
 
 	v.viewRef = nil
 
-	for update, _ := range v2.Entries {
-		v.Entries[update] = true
+	for update, _ := range v2.entries {
+		v.entries[update] = true
 
 		switch update.Type {
 		case Join:
-			if !v.Entries[Update{Leave, update.Process}] {
-				v.Members[update.Process] = true
+			if !v.entries[Update{Leave, update.Process}] {
+				v.members[update.Process] = true
 			}
 		case Leave:
-			delete(v.Members, update.Process)
+			delete(v.members, update.Process)
 		}
 	}
 }
@@ -186,14 +186,14 @@ func (v *View) HasUpdate(u Update) bool {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	return v.Entries[u]
+	return v.entries[u]
 }
 
 func (v *View) HasMember(p Process) bool {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	return v.Members[p]
+	return v.members[p]
 }
 
 func (v *View) GetEntries() []Update {
@@ -205,7 +205,7 @@ func (v *View) GetEntries() []Update {
 
 func (v *View) getEntries() []Update {
 	var entries []Update
-	for update, _ := range v.Entries {
+	for update, _ := range v.entries {
 		entries = append(entries, update)
 	}
 	return entries
@@ -216,7 +216,7 @@ func (v *View) GetMembers() []Process {
 	defer v.mu.RUnlock()
 
 	var members []Process
-	for process, _ := range v.Members {
+	for process, _ := range v.members {
 		members = append(members, process)
 	}
 	return members
@@ -230,11 +230,11 @@ func (v *View) GetMembersAlsoIn(v2 *View) []Process {
 	defer v2.mu.RUnlock()
 
 	var members []Process
-	for process, _ := range v.Members {
+	for process, _ := range v.members {
 		members = append(members, process)
 	}
-	for process, _ := range v2.Members {
-		if !v.Members[process] {
+	for process, _ := range v2.members {
+		if !v.members[process] {
 			members = append(members, process)
 		}
 	}
@@ -250,8 +250,8 @@ func (v *View) GetMembersNotIn(v2 *View) []Process {
 	defer v2.mu.RUnlock()
 
 	var members []Process
-	for process, _ := range v.Members {
-		if !v2.Members[process] {
+	for process, _ := range v.members {
+		if !v2.members[process] {
 			members = append(members, process)
 		}
 	}
@@ -264,13 +264,13 @@ func (v *View) GetProcessPosition(process Process) int {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	if _, ok := v.Members[process]; !ok {
+	if _, ok := v.members[process]; !ok {
 		return -1
 	}
 
 	// Position will be the position of the process in an ordered list of the members.
 	position := 0
-	for proc, _ := range v.Members {
+	for proc, _ := range v.members {
 		if proc.Addr < process.Addr {
 			position++
 		}
@@ -282,7 +282,7 @@ func (v *View) NumberOfEntries() int {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	return len(v.Entries)
+	return len(v.entries)
 }
 
 func (v *View) QuorumSize() int {
@@ -293,7 +293,7 @@ func (v *View) QuorumSize() int {
 }
 
 func (v *View) quorumSize() int {
-	membersTotal := len(v.Members)
+	membersTotal := len(v.members)
 	return (membersTotal+1)/2 + (membersTotal+1)%2
 }
 
@@ -301,14 +301,14 @@ func (v *View) N() int {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	return len(v.Members)
+	return len(v.members)
 }
 
 func (v *View) F() int {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	membersTotal := len(v.Members)
+	membersTotal := len(v.members)
 	return membersTotal - v.quorumSize()
 }
 
