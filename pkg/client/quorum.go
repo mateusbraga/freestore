@@ -71,6 +71,7 @@ func readQuorum(immutableCurrentView *view.View) (RegisterMsg, error) {
 			// Look for different values returned from the processes
 			for _, val := range resultArray {
 				if finalValue.Timestamp != val.Timestamp {
+					log.Printf("finalValue.Timestamp %v != val.Timestamp %v\n", finalValue.Timestamp, val.Timestamp)
 					return finalValue, diffResultsErr
 				}
 			}
@@ -137,26 +138,26 @@ func writeQuorum(immutableCurrentView *view.View, writeMsg RegisterMsg) error {
 
 func broadcastRead(destinationView *view.View, resultChan chan RegisterMsg) {
 	for _, process := range destinationView.GetMembers() {
-		go func() {
+		go func(process view.Process) {
 			var result RegisterMsg
 			err := comm.SendRPCRequest(process, "ClientRequest.Read", destinationView, &result)
 			if err != nil {
 				resultChan <- RegisterMsg{Err: err}
 			}
 			resultChan <- result
-		}()
+		}(process)
 	}
 }
 
 func broadcastWrite(destinationView *view.View, writeMsg RegisterMsg, resultChan chan RegisterMsg) {
 	for _, process := range destinationView.GetMembers() {
-		go func() {
+		go func(process view.Process) {
 			var result RegisterMsg
 			err := comm.SendRPCRequest(process, "ClientRequest.Write", writeMsg, &result)
 			if err != nil {
 				resultChan <- RegisterMsg{Err: err}
 			}
 			resultChan <- result
-		}()
+		}(process)
 	}
 }

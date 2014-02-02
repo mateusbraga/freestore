@@ -49,67 +49,13 @@ func getCommLink(process view.Process) communicationLink {
 	return commLink
 }
 
-//func BroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}, replyType interface{}, resultChan chan CommunicationResult) {
-//if resultChan == nil {
-//newResultChan := make(chan CommunicationResult, destinationView.N())
-//broadcastRPCRequest(destinationView, serviceMethod, arg, newResultChan)
-
-//// confirm that a majority of processes from destinationView was successful
-//successTotal := 0
-//failedTotal := 0
-//for resultCounter := 0; resultCounter < destinationView.N(); resultCounter++ {
-//result := <-resultChan
-//if result.Err != nil {
-//failedTotal++
-
-//if failedTotal == destinationView.F() {
-//log.Panicf("%v processes failed in view %v during BroadcastRPCRequest %v\n", failedTotal, destinationView, serviceMethod)
-//}
-//continue
-//}
-
-//successTotal++
-//if successTotal == destinationView.QuorumSize() {
-//break
-//}
-//}
-
-//return
-//} else {
-//broadcastRPCRequest(destinationView, serviceMethod, arg, resultChan)
-//return
-//}
-//}
-
-//func broadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}, resultChan chan CommunicationResult) {
-//for _, process := range destinationView.GetMembers() {
-//commLink := getCommLink(process)
-//if commLink.isFaulty() {
-//err := errors.New(fmt.Sprintf("process %v is unreachable", process))
-//errResult := CommunicationResult{Err: err}
-
-//// try to return error, will not break if resultChan is nil or blocking
-//select {
-//case resultChan <- errResult:
-//default:
-//log.Println("WARNING: Could not send error through resultChan. serviceMethod:", serviceMethod)
-//}
-
-//continue
-//}
-
-//go func() {
-//resultChan <- sendRPCRequest(commLink, serviceMethod, arg)
-//}()
-//}
-//}
-
 func SendRPCRequest(process view.Process, serviceMethod string, arg interface{}, result interface{}) error {
 	commLink := getCommLink(process)
 	if commLink.isFaulty() {
 		return errors.New(fmt.Sprintf("process %v is unreachable", process))
 	}
 
+	fmt.Printf("send %v to process %v\n", serviceMethod, process)
 	err := commLink.rpcClient.Call(serviceMethod, arg, result)
 	if err != nil {
 		commLink.rpcClient = nil
