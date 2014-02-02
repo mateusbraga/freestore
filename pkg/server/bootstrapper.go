@@ -38,26 +38,28 @@ func Run(bindAddr string, initialView *view.View, useConsensusArg bool) {
 		register.mu.Unlock() // Enable r/w operations
 	} else {
 		// try to update currentView with the first member
-		getCurrentView(currentView.GetMembers()[0])
+		getCurrentView(currentView.GetMembers()...)
 		// join the view
-		err := Join()
-		if err != nil {
-			log.Println("Join:", err)
-		}
+		Join()
 	}
 
 	// Accept connections forever
 	rpc.Accept(listener)
 }
 
-// GetCurrentViewClient asks process for the currentView
-func getCurrentView(process view.Process) {
-	var newView *view.View
-	err := comm.SendRPCRequest(process, "ClientRequest.GetCurrentView", 0, &newView)
-	if err != nil {
-		log.Fatalln("ERROR: getCurrentView:", err)
+// GetCurrentView asks processes for the its current view and returns it.
+func getCurrentView(processes ...view.Process) {
+	for _, loopProcess := range processes {
+		var receivedView *view.View
+		err := comm.SendRPCRequest(loopProcess, "ClientRequest.GetCurrentView", 0, &receivedView)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		currentView.Set(receivedView)
 		return
 	}
 
-	currentView.Set(newView)
+	log.Fatalln("Failed to get current view from processes")
 }
