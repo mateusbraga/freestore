@@ -70,7 +70,6 @@ func readQuorum(immutableCurrentView *view.View) (RegisterMsg, error) {
 			// Look for different values returned from the processes
 			for _, val := range resultArray {
 				if finalValue.Timestamp != val.Timestamp {
-					log.Printf("finalValue.Timestamp %v != val.Timestamp %v\n", finalValue.Timestamp, val.Timestamp)
 					return finalValue, diffResultsErr
 				}
 			}
