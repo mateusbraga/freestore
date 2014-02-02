@@ -85,7 +85,7 @@ func consensusWorker(ci consensusInstance) {
 				saveAcceptedProposal(ci.id, receivedAcceptRequest.Proposal)
 				acceptedProposal = *receivedAcceptRequest.Proposal
 
-				go spreadAcceptance(*receivedAcceptRequest.Proposal)
+				go broadcastLearnRequest(currentView.NewCopy(), *receivedAcceptRequest.Proposal)
 			} else {
 				receivedAcceptRequest.reply.Err = oldProposalNumberErr
 			}
@@ -133,84 +133,112 @@ func Propose(ci consensusInstance, defaultValue interface{}) {
 
 // prepare is a stage of the Propose funcion
 func prepare(proposal Proposal) (interface{}, error) {
-	resultChan := make(chan Proposal, currentView.N())
-	errChan := make(chan error, currentView.N())
+	immutableCurrentView := currentView.NewCopy()
 
 	// Send read request to all
-	for _, process := range currentView.GetMembers() {
-		go prepareProcess(process, proposal, resultChan, errChan)
+	resultChan := make(chan Proposal, immutableCurrentView.N())
+	go broadcastPrepareRequest(immutableCurrentView, proposal, resultChan)
+
+	// Wait for quorum
+	var successTotal int
+	var failedTotal int
+	var highestNumberedAcceptedProposal Proposal
+
+	countError := func(err error) bool {
+		log.Println("+1 error to prepare:", err)
+		failedTotal++
+
+		allFailed := failedTotal == immutableCurrentView.N()
+		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > immutableCurrentView.F()
+
+		if mostFailedInspiteSomeSuccess || allFailed {
+			return false
+		}
+
+		return true
 	}
 
-	// Get quorum
-	var failedTotal int
-	var success int
-	var highestNumberedAcceptedProposal Proposal
+	countSuccess := func(receivedProposal Proposal) bool {
+		successTotal++
+		if highestNumberedAcceptedProposal.N < receivedProposal.N {
+			highestNumberedAcceptedProposal = receivedProposal
+		}
+
+		if successTotal == immutableCurrentView.QuorumSize() {
+			return true
+		}
+
+		return false
+	}
+
 	for {
-		select {
-		case receivedProposal := <-resultChan:
-			if receivedProposal.Err != nil {
-				errChan <- receivedProposal.Err
-				break
-			}
+		receivedProposal := <-resultChan
 
-			success++
-			if highestNumberedAcceptedProposal.N < receivedProposal.N {
-				highestNumberedAcceptedProposal = receivedProposal
+		if receivedProposal.Err != nil {
+			ok := countError(receivedProposal.Err)
+			if !ok {
+				return nil, errors.New("Failed to get prepare quorun")
 			}
+			continue
+		}
 
-			if success == currentView.QuorumSize() {
-				return highestNumberedAcceptedProposal.Value, nil
-			}
-		case err := <-errChan:
-			log.Println("+1 error to prepare:", err)
-			failedTotal++
-
-			allFailed := failedTotal == currentView.N()
-			mostFailedInspiteSomeSuccess := success > 0 && failedTotal > currentView.F()
-
-			if mostFailedInspiteSomeSuccess || allFailed {
-				return Value{}, errors.New("Failed to get prepare quorun")
-			}
+		done := countSuccess(receivedProposal)
+		if done {
+			return highestNumberedAcceptedProposal, nil
 		}
 	}
 }
 
 // accept is a stage of the Propose funcion.
 func accept(proposal Proposal) error {
-	resultChan := make(chan Proposal, currentView.N())
-	errChan := make(chan error, currentView.N())
+	immutableCurrentView := currentView.NewCopy()
 
 	// Send accept request to all
-	for _, process := range currentView.GetMembers() {
-		go acceptProcess(process, proposal, resultChan, errChan)
+	resultChan := make(chan Proposal, immutableCurrentView.N())
+	go broadcastAcceptRequest(immutableCurrentView, proposal, resultChan)
+
+	// Wait for quorum
+	var successTotal int
+	var failedTotal int
+
+	countError := func(err error) bool {
+		log.Println("+1 error to accept:", err)
+		failedTotal++
+
+		allFailed := failedTotal == immutableCurrentView.N()
+		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > immutableCurrentView.F()
+
+		if mostFailedInspiteSomeSuccess || allFailed {
+			return false
+		}
+
+		return true
 	}
 
-	// Get quorum
-	var failedTotal int
-	var success int
+	countSuccess := func() bool {
+		successTotal++
+
+		if successTotal == immutableCurrentView.QuorumSize() {
+			return true
+		}
+
+		return false
+	}
+
 	for {
-		select {
-		case receivedProposal := <-resultChan:
-			if receivedProposal.Err != nil {
-				errChan <- receivedProposal.Err
-				break
-			}
+		receivedProposal := <-resultChan
 
-			success++
-
-			if success == currentView.QuorumSize() {
-				return nil
-			}
-		case err := <-errChan:
-			log.Println("+1 error to accept:", err)
-			failedTotal++
-
-			allFailed := failedTotal == currentView.N()
-			mostFailedInspiteSomeSuccess := success > 0 && failedTotal > currentView.F()
-
-			if mostFailedInspiteSomeSuccess || allFailed {
+		if receivedProposal.Err != nil {
+			ok := countError(receivedProposal.Err)
+			if !ok {
 				return errors.New("Failed to get accept quorun")
 			}
+			continue
+		}
+
+		done := countSuccess()
+		if done {
+			return nil
 		}
 	}
 }
@@ -323,49 +351,6 @@ func savePrepareRequest(consensusId int, proposal *Prepare) {
 	}
 }
 
-// spreadAcceptance to all processes on the current view
-func spreadAcceptance(proposal Proposal) {
-	// Send acceptances to all
-	// Can be improved: it is currently send too many messages at once
-	for _, process := range currentView.GetMembers() {
-		go spreadAcceptanceProcess(process, proposal)
-	}
-}
-
-// prepareProcess sends a prepare proposal to process.
-func prepareProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error) {
-	var reply Proposal
-	err := comm.SendRPCRequest(process, "ConsensusRequest.Prepare", proposal, &reply)
-	if err != nil {
-		errChan <- err
-		return
-	}
-
-	resultChan <- reply
-}
-
-// acceptProcess sends a prepare proposal to process.
-func acceptProcess(process view.Process, proposal Proposal, resultChan chan Proposal, errChan chan error) {
-	var reply Proposal
-	err := comm.SendRPCRequest(process, "ConsensusRequest.Accept", proposal, &reply)
-	if err != nil {
-		errChan <- err
-		return
-	}
-
-	resultChan <- reply
-}
-
-// spreadAcceptance sends acceptance to process.
-func spreadAcceptanceProcess(process view.Process, proposal Proposal) {
-	var reply int
-	err := comm.SendRPCRequest(process, "ConsensusRequest.Learn", proposal, &reply)
-	if err != nil {
-		log.Println("+1 error to spread acceptance: spreadAcceptanceProcess:", err)
-		return
-	}
-}
-
 // -------- REQUESTS -----------
 type ConsensusRequest int
 
@@ -467,4 +452,55 @@ func (e OldProposalNumberError) Error() string {
 
 func init() {
 	gob.Register(new(OldProposalNumberError))
+}
+
+func broadcastPrepareRequest(destinationView *view.View, proposal Proposal, resultChan chan Proposal) {
+	for _, process := range destinationView.GetMembers() {
+		go func() {
+			var result Proposal
+			err := comm.SendRPCRequest(process, "ConsensusRequest.Prepare", proposal, result)
+			if err != nil {
+				resultChan <- Proposal{Err: err}
+			}
+			resultChan <- result
+		}()
+	}
+}
+
+func broadcastAcceptRequest(destinationView *view.View, proposal Proposal, resultChan chan Proposal) {
+	for _, process := range destinationView.GetMembers() {
+		go func() {
+			var result Proposal
+			err := comm.SendRPCRequest(process, "ConsensusRequest.Accept", proposal, result)
+			if err != nil {
+				resultChan <- Proposal{Err: err}
+			}
+			resultChan <- result
+		}()
+	}
+}
+
+func broadcastLearnRequest(destinationView *view.View, proposal Proposal) {
+	errorChan := make(chan error, destinationView.N())
+
+	for _, process := range destinationView.GetMembers() {
+		var discardResult error
+		go comm.SendRPCRequestWithErrorChan(process, "ConsensusRequest.Learn", proposal, discardResult, errorChan)
+	}
+
+	failedTotal := 0
+	successTotal := 0
+	for {
+		err := <-errorChan
+		if err != nil {
+			failedTotal++
+			if failedTotal > destinationView.F() {
+				log.Fatalln("Failed to send Reconfig to a quorum")
+			}
+		}
+		successTotal++
+		if successTotal == destinationView.QuorumSize() {
+			return
+		}
+	}
 }

@@ -13,117 +13,150 @@ var diffResultsErr = errors.New("Read Divergence")
 
 // readQuorum asks for the register value from all members of the view, returning the most recent one after it receives answers from a majority.
 // If the view needs to be updated, it will return a *view.OldViewError.  If values returned by the processes differ, it will return diffResultsErr.
-func readQuorum(view *view.View) (RegisterMsg, error) {
-	resultChan := make(chan RegisterMsg, view.N())
-	errChan := make(chan error, view.N())
+func readQuorum(immutableCurrentView *view.View) (RegisterMsg, error) {
+	// Send write request to all
+	resultChan := make(chan RegisterMsg, immutableCurrentView.N())
+	go broadcastRead(immutableCurrentView, resultChan)
 
-	// Send read request to all
-	for _, process := range view.GetMembers() {
-		go sendReadRequest(process, view, resultChan, errChan)
-	}
-
-	// Get quorum
+	// Wait for quorum
 	var failedTotal int
 	var resultArray []RegisterMsg
 	var finalValue RegisterMsg
 	finalValue.Timestamp = -1 // Make it negative to force value.Timestamp > finalValue.Timestamp
+
+	countError := func(err error) bool {
+		log.Println("+1 error to read:", err)
+		failedTotal++
+
+		allFailed := failedTotal == immutableCurrentView.N()
+		mostFailedInspiteSomeSuccess := len(resultArray) > 0 && failedTotal > immutableCurrentView.F()
+
+		if mostFailedInspiteSomeSuccess || allFailed {
+			return false
+		}
+
+		return true
+	}
+
+	countSuccess := func(receivedValue RegisterMsg) bool {
+		resultArray = append(resultArray, receivedValue)
+
+		if receivedValue.Timestamp > finalValue.Timestamp {
+			finalValue = receivedValue
+		}
+
+		if len(resultArray) == immutableCurrentView.QuorumSize() {
+			return true
+		}
+		return false
+	}
+
 	for {
-		select {
-		case resultValue := <-resultChan:
-			if resultValue.Err != nil {
-				return RegisterMsg{}, resultValue.Err
+		receivedValue := <-resultChan
+
+		if receivedValue.Err != nil {
+			if oldViewError, ok := receivedValue.Err.(*view.OldViewError); ok {
+				return RegisterMsg{}, oldViewError
 			}
 
-			resultArray = append(resultArray, resultValue)
-
-			if resultValue.Timestamp > finalValue.Timestamp {
-				finalValue = resultValue
-			}
-
-			if len(resultArray) == view.QuorumSize() {
-				for _, val := range resultArray {
-					if finalValue.Timestamp != val.Timestamp { // There are divergence on the processes
-						return finalValue, diffResultsErr
-					}
-				}
-				return finalValue, nil
-			}
-		case err := <-errChan:
-			log.Println("+1 error on read:", err)
-			failedTotal++
-
-			allFailed := failedTotal == view.N()
-			mostFailedInspiteSomeSuccess := len(resultArray) > 0 && failedTotal > view.F()
-
-			if mostFailedInspiteSomeSuccess || allFailed {
+			ok := countError(receivedValue.Err)
+			if !ok {
 				return RegisterMsg{}, errors.New("Failed to get read quorun")
 			}
+			continue
+		}
+
+		done := countSuccess(receivedValue)
+		if done {
+			// Look for different values returned from the processes
+			for _, val := range resultArray {
+				if finalValue.Timestamp != val.Timestamp {
+					return finalValue, diffResultsErr
+				}
+			}
+			return finalValue, nil
 		}
 	}
+
 }
 
 // writeQuorum tries to write the value in writeMsg to the register of all processes on the view, returning when it gets confirmation from a majority.
 // If the view needs to be updated, it will return the new view in a *view.OldViewError.
-func writeQuorum(view *view.View, writeMsg RegisterMsg) error {
-	resultChan := make(chan RegisterMsg, view.N())
-	errChan := make(chan error, view.N())
-
+func writeQuorum(immutableCurrentView *view.View, writeMsg RegisterMsg) error {
 	// Send write request to all
-	for _, process := range view.GetMembers() {
-		go sendWriteRequest(process, writeMsg, resultChan, errChan)
-	}
+	resultChan := make(chan RegisterMsg, immutableCurrentView.N())
+	go broadcastWrite(immutableCurrentView, writeMsg, resultChan)
 
-	// Get quorum
+	// Wait for quorum
 	var successTotal int
 	var failedTotal int
+
+	countError := func(err error) bool {
+		log.Println("+1 error to write:", err)
+		failedTotal++
+
+		allFailed := failedTotal == immutableCurrentView.N()
+		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > immutableCurrentView.F()
+
+		if mostFailedInspiteSomeSuccess || allFailed {
+			return false
+		}
+
+		return true
+	}
+
+	countSuccess := func() bool {
+		successTotal++
+		if successTotal == immutableCurrentView.QuorumSize() {
+			return true
+		}
+		return false
+	}
+
 	for {
-		select {
-		case resultValue := <-resultChan:
-			if resultValue.Err != nil {
-				return resultValue.Err
+		receivedValue := <-resultChan
+
+		if receivedValue.Err != nil {
+			if oldViewError, ok := receivedValue.Err.(*view.OldViewError); ok {
+				return oldViewError
 			}
 
-			successTotal++
-			if successTotal == view.QuorumSize() {
-				return nil
+			ok := countError(receivedValue.Err)
+			if !ok {
+				return errors.New("Failed to get write quorun")
 			}
+			continue
+		}
 
-		case err := <-errChan:
-			log.Println("+1 error on write:", err)
-			failedTotal++
-
-			allFailed := failedTotal == view.N()
-			mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > view.F()
-
-			if mostFailedInspiteSomeSuccess || allFailed {
-				return errors.New("failedTotal to get write quorun")
-			}
+		done := countSuccess()
+		if done {
+			return nil
 		}
 	}
 }
 
-// ---------- Send functions -------------
-
-// sendWriteRequest sends a write request with writeMsg to process and return the result through resultChan or an error through errChan
-func sendWriteRequest(process view.Process, writeMsg RegisterMsg, resultChan chan RegisterMsg, errChan chan error) {
-	var reply RegisterMsg
-	err := comm.SendRPCRequest(process, "ClientRequest.Write", writeMsg, &reply)
-	if err != nil {
-		errChan <- err
-		return
+func broadcastRead(destinationView *view.View, resultChan chan RegisterMsg) {
+	for _, process := range destinationView.GetMembers() {
+		go func() {
+			var result RegisterMsg
+			err := comm.SendRPCRequest(process, "ClientRequest.Read", destinationView, &result)
+			if err != nil {
+				resultChan <- RegisterMsg{Err: err}
+			}
+			resultChan <- result
+		}()
 	}
-
-	resultChan <- reply
 }
 
-// sendReadRequest sends a read request to process and return an err through errChan or a result through resultChan
-func sendReadRequest(process view.Process, immutableCurrentView *view.View, resultChan chan RegisterMsg, errChan chan error) {
-	var reply RegisterMsg
-	err := comm.SendRPCRequest(process, "ClientRequest.Read", immutableCurrentView, &reply)
-	if err != nil {
-		errChan <- err
-		return
+func broadcastWrite(destinationView *view.View, writeMsg RegisterMsg, resultChan chan RegisterMsg) {
+	for _, process := range destinationView.GetMembers() {
+		go func() {
+			var result RegisterMsg
+			err := comm.SendRPCRequest(process, "ClientRequest.Write", writeMsg, &result)
+			if err != nil {
+				resultChan <- RegisterMsg{Err: err}
+			}
+			resultChan <- result
+		}()
 	}
-
-	resultChan <- reply
 }
