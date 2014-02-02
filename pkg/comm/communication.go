@@ -55,6 +55,7 @@ func SendRPCRequest(process view.Process, serviceMethod string, arg interface{},
 		return errors.New(fmt.Sprintf("process %v is unreachable", process))
 	}
 
+	fmt.Printf("send %v to process %v\n", serviceMethod, process)
 	err := commLink.rpcClient.Call(serviceMethod, arg, result)
 	if err != nil {
 		commLink.rpcClient = nil
