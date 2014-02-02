@@ -1,23 +1,31 @@
 package client
 
 import (
-	"errors"
 	"github.com/mateusbraga/freestore/pkg/comm"
 	"github.com/mateusbraga/freestore/pkg/view"
-	"log"
 )
 
-// GetCurrentView asks processes for the its current view and returns it.
-func GetCurrentView(processes ...view.Process) (*view.View, error) {
-	for _, loopProcess := range processes {
-		var receivedView *view.View
-		err := comm.SendRPCRequest(loopProcess, "ClientRequest.GetCurrentView", 0, &receivedView)
+// GetCurrentView asks process for the its current view and returns it.
+func GetCurrentView(process ...view.Process) (*view.View, error) {
+	var newView *view.View
+	var err error
+	for _, loopProcess := range process {
+		newView, err = sendGetCurrentView(loopProcess)
 		if err != nil {
-			log.Println(err)
 			continue
 		}
-
-		return receivedView, nil
+		return newView, nil
 	}
-	return nil, errors.New("Failed to get current view from processes")
+	return nil, err
+}
+
+// sendGetCurrentView asks process for its currentView
+func sendGetCurrentView(process view.Process) (*view.View, error) {
+	var processCurrentView view.View
+	err := comm.SendRPCRequest(process, "ClientRequest.GetCurrentView", 0, &processCurrentView)
+	if err != nil {
+		return nil, err
+	}
+
+	return &processCurrentView, nil
 }

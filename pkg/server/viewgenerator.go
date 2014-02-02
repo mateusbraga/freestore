@@ -61,8 +61,9 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 		viewSeqMsg.ProposedSeq = initialSeq
 		viewSeqMsg.LastConvergedSeq = nil
 		viewSeqMsg.AssociatedView = associatedView
-
-		go broadcastViewSequence(associatedView.NewCopy(), viewSeqMsg)
+		for _, process := range associatedView.GetMembers() {
+			go sendViewSequence(process, viewSeqMsg)
+		}
 
 		lastProposedSeq = initialSeq
 	}
@@ -124,7 +125,10 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 				viewSeqMsg.ProposedSeq = newProposeSeq
 				viewSeqMsg.LastConvergedSeq = lastConvergedSeq
 
-				go broadcastViewSequence(associatedView.NewCopy(), viewSeqMsg)
+				// Send seq-view to all
+				for _, process := range associatedView.GetMembers() {
+					go sendViewSequence(process, viewSeqMsg)
+				}
 
 				lastProposedSeq = newProposeSeq
 			}
@@ -141,7 +145,9 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 				seqConvMsg.Seq = newConvergedSeq
 
 				// Send seq-conv to all
-				go broadcastViewSequenceConv(associatedView.NewCopy(), seqConvMsg)
+				for _, process := range associatedView.GetMembers() {
+					go sendViewSequenceConv(process, seqConvMsg)
+				}
 			}
 
 		case *SeqConv:
@@ -301,52 +307,20 @@ func init() {
 }
 
 // -------- Send functions -----------
-func broadcastViewSequence(destinationView *view.View, viewSeq ViewSeqMsg) {
-	errorChan := make(chan error, destinationView.N())
-
-	for _, process := range destinationView.GetMembers() {
-		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ViewGeneratorRequest.ProposeSeqView", viewSeq, discardResult, errorChan)
-	}
-
-	failedTotal := 0
-	successTotal := 0
-	for {
-		err := <-errorChan
-		if err != nil {
-			failedTotal++
-			if failedTotal > destinationView.F() {
-				log.Fatalln("Failed to send ProposeSeqView to a quorum")
-			}
-		}
-		successTotal++
-		if successTotal == destinationView.QuorumSize() {
-			return
-		}
+func sendViewSequence(process view.Process, viewSeq ViewSeqMsg) {
+	var reply error
+	err := comm.SendRPCRequest(process, "ViewGeneratorRequest.ProposeSeqView", viewSeq, &reply)
+	if err != nil {
+		log.Println("WARN sendViewSequence:", err)
+		return
 	}
 }
 
-func broadcastViewSequenceConv(destinationView *view.View, seqConv SeqConvMsg) {
-	errorChan := make(chan error, destinationView.N())
-
-	for _, process := range destinationView.GetMembers() {
-		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ViewGeneratorRequest.SeqConv", seqConv, discardResult, errorChan)
-	}
-
-	failedTotal := 0
-	successTotal := 0
-	for {
-		err := <-errorChan
-		if err != nil {
-			failedTotal++
-			if failedTotal > destinationView.F() {
-				log.Fatalln("Failed to SeqConv to a quorum")
-			}
-		}
-		successTotal++
-		if successTotal == destinationView.QuorumSize() {
-			return
-		}
+func sendViewSequenceConv(process view.Process, seqConv SeqConvMsg) {
+	var reply error
+	err := comm.SendRPCRequest(process, "ViewGeneratorRequest.SeqConv", seqConv, &reply)
+	if err != nil {
+		log.Println("WARN sendViewSequenceConv:", err)
+		return
 	}
 }

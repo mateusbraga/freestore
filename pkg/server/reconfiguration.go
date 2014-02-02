@@ -2,6 +2,7 @@ package server
 
 import (
 	"container/list"
+	"errors"
 	"fmt"
 	"log"
 	"net/rpc"
@@ -94,8 +95,9 @@ func generatedViewSeqProcessingLoop() {
 		installSeqMsg.Sender = thisProcess
 
 		// Send install-seq to all from old and new view
-		mergedView := view.MergeMembers(newGeneratedViewSeq.AssociatedView, leastUpdatedView)
-		go broadcastInstallSeq(mergedView, installSeqMsg)
+		for _, process := range newGeneratedViewSeq.AssociatedView.GetMembersAlsoIn(leastUpdatedView) {
+			go sendInstallSeq(process, installSeqMsg)
+		}
 	}
 }
 
@@ -136,8 +138,9 @@ func installSeqProcessingLoop() {
 		}
 
 		// Re-send install-seq to all
-		mergedView := view.MergeMembers(installSeqMsg.AssociatedView, installSeqMsg.InstallView)
-		go broadcastInstallSeq(mergedView, installSeqMsg)
+		for _, process := range installSeqMsg.AssociatedView.GetMembersAlsoIn(installSeqMsg.InstallView) {
+			go sendInstallSeq(process, installSeqMsg)
+		}
 
 		// Quorum check
 		if installSeqQuorumCounter.count(&installSeqMsg.InstallSeq, installSeqMsg.AssociatedView.QuorumSize()) {
@@ -173,7 +176,9 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 		stateMsg.AssociatedView = installSeq.AssociatedView
 
 		// Send state-update request to all
-		go broadcastStateUpdate(installSeq.InstallView.NewCopy(), stateMsg)
+		for _, process := range installSeq.InstallView.GetMembers() {
+			go sendStateUpdate(process, stateMsg)
+		}
 
 		log.Println("State sent!")
 	}
@@ -194,7 +199,9 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 		viewInstalledMsg.CurrentView = currentView
 
 		// Send view-installed to all
-		go broadcastViewInstalled(installSeq.AssociatedView.NewCopy(), viewInstalledMsg)
+		for _, process := range installSeq.AssociatedView.GetMembersNotIn(currentView) {
+			go sendViewInstalled(process, viewInstalledMsg)
+		}
 
 		var newSeq ViewSeq
 		cvIsMostUpdated := true
@@ -374,19 +381,79 @@ func syncState(installSeq InstallSeq) {
 
 // ------------- Join and Leave ---------------------
 
-func Join() {
+func Join() error {
+	resultChan := make(chan error, currentView.N())
+	errChan := make(chan error, currentView.N())
+
 	reconfig := ReconfigMsg{CurrentView: currentView.NewCopy(), Update: view.Update{view.Join, thisProcess}}
 
-	// Send reconfig request to currentView
-	go broadcastReconfigRequest(currentView.NewCopy(), reconfig)
+	// Send reconfig request to all
+	for _, process := range currentView.GetMembers() {
+		go sendReconfigRequest(process, reconfig, resultChan, errChan)
+	}
 
+	// Get quorum
+	var failed int
+	var success int
+	for {
+		select {
+		case result := <-resultChan:
+			if result != nil {
+				errChan <- result
+				break
+			}
+
+			success++
+			if success == currentView.QuorumSize() {
+				return nil
+			}
+		case err := <-errChan:
+			log.Println("+1 failure to reconfig:", err)
+
+			failed++
+			if failed > currentView.F() {
+				return errors.New("Failed to get rec-confirm quorun")
+			}
+		}
+	}
 }
 
-func Leave() {
-	reconfig := ReconfigMsg{CurrentView: currentView.NewCopy(), Update: view.Update{view.Leave, thisProcess}}
+func Leave() error {
+	resultChan := make(chan error, currentView.N())
+	errChan := make(chan error, currentView.N())
+
+	reconfig := ReconfigMsg{Update: view.Update{view.Leave, thisProcess}}
+	reconfig.CurrentView = currentView.NewCopy()
 
 	// Send reconfig request to all
-	go broadcastReconfigRequest(currentView.NewCopy(), reconfig)
+	for _, process := range currentView.GetMembers() {
+		go sendReconfigRequest(process, reconfig, resultChan, errChan)
+	}
+
+	// Get quorum
+	var failed int
+	var success int
+	for {
+		select {
+		case result := <-resultChan:
+			if result != nil {
+				errChan <- result
+				break
+			}
+
+			success++
+			if success == currentView.QuorumSize() {
+				return nil
+			}
+		case err := <-errChan:
+			log.Println("+1 failure to reconfig:", err)
+
+			failed++
+			if failed > currentView.F() {
+				return errors.New("Failed to get rec-confirm quorun")
+			}
+		}
+	}
 }
 
 // -------- REQUESTS -----------
@@ -493,102 +560,40 @@ func init() {
 
 // -------- Send functions -----------
 
-func broadcastViewInstalled(destinationView *view.View, viewInstalled ViewInstalledMsg) {
-	errorChan := make(chan error, destinationView.N())
-
-	for _, process := range destinationView.GetMembers() {
-		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.ViewInstalled", viewInstalled, discardResult, errorChan)
-	}
-
-	failedTotal := 0
-	successTotal := 0
-	for {
-		err := <-errorChan
-		if err != nil {
-			failedTotal++
-			if failedTotal > destinationView.F() {
-				log.Fatalln("Failed to send ViewInstalled to a quorum")
-			}
-		}
-		successTotal++
-		if successTotal == destinationView.QuorumSize() {
-			return
-		}
+func sendViewInstalled(process view.Process, viewInstalled ViewInstalledMsg) {
+	var reply error
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.ViewInstalled", viewInstalled, &reply)
+	if err != nil {
+		log.Println("WARN sendViewInstalled:", err)
+		return
 	}
 }
 
-func broadcastStateUpdate(destinationView *view.View, stateUpdateMsg StateUpdateMsg) {
-	errorChan := make(chan error, destinationView.N())
-
-	for _, process := range destinationView.GetMembers() {
-		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.StateUpdate", stateUpdateMsg, discardResult, errorChan)
-	}
-
-	failedTotal := 0
-	successTotal := 0
-	for {
-		err := <-errorChan
-		if err != nil {
-			failedTotal++
-			if failedTotal > destinationView.F() {
-				log.Fatalln("Failed to send StateUpdate to a quorum")
-			}
-		}
-		successTotal++
-		if successTotal == destinationView.QuorumSize() {
-			return
-		}
+func sendStateUpdate(process view.Process, state StateUpdateMsg) {
+	var reply error
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.StateUpdate", state, &reply)
+	if err != nil {
+		log.Println("WARN sendStateUpdate:", err)
+		return
 	}
 }
 
-func broadcastInstallSeq(destinationView *view.View, installSeq InstallSeqMsg) {
-	errorChan := make(chan error, destinationView.N())
-
-	for _, process := range destinationView.GetMembers() {
-		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.InstallSeq", installSeq, discardResult, errorChan)
-	}
-
-	failedTotal := 0
-	successTotal := 0
-	for {
-		err := <-errorChan
-		if err != nil {
-			failedTotal++
-			if failedTotal > destinationView.F() {
-				log.Fatalln("Failed to send InstallSeq to a quorum")
-			}
-		}
-		successTotal++
-		if successTotal == destinationView.QuorumSize() {
-			return
-		}
+func sendInstallSeq(process view.Process, installSeq InstallSeqMsg) {
+	var reply error
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.InstallSeq", installSeq, &reply)
+	if err != nil {
+		log.Println("WARN sendInstallSeq:", err)
+		return
 	}
 }
 
-func broadcastReconfigRequest(destinationView *view.View, reconfig ReconfigMsg) {
-	errorChan := make(chan error, destinationView.N())
-
-	for _, process := range destinationView.GetMembers() {
-		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.Reconfig", reconfig, discardResult, errorChan)
+func sendReconfigRequest(process view.Process, reconfig ReconfigMsg, resultChan chan error, errChan chan error) {
+	var reply error
+	err := comm.SendRPCRequest(process, "ReconfigurationRequest.Reconfig", reconfig, &reply)
+	if err != nil {
+		errChan <- err
+		return
 	}
 
-	failedTotal := 0
-	successTotal := 0
-	for {
-		err := <-errorChan
-		if err != nil {
-			failedTotal++
-			if failedTotal > destinationView.F() {
-				log.Fatalln("Failed to send Reconfig to a quorum")
-			}
-		}
-		successTotal++
-		if successTotal == destinationView.QuorumSize() {
-			return
-		}
-	}
+	resultChan <- reply
 }

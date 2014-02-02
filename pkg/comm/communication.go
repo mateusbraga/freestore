@@ -1,187 +1,91 @@
 package comm
 
 import (
-	"errors"
-	"fmt"
-	"log"
 	"net/rpc"
 	"sync"
-	"time"
 
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-const commLinkRepairPeriod = 20 * time.Second
-
 var (
-	commLinkTable   = make(map[view.Process]communicationLink)
-	commLinkTableMu sync.Mutex
-
-	repairLinkChan = make(chan communicationLink)
+	rpcClientWorkers   = make(map[view.Process]rpcClientInstance)
+	rpcClientWorkersMu sync.Mutex
 )
 
-type communicationLink struct {
-	Process   view.Process
-	rpcClient *rpc.Client
+type rpcClientJob struct {
+	serviceMethod string
+	args          interface{}
+	reply         interface{}
+	errorCh       chan error
 }
 
-func (commLink communicationLink) isFaulty() bool {
-	return commLink.rpcClient == nil
+type rpcClientInstance struct {
+	process view.Process
+	jobChan chan rpcClientJob
 }
 
-func getCommLink(process view.Process) communicationLink {
-	commLinkTableMu.Lock()
-	defer commLinkTableMu.Unlock()
+// rpcClientWorker is responsable for maintaining a rpc.Client.
+// Currently, rpcClientWorker never ends so we can keep it simpler for now.
+func rpcClientWorker(rci rpcClientInstance) {
+	process := rci.process
+	jobChan := rci.jobChan
 
-	commLink, ok := commLinkTable[process]
-	if !ok {
-		commLink = communicationLink{Process: process}
-
-		newRpcClient, err := rpc.Dial("tcp", process.Addr)
-		if err != nil {
-			repairLinkChan <- commLink
-		}
-		commLink.rpcClient = newRpcClient
-
-		commLinkTable[process] = commLink
-	}
-
-	return commLink
-}
-
-//func BroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}, replyType interface{}, resultChan chan CommunicationResult) {
-//if resultChan == nil {
-//newResultChan := make(chan CommunicationResult, destinationView.N())
-//broadcastRPCRequest(destinationView, serviceMethod, arg, newResultChan)
-
-//// confirm that a majority of processes from destinationView was successful
-//successTotal := 0
-//failedTotal := 0
-//for resultCounter := 0; resultCounter < destinationView.N(); resultCounter++ {
-//result := <-resultChan
-//if result.Err != nil {
-//failedTotal++
-
-//if failedTotal == destinationView.F() {
-//log.Panicf("%v processes failed in view %v during BroadcastRPCRequest %v\n", failedTotal, destinationView, serviceMethod)
-//}
-//continue
-//}
-
-//successTotal++
-//if successTotal == destinationView.QuorumSize() {
-//break
-//}
-//}
-
-//return
-//} else {
-//broadcastRPCRequest(destinationView, serviceMethod, arg, resultChan)
-//return
-//}
-//}
-
-//func broadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}, resultChan chan CommunicationResult) {
-//for _, process := range destinationView.GetMembers() {
-//commLink := getCommLink(process)
-//if commLink.isFaulty() {
-//err := errors.New(fmt.Sprintf("process %v is unreachable", process))
-//errResult := CommunicationResult{Err: err}
-
-//// try to return error, will not break if resultChan is nil or blocking
-//select {
-//case resultChan <- errResult:
-//default:
-//log.Println("WARNING: Could not send error through resultChan. serviceMethod:", serviceMethod)
-//}
-
-//continue
-//}
-
-//go func() {
-//resultChan <- sendRPCRequest(commLink, serviceMethod, arg)
-//}()
-//}
-//}
-
-func SendRPCRequest(process view.Process, serviceMethod string, arg interface{}, result interface{}) error {
-	commLink := getCommLink(process)
-	if commLink.isFaulty() {
-		return errors.New(fmt.Sprintf("process %v is unreachable", process))
-	}
-
-	err := commLink.rpcClient.Call(serviceMethod, arg, result)
-	if err != nil {
-		commLink.rpcClient = nil
-		repairLinkChan <- commLink
-		return errors.New(fmt.Sprintf("sendRPCRequest to process %v failed: %v", commLink.Process, err))
-	}
-
-	return nil
-}
-
-func SendRPCRequestWithErrorChan(process view.Process, serviceMethod string, arg interface{}, result interface{}, errorChan chan error) {
-	commLink := getCommLink(process)
-	if commLink.isFaulty() {
-		errorChan <- errors.New(fmt.Sprintf("process %v is unreachable", process))
-	}
-
-	err := commLink.rpcClient.Call(serviceMethod, arg, &result)
-	if err != nil {
-		commLink.rpcClient = nil
-		repairLinkChan <- commLink
-		errorChan <- errors.New(fmt.Sprintf("sendRPCRequest to process %v failed: %v", commLink.Process, err))
-	}
-	errorChan <- nil
-}
-
-func repairCommLinkFunc(process view.Process) error {
-	newRpcClient, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		return err
-	}
-
-	commLinkTableMu.Lock()
-	defer commLinkTableMu.Unlock()
-
-	commLink := commLinkTable[process]
-	commLink.rpcClient = newRpcClient
-	commLinkTable[process] = commLink
-	return nil
-}
-
-func repairCommLinkLoop() {
-	faultyCommLinks := make(map[view.Process]bool)
-	repairTicker := time.NewTicker(commLinkRepairPeriod)
+	var client *rpc.Client
+	var err error
 
 	for {
-		select {
-		case commLink := <-repairLinkChan:
-			err := repairCommLinkFunc(commLink.Process)
+		job := <-jobChan
+
+		// make sure client is not null
+		if client == nil {
+			client, err = rpc.Dial("tcp", process.Addr)
 			if err != nil {
-				log.Printf("Failed to repair communication link to process %v: %v\n", commLink.Process, err)
-				faultyCommLinks[commLink.Process] = true
-			}
-		case _ = <-repairTicker.C:
-			var repairedSucessfully []view.Process
-
-			for process, _ := range faultyCommLinks {
-				err := repairCommLinkFunc(process)
-				if err != nil {
-					log.Printf("Failed to repair communication link to process %v: %v\n", process, err)
-				}
-
-				repairedSucessfully = append(repairedSucessfully, process)
-			}
-
-			for _, process := range repairedSucessfully {
-				delete(faultyCommLinks, process)
+				job.errorCh <- err
+				continue
 			}
 		}
 
+		err = client.Call(job.serviceMethod, job.args, job.reply)
+		if err != nil {
+			if err == rpc.ErrShutdown {
+				client, err = rpc.Dial("tcp", process.Addr)
+				if err != nil {
+					job.errorCh <- err
+					continue
+				}
+
+				// retry this job
+				go func() { jobChan <- job }()
+
+			} else {
+				job.errorCh <- err
+			}
+		}
+		job.errorCh <- nil
 	}
 }
 
-func init() {
-	go repairCommLinkLoop()
+func getRpcClientInstance(process view.Process) rpcClientInstance {
+	rpcClientWorkersMu.Lock()
+	defer rpcClientWorkersMu.Unlock()
+
+	rci, ok := rpcClientWorkers[process]
+	if !ok {
+		// worker does not exist, create one
+		rci = rpcClientInstance{process: process, jobChan: make(chan rpcClientJob, 20)}
+		rpcClientWorkers[process] = rci
+		go rpcClientWorker(rci)
+	}
+	return rci
+}
+
+func SendRPCRequest(process view.Process, serviceMethod string, args interface{}, reply interface{}) error {
+	rci := getRpcClientInstance(process)
+
+	errorCh := make(chan error)
+	rcj := rpcClientJob{serviceMethod: serviceMethod, args: args, reply: reply, errorCh: errorCh}
+	rci.jobChan <- rcj
+
+	err := <-errorCh
+	return err
 }

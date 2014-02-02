@@ -222,24 +222,24 @@ func (v *View) GetMembers() []Process {
 	return members
 }
 
-func MergeMembers(v *View, v2 *View) *View {
+func (v *View) GetMembersAlsoIn(v2 *View) []Process {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
 	v2.mu.RLock()
 	defer v2.mu.RUnlock()
 
-	newView := New()
-
+	var members []Process
 	for process, _ := range v.members {
-		newView.AddUpdate(Update{Join, process})
+		members = append(members, process)
 	}
-
 	for process, _ := range v2.members {
-		newView.AddUpdate(Update{Join, process})
+		if !v.members[process] {
+			members = append(members, process)
+		}
 	}
 
-	return newView
+	return members
 }
 
 func (v *View) GetMembersNotIn(v2 *View) []Process {

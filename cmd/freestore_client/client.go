@@ -44,7 +44,7 @@ func main() {
 			log.Fatalln(err)
 		}
 
-		if i%100000 == 1 {
+		if i%100000 == 0 {
 			fmt.Printf("%v: Read %v (%v)-> Write (%v)\n", i, finalValue, endRead.Sub(startRead), endWrite.Sub(startWrite))
 		} else {
 			fmt.Printf(".")
