@@ -431,6 +431,7 @@ func init() {
 	rpc.Register(new(ConsensusRequest))
 }
 
+// ------- Init database -----------
 func initDatabase() {
 	var err error
 	database, err = kv.CreateMem(new(kv.Options))
@@ -454,11 +455,12 @@ func init() {
 	gob.Register(new(OldProposalNumberError))
 }
 
+// ------- Broadcast functions -----------
 func broadcastPrepareRequest(destinationView *view.View, proposal Proposal, resultChan chan Proposal) {
 	for _, process := range destinationView.GetMembers() {
 		go func() {
 			var result Proposal
-			err := comm.SendRPCRequest(process, "ConsensusRequest.Prepare", proposal, result)
+			err := comm.SendRPCRequest(process, "ConsensusRequest.Prepare", proposal, &result)
 			if err != nil {
 				resultChan <- Proposal{Err: err}
 			}
@@ -471,7 +473,7 @@ func broadcastAcceptRequest(destinationView *view.View, proposal Proposal, resul
 	for _, process := range destinationView.GetMembers() {
 		go func() {
 			var result Proposal
-			err := comm.SendRPCRequest(process, "ConsensusRequest.Accept", proposal, result)
+			err := comm.SendRPCRequest(process, "ConsensusRequest.Accept", proposal, &result)
 			if err != nil {
 				resultChan <- Proposal{Err: err}
 			}
@@ -485,7 +487,7 @@ func broadcastLearnRequest(destinationView *view.View, proposal Proposal) {
 
 	for _, process := range destinationView.GetMembers() {
 		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ConsensusRequest.Learn", proposal, discardResult, errorChan)
+		go comm.SendRPCRequestWithErrorChan(process, "ConsensusRequest.Learn", proposal, &discardResult, errorChan)
 	}
 
 	failedTotal := 0

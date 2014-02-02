@@ -498,7 +498,7 @@ func broadcastViewInstalled(destinationView *view.View, viewInstalled ViewInstal
 
 	for _, process := range destinationView.GetMembers() {
 		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.ViewInstalled", viewInstalled, discardResult, errorChan)
+		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.ViewInstalled", viewInstalled, &discardResult, errorChan)
 	}
 
 	failedTotal := 0
@@ -523,7 +523,7 @@ func broadcastStateUpdate(destinationView *view.View, stateUpdateMsg StateUpdate
 
 	for _, process := range destinationView.GetMembers() {
 		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.StateUpdate", stateUpdateMsg, discardResult, errorChan)
+		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.StateUpdate", stateUpdateMsg, &discardResult, errorChan)
 	}
 
 	failedTotal := 0
@@ -548,7 +548,7 @@ func broadcastInstallSeq(destinationView *view.View, installSeq InstallSeqMsg) {
 
 	for _, process := range destinationView.GetMembers() {
 		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.InstallSeq", installSeq, discardResult, errorChan)
+		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.InstallSeq", installSeq, &discardResult, errorChan)
 	}
 
 	failedTotal := 0
@@ -573,7 +573,7 @@ func broadcastReconfigRequest(destinationView *view.View, reconfig ReconfigMsg) 
 
 	for _, process := range destinationView.GetMembers() {
 		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.Reconfig", reconfig, discardResult, errorChan)
+		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.Reconfig", reconfig, &discardResult, errorChan)
 	}
 
 	failedTotal := 0

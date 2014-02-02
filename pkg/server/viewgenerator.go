@@ -300,13 +300,13 @@ func init() {
 	rpc.Register(new(ViewGeneratorRequest))
 }
 
-// -------- Send functions -----------
+// -------- Broadcast functions -----------
 func broadcastViewSequence(destinationView *view.View, viewSeq ViewSeqMsg) {
 	errorChan := make(chan error, destinationView.N())
 
 	for _, process := range destinationView.GetMembers() {
 		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ViewGeneratorRequest.ProposeSeqView", viewSeq, discardResult, errorChan)
+		go comm.SendRPCRequestWithErrorChan(process, "ViewGeneratorRequest.ProposeSeqView", viewSeq, &discardResult, errorChan)
 	}
 
 	failedTotal := 0
@@ -331,7 +331,7 @@ func broadcastViewSequenceConv(destinationView *view.View, seqConv SeqConvMsg) {
 
 	for _, process := range destinationView.GetMembers() {
 		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ViewGeneratorRequest.SeqConv", seqConv, discardResult, errorChan)
+		go comm.SendRPCRequestWithErrorChan(process, "ViewGeneratorRequest.SeqConv", seqConv, &discardResult, errorChan)
 	}
 
 	failedTotal := 0

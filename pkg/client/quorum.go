@@ -22,7 +22,6 @@ func readQuorum(immutableCurrentView *view.View) (RegisterMsg, error) {
 	var failedTotal int
 	var resultArray []RegisterMsg
 	var finalValue RegisterMsg
-	finalValue.Timestamp = -1 // Make it negative to force value.Timestamp > finalValue.Timestamp
 
 	countError := func(err error) bool {
 		log.Println("+1 error to read:", err)
