@@ -497,8 +497,10 @@ func broadcastViewInstalled(destinationView *view.View, viewInstalled ViewInstal
 	errorChan := make(chan error, destinationView.N())
 
 	for _, process := range destinationView.GetMembers() {
-		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.ViewInstalled", viewInstalled, &discardResult, errorChan)
+		go func(process view.Process) {
+			var discardResult error
+			errorChan <- comm.SendRPCRequest(process, "ReconfigurationRequest.ViewInstalled", viewInstalled, &discardResult)
+		}(process)
 	}
 
 	failedTotal := 0
@@ -522,8 +524,10 @@ func broadcastStateUpdate(destinationView *view.View, stateUpdateMsg StateUpdate
 	errorChan := make(chan error, destinationView.N())
 
 	for _, process := range destinationView.GetMembers() {
-		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.StateUpdate", stateUpdateMsg, &discardResult, errorChan)
+		go func(process view.Process) {
+			var discardResult error
+			errorChan <- comm.SendRPCRequest(process, "ReconfigurationRequest.StateUpdate", stateUpdateMsg, &discardResult)
+		}(process)
 	}
 
 	failedTotal := 0
@@ -547,8 +551,10 @@ func broadcastInstallSeq(destinationView *view.View, installSeq InstallSeqMsg) {
 	errorChan := make(chan error, destinationView.N())
 
 	for _, process := range destinationView.GetMembers() {
-		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.InstallSeq", installSeq, &discardResult, errorChan)
+		go func(process view.Process) {
+			var discardResult error
+			errorChan <- comm.SendRPCRequest(process, "ReconfigurationRequest.InstallSeq", installSeq, &discardResult)
+		}(process)
 	}
 
 	failedTotal := 0
@@ -572,8 +578,10 @@ func broadcastReconfigRequest(destinationView *view.View, reconfig ReconfigMsg) 
 	errorChan := make(chan error, destinationView.N())
 
 	for _, process := range destinationView.GetMembers() {
-		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ReconfigurationRequest.Reconfig", reconfig, &discardResult, errorChan)
+		go func(process view.Process) {
+			var discardResult error
+			errorChan <- comm.SendRPCRequest(process, "ReconfigurationRequest.Reconfig", reconfig, &discardResult)
+		}(process)
 	}
 
 	failedTotal := 0

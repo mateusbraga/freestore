@@ -66,18 +66,7 @@ func SendRPCRequest(process view.Process, serviceMethod string, arg interface{},
 }
 
 func SendRPCRequestWithErrorChan(process view.Process, serviceMethod string, arg interface{}, result interface{}, errorChan chan error) {
-	commLink := getCommLink(process)
-	if commLink.isFaulty() {
-		errorChan <- errors.New(fmt.Sprintf("process %v is unreachable", process))
-	}
-
-	err := commLink.rpcClient.Call(serviceMethod, arg, &result)
-	if err != nil {
-		commLink.rpcClient = nil
-		repairLinkChan <- commLink
-		errorChan <- errors.New(fmt.Sprintf("sendRPCRequest to process %v failed: %v", commLink.Process, err))
-	}
-	errorChan <- nil
+	errorChan <- SendRPCRequest(process, serviceMethod, arg, result)
 }
 
 func repairCommLinkFunc(process view.Process) error {

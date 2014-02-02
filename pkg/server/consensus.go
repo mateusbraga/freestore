@@ -486,8 +486,10 @@ func broadcastLearnRequest(destinationView *view.View, proposal Proposal) {
 	errorChan := make(chan error, destinationView.N())
 
 	for _, process := range destinationView.GetMembers() {
-		var discardResult error
-		go comm.SendRPCRequestWithErrorChan(process, "ConsensusRequest.Learn", proposal, &discardResult, errorChan)
+		go func(process view.Process) {
+			var discardResult error
+			errorChan <- comm.SendRPCRequest(process, "ConsensusRequest.Learn", proposal, &discardResult)
+		}(process)
 	}
 
 	failedTotal := 0
