@@ -29,7 +29,7 @@ func Run(bindAddr string, initialView *view.View, useConsensusArg bool) {
 	thisProcess = view.Process{listener.Addr().String()}
 
 	log.Println("Initial View:", initialView)
-	currentView.Set(initialView)
+	currentView = initialView.NewCopy()
 
 	useConsensus = useConsensusArg
 
@@ -57,7 +57,7 @@ func getCurrentView(processes ...view.Process) {
 			continue
 		}
 
-		currentView.Set(receivedView)
+		currentView = receivedView.NewCopy()
 		return
 	}
 

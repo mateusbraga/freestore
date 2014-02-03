@@ -38,19 +38,23 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	initialView := view.New()
+	var initialView *view.View
 	switch {
 	case strings.Contains(hostname, "node-"): // emulab.net
+		updates := []view.Update{}
 		for i := 0; i < *numberOfServers; i++ {
 			process := view.Process{fmt.Sprintf("10.1.1.%d:5000", i+2)}
-			initialView.AddUpdate(view.Update{view.Join, process})
+			updates = append(updates, view.Update{view.Join, process})
 		}
+		initialView = view.NewWithUpdates(updates...)
 
 	default:
+		updates := []view.Update{}
 		for i := 0; i < *numberOfServers; i++ {
 			process := view.Process{fmt.Sprintf("[::]:500%d", i)}
-			initialView.AddUpdate(view.Update{view.Join, process})
+			updates = append(updates, view.Update{view.Join, process})
 		}
+		initialView = view.NewWithUpdates(updates...)
 	}
 
 	go func() {

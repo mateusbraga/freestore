@@ -5,6 +5,12 @@ import (
 )
 
 func TestViewEqual(t *testing.T) {
+	updates := []Update{Update{Type: Join, Process: Process{"1"}},
+		Update{Type: Join, Process: Process{"2"}},
+		Update{Type: Join, Process: Process{"3"}},
+		Update{Type: Leave, Process: Process{"1"}},
+	}
+
 	v1 := New()
 	v2 := New()
 
@@ -12,58 +18,33 @@ func TestViewEqual(t *testing.T) {
 		t.Fatalf("Empty views v1 and v2 should be equal")
 	}
 
-	v1.AddUpdate(Update{Join, Process{"1"}})
-	v1.AddUpdate(Update{Join, Process{"2"}})
-	v1.AddUpdate(Update{Join, Process{"3"}})
-	v1.AddUpdate(Update{Leave, Process{"1"}})
+	v1 = v1.NewCopyWithUpdates(updates...)
 
 	if v1.Equal(v2) {
 		t.Fatalf("Views v1 and v2 should be different")
 	}
 
-	v2.AddUpdate(Update{Join, Process{"1"}})
-	v2.AddUpdate(Update{Join, Process{"2"}})
-	v2.AddUpdate(Update{Join, Process{"3"}})
-	v2.AddUpdate(Update{Leave, Process{"1"}})
+	v2 = v2.NewCopyWithUpdates(updates...)
 
 	if !v1.Equal(v2) {
 		t.Fatalf("Views v1 and v2 should be equal")
 	}
 
-	v2.AddUpdate(Update{Leave, Process{"2"}})
+	v2 = v2.NewCopyWithUpdates(Update{Leave, Process{"2"}})
 
 	if v1.Equal(v2) {
 		t.Fatalf("Views v1 and v2 should be different")
-	}
-}
-
-func TestViewSet(t *testing.T) {
-	v1 := New()
-	v2 := New()
-
-	v1.AddUpdate(Update{Join, Process{"1"}})
-	v1.AddUpdate(Update{Join, Process{"2"}})
-	v1.AddUpdate(Update{Join, Process{"3"}})
-	v1.AddUpdate(Update{Leave, Process{"1"}})
-
-	if v1.N() != 2 {
-		t.Fatalf("v1 should have 2 members")
-	}
-
-	v2.Set(v1)
-
-	if !v1.Equal(v2) {
-		t.Fatalf("Views v1 and v2 should be equal")
 	}
 }
 
 func TestViewGetMembers(t *testing.T) {
-	v1 := New()
+	updates := []Update{Update{Type: Join, Process: Process{"1"}},
+		Update{Type: Join, Process: Process{"2"}},
+		Update{Type: Join, Process: Process{"3"}},
+		Update{Type: Leave, Process: Process{"1"}},
+	}
 
-	v1.AddUpdate(Update{Join, Process{"1"}})
-	v1.AddUpdate(Update{Join, Process{"2"}})
-	v1.AddUpdate(Update{Join, Process{"3"}})
-	v1.AddUpdate(Update{Leave, Process{"1"}})
+	v1 := NewWithUpdates(updates...)
 
 	processes := v1.GetMembers()
 	processes2 := []Process{Process{"2"}, Process{"3"}}
@@ -87,10 +68,11 @@ func TestViewGetMembers(t *testing.T) {
 }
 
 func TestViewSize(t *testing.T) {
-	v1 := New()
+	updates := []Update{Update{Type: Join, Process: Process{"1"}},
+		Update{Type: Join, Process: Process{"2"}},
+	}
 
-	v1.AddUpdate(Update{Join, Process{"1"}})
-	v1.AddUpdate(Update{Join, Process{"2"}})
+	v1 := NewWithUpdates(updates...)
 
 	if n := v1.N(); n != 2 {
 		t.Errorf("v1 should have 2 members, not %d", n)
@@ -104,7 +86,7 @@ func TestViewSize(t *testing.T) {
 		t.Errorf("Number of tolerable failures of 2 processes should be 0, not %d", f)
 	}
 
-	v1.AddUpdate(Update{Join, Process{"3"}})
+	v1 = v1.NewCopyWithUpdates(Update{Join, Process{"3"}})
 
 	if q := v1.QuorumSize(); q != 2 {
 		t.Errorf("Quorum of 3 processes should be 2, not %d", q)
@@ -114,7 +96,7 @@ func TestViewSize(t *testing.T) {
 		t.Errorf("Number of tolerable failures of 3 processes should be 1, not %d", f)
 	}
 
-	v1.AddUpdate(Update{Join, Process{"4"}})
+	v1 = v1.NewCopyWithUpdates(Update{Join, Process{"4"}})
 
 	if q := v1.QuorumSize(); q != 3 {
 		t.Errorf("Quorum of 4 processes should be 3, not %d", q)
@@ -126,13 +108,12 @@ func TestViewSize(t *testing.T) {
 }
 
 func TestViewLessUpdatedThan(t *testing.T) {
-	v1 := New()
-	v2 := New()
+	updates := []Update{Update{Type: Join, Process: Process{"1"}},
+		Update{Type: Join, Process: Process{"2"}},
+	}
 
-	v1.AddUpdate(Update{Join, Process{"1"}})
-	v1.AddUpdate(Update{Join, Process{"2"}})
-
-	v2.AddUpdate(Update{Join, Process{"1"}})
+	v1 := NewWithUpdates(updates...)
+	v2 := NewWithUpdates(updates[0])
 
 	if v1.LessUpdatedThan(v2) {
 		t.Errorf("v1 is not less updated than v2!")
@@ -142,7 +123,7 @@ func TestViewLessUpdatedThan(t *testing.T) {
 		t.Errorf("v2 is less updated than v1!")
 	}
 
-	v2.AddUpdate(Update{Join, Process{"3"}})
+	v2 = v2.NewCopyWithUpdates(Update{Join, Process{"3"}})
 
 	if !v1.LessUpdatedThan(v2) {
 		t.Errorf("v1 is less updated than v2!")
@@ -152,8 +133,8 @@ func TestViewLessUpdatedThan(t *testing.T) {
 		t.Errorf("v2 is less updated than v1!")
 	}
 
-	v1.AddUpdate(Update{Join, Process{"3"}})
-	v2.AddUpdate(Update{Join, Process{"2"}})
+	v1 = v1.NewCopyWithUpdates(Update{Join, Process{"3"}})
+	v2 = v2.NewCopyWithUpdates(Update{Join, Process{"2"}})
 
 	if v2.LessUpdatedThan(v1) {
 		t.Errorf("v2 is not less updated than v1!")
@@ -161,12 +142,13 @@ func TestViewLessUpdatedThan(t *testing.T) {
 }
 
 func TestNewCopy(t *testing.T) {
-	v1 := New()
+	updates := []Update{Update{Type: Join, Process: Process{"1"}},
+		Update{Type: Join, Process: Process{"2"}},
+		Update{Type: Join, Process: Process{"3"}},
+		Update{Type: Leave, Process: Process{"1"}},
+	}
 
-	v1.AddUpdate(Update{Join, Process{"1"}})
-	v1.AddUpdate(Update{Join, Process{"2"}})
-	v1.AddUpdate(Update{Join, Process{"3"}})
-	v1.AddUpdate(Update{Leave, Process{"1"}})
+	v1 := NewWithUpdates(updates...)
 
 	v2 := v1.NewCopy()
 	if !v1.Equal(v2) {
@@ -175,11 +157,12 @@ func TestNewCopy(t *testing.T) {
 }
 
 func TestGetProcessPosition(t *testing.T) {
-	v1 := New()
+	updates := []Update{Update{Type: Join, Process: Process{"1"}},
+		Update{Type: Join, Process: Process{"2"}},
+		Update{Type: Join, Process: Process{"3"}},
+	}
 
-	v1.AddUpdate(Update{Join, Process{"1"}})
-	v1.AddUpdate(Update{Join, Process{"2"}})
-	v1.AddUpdate(Update{Join, Process{"3"}})
+	v1 := NewWithUpdates(updates...)
 
 	if position := v1.GetProcessPosition(Process{"1"}); position != 0 {
 		t.Errorf("GetProcessPosition: expected 0, got %v", position)
@@ -189,7 +172,7 @@ func TestGetProcessPosition(t *testing.T) {
 		t.Errorf("GetProcessPosition: expected 1, got %v", position)
 	}
 
-	v1.AddUpdate(Update{Leave, Process{"1"}})
+	v1 = v1.NewCopyWithUpdates(Update{Leave, Process{"1"}})
 
 	if position := v1.GetProcessPosition(Process{"1"}); position != -1 {
 		t.Errorf("GetProcessPosition: expected -1, got %v", position)

@@ -109,8 +109,8 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 					oldMostUpdated := lastProposedSeq.GetMostUpdatedView()
 					receivedMostUpdated := receivedViewSeqMsg.ProposedSeq.GetMostUpdatedView()
 
-					auxView := oldMostUpdated.NewCopy()
-					auxView.Merge(receivedMostUpdated)
+					updates := append(oldMostUpdated.GetEntries(), receivedMostUpdated.GetEntries()...)
+					auxView := view.NewWithUpdates(updates...)
 
 					newProposeSeq = append(lastConvergedSeq, auxView)
 					break

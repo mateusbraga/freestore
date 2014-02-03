@@ -7,14 +7,11 @@ import (
 )
 
 func TestGetMostUpdatedView(t *testing.T) {
-	v := view.New()
-	v.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5000"}})
+	v := view.NewWithUpdates(view.Update{Type: view.Join, Process: view.Process{"[::]:5000"}})
 
-	v2 := v.NewCopy()
-	v2.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5001"}})
+	v2 := v.NewCopyWithUpdates(view.Update{Type: view.Join, Process: view.Process{"[::]:5001"}})
 
-	v3 := v2.NewCopy()
-	v3.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5002"}})
+	v3 := v2.NewCopyWithUpdates(view.Update{Type: view.Join, Process: view.Process{"[::]:5002"}})
 
 	var seq ViewSeq
 
@@ -38,14 +35,11 @@ func TestGetMostUpdatedView(t *testing.T) {
 }
 
 func TestGetLeastUpdatedView(t *testing.T) {
-	v := view.New()
-	v.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5000"}})
+	v := view.NewWithUpdates(view.Update{Type: view.Join, Process: view.Process{"[::]:5000"}})
 
-	v2 := v.NewCopy()
-	v2.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5001"}})
+	v2 := v.NewCopyWithUpdates(view.Update{Type: view.Join, Process: view.Process{"[::]:5001"}})
 
-	v3 := v2.NewCopy()
-	v3.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5002"}})
+	v3 := v2.NewCopyWithUpdates(view.Update{Type: view.Join, Process: view.Process{"[::]:5002"}})
 
 	var seq ViewSeq
 

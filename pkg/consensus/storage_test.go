@@ -9,10 +9,11 @@ import (
 func TestDatabaseFunctions(t *testing.T) {
 	initStorage()
 
-	associatedView := view.New()
-	associatedView.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5000"}})
-	associatedView.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5001"}})
-	associatedView.AddUpdate(view.Update{Type: view.Join, Process: view.Process{"[::]:5002"}})
+	updates := []view.Update{view.Update{Type: view.Join, Process: view.Process{"[::]:5000"}},
+		view.Update{Type: view.Join, Process: view.Process{"[::]:5001"}},
+		view.Update{Type: view.Join, Process: view.Process{"[::]:5002"}}}
+
+	associatedView := view.NewWithUpdates(updates...)
 
 	thisProcess := view.Process{"[::]:5001"}
 

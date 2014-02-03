@@ -13,10 +13,10 @@ var diffResultsErr = errors.New("Read Divergence")
 
 // readQuorum asks for the register value from all members of the view, returning the most recent one after it receives answers from a majority.
 // If the view needs to be updated, it will return a *view.OldViewError.  If values returned by the processes differ, it will return diffResultsErr.
-func readQuorum(immutableCurrentView *view.View) (RegisterMsg, error) {
+func readQuorum(destinationView *view.View) (RegisterMsg, error) {
 	// Send write request to all
-	resultChan := make(chan RegisterMsg, immutableCurrentView.N())
-	go broadcastRead(immutableCurrentView, resultChan)
+	resultChan := make(chan RegisterMsg, destinationView.N())
+	go broadcastRead(destinationView, resultChan)
 
 	// Wait for quorum
 	var failedTotal int
@@ -27,8 +27,8 @@ func readQuorum(immutableCurrentView *view.View) (RegisterMsg, error) {
 		log.Println("+1 error to read:", err)
 		failedTotal++
 
-		allFailed := failedTotal == immutableCurrentView.N()
-		mostFailedInspiteSomeSuccess := len(resultArray) > 0 && failedTotal > immutableCurrentView.F()
+		allFailed := failedTotal == destinationView.N()
+		mostFailedInspiteSomeSuccess := len(resultArray) > 0 && failedTotal > destinationView.F()
 
 		if mostFailedInspiteSomeSuccess || allFailed {
 			return false
@@ -44,7 +44,7 @@ func readQuorum(immutableCurrentView *view.View) (RegisterMsg, error) {
 			finalValue = receivedValue
 		}
 
-		if len(resultArray) == immutableCurrentView.QuorumSize() {
+		if len(resultArray) == destinationView.QuorumSize() {
 			return true
 		}
 		return false
@@ -81,10 +81,10 @@ func readQuorum(immutableCurrentView *view.View) (RegisterMsg, error) {
 
 // writeQuorum tries to write the value in writeMsg to the register of all processes on the view, returning when it gets confirmation from a majority.
 // If the view needs to be updated, it will return the new view in a *view.OldViewError.
-func writeQuorum(immutableCurrentView *view.View, writeMsg RegisterMsg) error {
+func writeQuorum(destinationView *view.View, writeMsg RegisterMsg) error {
 	// Send write request to all
-	resultChan := make(chan RegisterMsg, immutableCurrentView.N())
-	go broadcastWrite(immutableCurrentView, writeMsg, resultChan)
+	resultChan := make(chan RegisterMsg, destinationView.N())
+	go broadcastWrite(destinationView, writeMsg, resultChan)
 
 	// Wait for quorum
 	var successTotal int
@@ -94,8 +94,8 @@ func writeQuorum(immutableCurrentView *view.View, writeMsg RegisterMsg) error {
 		log.Println("+1 error to write:", err)
 		failedTotal++
 
-		allFailed := failedTotal == immutableCurrentView.N()
-		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > immutableCurrentView.F()
+		allFailed := failedTotal == destinationView.N()
+		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > destinationView.F()
 
 		if mostFailedInspiteSomeSuccess || allFailed {
 			return false
@@ -106,7 +106,7 @@ func writeQuorum(immutableCurrentView *view.View, writeMsg RegisterMsg) error {
 
 	countSuccess := func() bool {
 		successTotal++
-		if successTotal == immutableCurrentView.QuorumSize() {
+		if successTotal == destinationView.QuorumSize() {
 			return true
 		}
 		return false

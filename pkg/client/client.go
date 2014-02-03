@@ -5,6 +5,7 @@ package client
 
 import (
 	"log"
+	"sync"
 
 	"github.com/mateusbraga/freestore/pkg/view"
 )
@@ -12,6 +13,9 @@ import (
 type Client struct {
 	// View is used to send the currentView on client requests.
 	view *view.View
+
+	// Protects changing view in the middle of writes and reads
+	mu sync.RWMutex
 }
 
 // New returns a new Client with initialView.
@@ -22,15 +26,19 @@ func New(initialView *view.View) *Client {
 
 // SetView sets newView as the client's view.
 func (thisClient *Client) SetView(newView *view.View) {
+	thisClient.mu.Lock()
+	defer thisClient.mu.Unlock()
+
 	log.Printf("Updating client view from %v to %v\n", thisClient.view, newView)
-	thisClient.view.Set(newView)
+	thisClient.view = newView
 }
 
 // Write v to the system's register.
 func (thisClient *Client) Write(v interface{}) error {
-	immutableCurrentView := thisClient.view.NewCopy()
+	thisClient.mu.RLock()
+	defer thisClient.mu.RUnlock()
 
-	readValue, err := readQuorum(immutableCurrentView)
+	readValue, err := readQuorum(thisClient.view)
 	if err != nil {
 		// Special cases:
 		//  oldViewError: thisClient.view is old, update it and retry
@@ -49,9 +57,9 @@ func (thisClient *Client) Write(v interface{}) error {
 	writeMsg := RegisterMsg{}
 	writeMsg.Value = v
 	writeMsg.Timestamp = readValue.Timestamp + 1
-	writeMsg.View = immutableCurrentView
+	writeMsg.View = thisClient.view
 
-	err = writeQuorum(immutableCurrentView, writeMsg)
+	err = writeQuorum(thisClient.view, writeMsg)
 	if err != nil {
 		if oldViewError, ok := err.(*view.OldViewError); ok {
 			log.Println("View updated during basic write quorum of Write op")
@@ -67,9 +75,10 @@ func (thisClient *Client) Write(v interface{}) error {
 
 // Read executes the quorum read protocol.
 func (thisClient *Client) Read() (interface{}, error) {
-	immutableCurrentView := thisClient.view.NewCopy()
+	thisClient.mu.RLock()
+	defer thisClient.mu.RUnlock()
 
-	readMsg, err := readQuorum(immutableCurrentView)
+	readMsg, err := readQuorum(thisClient.view)
 	if err != nil {
 		// Expected: oldViewError (will retry) or diffResultsErr (will write most current value to view).
 		if oldViewError, ok := err.(*view.OldViewError); ok {
@@ -79,9 +88,9 @@ func (thisClient *Client) Read() (interface{}, error) {
 		} else if err == diffResultsErr {
 			log.Println("Found divergence: Going to 2nd phase of read protocol")
 
-			readMsg.View = immutableCurrentView
+			readMsg.View = thisClient.view
 
-			return thisClient.read2ndPhase(immutableCurrentView, readMsg)
+			return thisClient.read2ndPhase(thisClient.view, readMsg)
 		} else {
 			return 0, err
 		}
@@ -90,8 +99,8 @@ func (thisClient *Client) Read() (interface{}, error) {
 	return readMsg.Value, nil
 }
 
-func (thisClient *Client) read2ndPhase(immutableCurrentView *view.View, readMsg RegisterMsg) (interface{}, error) {
-	err := writeQuorum(immutableCurrentView, readMsg)
+func (thisClient *Client) read2ndPhase(destinationView *view.View, readMsg RegisterMsg) (interface{}, error) {
+	err := writeQuorum(destinationView, readMsg)
 	if err != nil {
 		if oldViewError, ok := err.(*view.OldViewError); ok {
 			log.Println("View updated during basic write quorum of Read op (2nd phase)")

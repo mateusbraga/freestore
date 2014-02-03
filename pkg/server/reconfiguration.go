@@ -59,10 +59,11 @@ func startReconfiguration() {
 
 	log.Println("Start reconfiguration of currentView:", currentView)
 
-	newView := currentView.NewCopy()
+	updates := []view.Update{}
 	for update, _ := range recv {
-		newView.AddUpdate(update)
+		updates = append(updates, update)
 	}
+	newView := currentView.NewCopyWithUpdates(updates...)
 	initialViewSeq := ViewSeq{newView}
 	currentViewCopy := currentView.NewCopy()
 
@@ -94,7 +95,9 @@ func generatedViewSeqProcessingLoop() {
 		installSeqMsg.Sender = thisProcess
 
 		// Send install-seq to all from old and new view
-		mergedView := view.MergeMembers(newGeneratedViewSeq.AssociatedView, leastUpdatedView)
+		processes := append(newGeneratedViewSeq.AssociatedView.GetMembers(), leastUpdatedView.GetMembers()...)
+		mergedView := view.NewWithProcesses(processes...)
+
 		go broadcastInstallSeq(mergedView, installSeqMsg)
 	}
 }
@@ -136,7 +139,8 @@ func installSeqProcessingLoop() {
 		}
 
 		// Re-send install-seq to all
-		mergedView := view.MergeMembers(installSeqMsg.AssociatedView, installSeqMsg.InstallView)
+		processes := append(installSeqMsg.AssociatedView.GetMembers(), installSeqMsg.InstallView.GetMembers()...)
+		mergedView := view.NewWithProcesses(processes...)
 		go broadcastInstallSeq(mergedView, installSeqMsg)
 
 		// Quorum check
@@ -187,14 +191,16 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 		// Process is on the new view
 		syncState(installSeq)
 
-		currentView.Set(installSeq.InstallView)
+		currentView = installSeq.InstallView.NewCopy()
 		log.Println("New view installed:", currentView)
 
 		viewInstalledMsg := ViewInstalledMsg{}
 		viewInstalledMsg.CurrentView = currentView
 
 		// Send view-installed to all
-		go broadcastViewInstalled(installSeq.AssociatedView.NewCopy(), viewInstalledMsg)
+		processes := installSeq.AssociatedView.GetMembersNotIn(installSeq.InstallView)
+		viewOfLeavingProcesses := view.NewWithProcesses(processes...)
+		go broadcastViewInstalled(viewOfLeavingProcesses, viewInstalledMsg)
 
 		var newSeq ViewSeq
 		cvIsMostUpdated := true

@@ -5,27 +5,19 @@ import (
 )
 
 func TestViewRef(t *testing.T) {
-	v1 := New()
-	v1.AddUpdate(Update{Join, Process{"1"}})
-	v1.AddUpdate(Update{Join, Process{"2"}})
+	updates := []Update{Update{Type: Join, Process: Process{"1"}},
+		Update{Type: Join, Process: Process{"2"}}}
 
-	v2 := New()
-	v2.AddUpdate(Update{Join, Process{"1"}})
-	v2.AddUpdate(Update{Join, Process{"2"}})
+	v1 := NewWithUpdates(updates...)
+	v2 := NewWithUpdates(updates...)
 
 	if v1.GetViewRef() != v2.GetViewRef() {
 		t.Errorf("v1 and v2 should have same ViewRef\n")
 	}
 
-	v1.AddUpdate(Update{Join, Process{"3"}})
+	v3 := v1.NewCopyWithUpdates(Update{Join, Process{"3"}})
 
-	if v1.GetViewRef() == v2.GetViewRef() {
-		t.Errorf("v1 and v2 should have different ViewRefs\n")
-	}
-
-	v2.AddUpdate(Update{Join, Process{"3"}})
-
-	if v1.GetViewRef() != v2.GetViewRef() {
-		t.Errorf("v1 and v2 should have same ViewRef\n")
+	if v1.GetViewRef() == v3.GetViewRef() {
+		t.Errorf("v1 and v3 should have different ViewRefs\n")
 	}
 }

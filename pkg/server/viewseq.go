@@ -32,25 +32,25 @@ func (viewSeq ViewSeq) HasView(view *view.View) bool {
 }
 
 func (viewSeq ViewSeq) GetLeastUpdatedView() *view.View {
-	leastUpdatedView := viewSeq[0]
-	for _, loopView := range viewSeq[1:] {
-		if loopView.LessUpdatedThan(leastUpdatedView) {
-			leastUpdatedView.Set(loopView)
+	leastUpdatedViewIndex := 0
+	for loopIndex, loopView := range viewSeq {
+		if loopView.LessUpdatedThan(viewSeq[leastUpdatedViewIndex]) {
+			leastUpdatedViewIndex = loopIndex
 		}
 	}
 
-	return leastUpdatedView
+	return viewSeq[leastUpdatedViewIndex]
 }
 
 func (viewSeq ViewSeq) GetMostUpdatedView() *view.View {
-	mostUpdatedView := viewSeq[0]
-	for _, loopView := range viewSeq[1:] {
-		if mostUpdatedView.LessUpdatedThan(loopView) {
-			mostUpdatedView.Set(loopView)
+	mostUpdatedViewIndex := 0
+	for loopIndex, loopView := range viewSeq {
+		if viewSeq[mostUpdatedViewIndex].LessUpdatedThan(loopView) {
+			mostUpdatedViewIndex = loopIndex
 		}
 	}
 
-	return mostUpdatedView
+	return viewSeq[mostUpdatedViewIndex]
 }
 
 func init() {

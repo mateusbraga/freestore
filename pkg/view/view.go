@@ -51,7 +51,59 @@ func New() *View {
 	v := View{}
 	v.entries = make(map[Update]bool)
 	v.members = make(map[Process]bool)
+	v.viewRef = nil
 	return &v
+}
+
+func NewWithUpdates(updates ...Update) *View {
+	newCopy := New()
+	newCopy.addUpdate(updates...)
+	return newCopy
+}
+
+func NewWithProcesses(processes ...Process) *View {
+	updates := []Update{}
+	for _, process := range processes {
+		updates = append(updates, Update{Join, process})
+	}
+	return NewWithUpdates(updates...)
+}
+
+func (v *View) NewCopy() *View {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
+	newCopy := New()
+
+	newCopy.viewRef = v.viewRef
+	newCopy.entries = make(map[Update]bool, len(v.entries))
+	newCopy.members = make(map[Process]bool, len(v.members))
+
+	for update, _ := range v.entries {
+		newCopy.entries[update] = true
+	}
+	for process, _ := range v.members {
+		newCopy.members[process] = true
+	}
+	return newCopy
+}
+
+func (v *View) NewCopyWithUpdates(updates ...Update) *View {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
+	newCopy := New()
+
+	for update, _ := range v.entries {
+		newCopy.entries[update] = true
+	}
+	for process, _ := range v.members {
+		newCopy.members[process] = true
+	}
+
+	newCopy.addUpdate(updates...)
+
+	return newCopy
 }
 
 func (v *View) String() string {
@@ -72,26 +124,6 @@ func (v *View) String() string {
 
 	fmt.Fprintf(&b, "}")
 	return b.String()
-}
-
-func (v *View) Set(v2 *View) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
-	v2.mu.RLock()
-	defer v2.mu.RUnlock()
-
-	v.viewRef = v2.viewRef
-
-	v.entries = make(map[Update]bool, len(v2.entries))
-	v.members = make(map[Process]bool, len(v2.members))
-
-	for update, _ := range v2.entries {
-		v.entries[update] = true
-	}
-	for process, _ := range v2.members {
-		v.members[process] = true
-	}
 }
 
 func (v *View) LessUpdatedThan(v2 *View) bool {
@@ -133,7 +165,7 @@ func (v *View) Equal(v2 *View) bool {
 	return true
 }
 
-func (v *View) AddUpdate(updates ...Update) {
+func (v *View) addUpdate(updates ...Update) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -149,35 +181,6 @@ func (v *View) AddUpdate(updates ...Update) {
 			}
 		case Leave:
 			delete(v.members, newUpdate.Process)
-		}
-	}
-}
-
-func (v *View) NewCopy() *View {
-	newCopy := New()
-	newCopy.Set(v)
-	return newCopy
-}
-
-func (v *View) Merge(v2 *View) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
-	v2.mu.RLock()
-	defer v2.mu.RUnlock()
-
-	v.viewRef = nil
-
-	for update, _ := range v2.entries {
-		v.entries[update] = true
-
-		switch update.Type {
-		case Join:
-			if !v.entries[Update{Leave, update.Process}] {
-				v.members[update.Process] = true
-			}
-		case Leave:
-			delete(v.members, update.Process)
 		}
 	}
 }
@@ -220,26 +223,6 @@ func (v *View) GetMembers() []Process {
 		members = append(members, process)
 	}
 	return members
-}
-
-func MergeMembers(v *View, v2 *View) *View {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
-	v2.mu.RLock()
-	defer v2.mu.RUnlock()
-
-	newView := New()
-
-	for process, _ := range v.members {
-		newView.AddUpdate(Update{Join, process})
-	}
-
-	for process, _ := range v2.members {
-		newView.AddUpdate(Update{Join, process})
-	}
-
-	return newView
 }
 
 func (v *View) GetMembersNotIn(v2 *View) []Process {
