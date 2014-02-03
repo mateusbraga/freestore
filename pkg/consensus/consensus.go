@@ -1,7 +1,6 @@
-package server
+package consensus
 
 import (
-	"bytes"
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -11,35 +10,42 @@ import (
 
 	"github.com/mateusbraga/freestore/pkg/comm"
 	"github.com/mateusbraga/freestore/pkg/view"
-
-	"github.com/cznic/kv"
 )
+
+const CHANNEL_DEFAULT_BUFFER_SIZE = 20
+
+var oldProposalNumberErr OldProposalNumberError
 
 var (
 	consensusTable   = make(map[int]consensusInstance)
 	consensusTableMu sync.RWMutex
-
-	oldProposalNumberErr OldProposalNumberError
-
-	database *kv.DB
 )
 
 type consensusInstance struct {
-	id                int
+	associatedView    *view.View
 	taskChan          chan consensusTask
 	callbackLearnChan chan interface{}
 }
 
+func (ci consensusInstance) Id() int {
+	return ci.associatedView.NumberOfEntries()
+}
+
 type consensusTask interface{}
 
-func getConsensus(consensusId int) consensusInstance {
+func GetConsensusResultChan(associatedView *view.View) chan interface{} {
+	ci := getOrCreateConsensus(associatedView)
+	return ci.callbackLearnChan
+}
+
+func getOrCreateConsensus(associatedView *view.View) consensusInstance {
 	consensusTableMu.Lock()
 	defer consensusTableMu.Unlock()
 
-	ci, ok := consensusTable[consensusId]
+	ci, ok := consensusTable[associatedView.NumberOfEntries()]
 	if !ok {
-		ci = consensusInstance{id: consensusId, taskChan: make(chan consensusTask, CHANNEL_DEFAULT_SIZE), callbackLearnChan: make(chan interface{}, 1)}
-		consensusTable[ci.id] = ci
+		ci = consensusInstance{associatedView: associatedView, taskChan: make(chan consensusTask, CHANNEL_DEFAULT_BUFFER_SIZE), callbackLearnChan: make(chan interface{}, 1)}
+		consensusTable[associatedView.NumberOfEntries()] = ci
 		log.Println("Created consensus instance:", ci)
 
 		go consensusWorker(ci)
@@ -66,7 +72,7 @@ func consensusWorker(ci consensusInstance) {
 
 			if receivedPrepareRequest.N > lastPromiseProposalNumber {
 				//setLastPromiseProposalNumber
-				savePrepareRequest(ci.id, receivedPrepareRequest)
+				savePrepareRequestOnStorage(ci, receivedPrepareRequest)
 				lastPromiseProposalNumber = receivedPrepareRequest.N
 
 				receivedPrepareRequest.reply.N = acceptedProposal.N
@@ -82,10 +88,10 @@ func consensusWorker(ci consensusInstance) {
 
 			if receivedAcceptRequest.N >= lastPromiseProposalNumber {
 				//setAcceptedProposal
-				saveAcceptedProposal(ci.id, receivedAcceptRequest.Proposal)
+				saveAcceptedProposalOnStorage(ci, receivedAcceptRequest.Proposal)
 				acceptedProposal = *receivedAcceptRequest.Proposal
 
-				go broadcastLearnRequest(currentView.NewCopy(), *receivedAcceptRequest.Proposal)
+				go broadcastLearnRequest(receivedAcceptRequest.AssociatedView, *receivedAcceptRequest.Proposal)
 			} else {
 				receivedAcceptRequest.reply.Err = oldProposalNumberErr
 			}
@@ -96,7 +102,7 @@ func consensusWorker(ci consensusInstance) {
 			receivedLearnRequest := task
 
 			learnCounter++
-			if learnCounter == currentView.QuorumSize() {
+			if learnCounter == receivedLearnRequest.AssociatedView.QuorumSize() {
 				ci.callbackLearnChan <- receivedLearnRequest.Value
 			}
 		default:
@@ -106,16 +112,16 @@ func consensusWorker(ci consensusInstance) {
 }
 
 // Propose proposes the value to be agreed upon on this consensus instance. It should be run only by the leader process to guarantee termination.
-func Propose(ci consensusInstance, defaultValue interface{}) {
+func Propose(associatedView *view.View, thisProcess view.Process, defaultValue interface{}) {
 	log.Println("Running propose with:", defaultValue)
 
-	proposalNumber := getNextProposalNumber(ci.id)
-	proposal := Proposal{N: proposalNumber, ConsensusId: ci.id}
+	proposalNumber := getNextProposalNumber(associatedView, thisProcess)
+	proposal := Proposal{AssociatedView: associatedView, N: proposalNumber}
 
 	value, err := prepare(proposal)
 	if err != nil {
 		// Could not get quorum or old proposal number
-		log.Println("Failed to propose. Could not pass prepare phase: ", err)
+		log.Fatalf("Failed to propose. Could not pass prepare phase: %v\n", err)
 		return
 	}
 
@@ -126,18 +132,16 @@ func Propose(ci consensusInstance, defaultValue interface{}) {
 	proposal.Value = value
 	if err := accept(proposal); err != nil {
 		// Could not get quorum or old proposal number
-		log.Println("Failed to propose. Could not pass accept phase: ", err)
+		log.Fatalf("Failed to propose. Could not pass accept phase: %v\n", err)
 		return
 	}
 }
 
 // prepare is a stage of the Propose funcion
 func prepare(proposal Proposal) (interface{}, error) {
-	immutableCurrentView := currentView.NewCopy()
-
 	// Send read request to all
-	resultChan := make(chan Proposal, immutableCurrentView.N())
-	go broadcastPrepareRequest(immutableCurrentView, proposal, resultChan)
+	resultChan := make(chan Proposal, proposal.AssociatedView.N())
+	go broadcastPrepareRequest(proposal.AssociatedView, proposal, resultChan)
 
 	// Wait for quorum
 	var successTotal int
@@ -148,8 +152,8 @@ func prepare(proposal Proposal) (interface{}, error) {
 		log.Println("+1 error to prepare:", err)
 		failedTotal++
 
-		allFailed := failedTotal == immutableCurrentView.N()
-		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > immutableCurrentView.F()
+		allFailed := failedTotal == proposal.AssociatedView.N()
+		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > proposal.AssociatedView.F()
 
 		if mostFailedInspiteSomeSuccess || allFailed {
 			return false
@@ -164,7 +168,7 @@ func prepare(proposal Proposal) (interface{}, error) {
 			highestNumberedAcceptedProposal = receivedProposal
 		}
 
-		if successTotal == immutableCurrentView.QuorumSize() {
+		if successTotal == proposal.AssociatedView.QuorumSize() {
 			return true
 		}
 
@@ -184,18 +188,16 @@ func prepare(proposal Proposal) (interface{}, error) {
 
 		done := countSuccess(receivedProposal)
 		if done {
-			return highestNumberedAcceptedProposal, nil
+			return highestNumberedAcceptedProposal.Value, nil
 		}
 	}
 }
 
 // accept is a stage of the Propose funcion.
 func accept(proposal Proposal) error {
-	immutableCurrentView := currentView.NewCopy()
-
 	// Send accept request to all
-	resultChan := make(chan Proposal, immutableCurrentView.N())
-	go broadcastAcceptRequest(immutableCurrentView, proposal, resultChan)
+	resultChan := make(chan Proposal, proposal.AssociatedView.N())
+	go broadcastAcceptRequest(proposal.AssociatedView, proposal, resultChan)
 
 	// Wait for quorum
 	var successTotal int
@@ -205,8 +207,8 @@ func accept(proposal Proposal) error {
 		log.Println("+1 error to accept:", err)
 		failedTotal++
 
-		allFailed := failedTotal == immutableCurrentView.N()
-		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > immutableCurrentView.F()
+		allFailed := failedTotal == proposal.AssociatedView.N()
+		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > proposal.AssociatedView.F()
 
 		if mostFailedInspiteSomeSuccess || allFailed {
 			return false
@@ -218,7 +220,7 @@ func accept(proposal Proposal) error {
 	countSuccess := func() bool {
 		successTotal++
 
-		if successTotal == immutableCurrentView.QuorumSize() {
+		if successTotal == proposal.AssociatedView.QuorumSize() {
 			return true
 		}
 
@@ -244,118 +246,45 @@ func accept(proposal Proposal) error {
 }
 
 // CheckForChosenValue checks to see if any value has already been agreed upon on this consensus instance.
-func CheckForChosenValue(ci consensusInstance) (interface{}, error) {
-	proposalNumber := getNextProposalNumber(ci.id)
+//func CheckForChosenValue(ci consensusInstance) (interface{}, error) {
+//proposalNumber := getNextProposalNumber(ci.associatedView)
 
-	proposal := Proposal{N: proposalNumber, ConsensusId: ci.id}
-	value, err := prepare(proposal)
-	if err != nil {
-		return nil, errors.New("Could not read prepare consensus")
-	}
-	if value == nil {
-		return nil, errors.New("No value has been chosen")
-	}
+//proposal := Proposal{N: proposalNumber, AssociatedView: ci.associatedView}
+//value, err := prepare(proposal)
+//if err != nil {
+//return nil, errors.New("Could not read prepare consensus")
+//}
+//if value == nil {
+//return nil, errors.New("No value has been chosen")
+//}
 
-	return value, nil
-}
+//return value, nil
+//}
 
 // getNextProposalNumber to be used by this process. This function is a stage of the Propose funcion.
-func getNextProposalNumber(consensusId int) (proposalNumber int) {
-	if currentView.N() == 0 {
-		log.Fatalln("currentView is empty")
+func getNextProposalNumber(associatedView *view.View, thisProcess view.Process) (proposalNumber int) {
+	if associatedView.N() == 0 {
+		log.Fatalln("associatedView is empty")
 	}
 
-	thisProcessPosition := currentView.GetProcessPosition(thisProcess)
+	thisProcessPosition := associatedView.GetProcessPosition(thisProcess)
 
-	lastProposalNumber, err := getLastProposalNumber(consensusId)
+	lastProposalNumber, err := getLastProposalNumber(associatedView.NumberOfEntries())
 	if err != nil {
-		proposalNumber = currentView.N() + thisProcessPosition
+		proposalNumber = associatedView.N() + thisProcessPosition
 	} else {
-		proposalNumber = (lastProposalNumber - (lastProposalNumber % currentView.N()) + currentView.N()) + thisProcessPosition
+		proposalNumber = (lastProposalNumber - (lastProposalNumber % associatedView.N()) + associatedView.N()) + thisProcessPosition
 	}
 
-	saveProposalNumber(consensusId, proposalNumber)
+	saveProposalNumberOnStorage(associatedView.NumberOfEntries(), proposalNumber)
 	return
-}
-
-// saveProposalNumber to permanent storage.
-func saveProposalNumber(consensusId int, proposalNumber int) {
-	proposalNumberBuffer := new(bytes.Buffer)
-	enc := gob.NewEncoder(proposalNumberBuffer)
-	err := enc.Encode(proposalNumber)
-	if err != nil {
-		log.Fatalln("enc.Encode failed:", err)
-	}
-
-	err = database.Set([]byte(fmt.Sprintf("lastProposalNumber_%v", consensusId)), proposalNumberBuffer.Bytes())
-	if err != nil {
-		log.Fatalln("database.Set failed:", err)
-	}
-}
-
-// getLastProposalNumber from permanent storage.
-func getLastProposalNumber(consensusId int) (int, error) {
-	lastProposalNumberBytes, err := database.Get(nil, []byte(fmt.Sprintf("lastProposalNumber_%v", consensusId)))
-	if err != nil {
-		log.Fatalln(err)
-	} else if lastProposalNumberBytes == nil {
-		return 0, errors.New("Last proposal number not found")
-	} else {
-		var lastProposalNumber int
-
-		lastProposalNumberBuffer := bytes.NewBuffer(lastProposalNumberBytes)
-		dec := gob.NewDecoder(lastProposalNumberBuffer)
-
-		err := dec.Decode(&lastProposalNumber)
-		if err != nil {
-			log.Fatalln("dec.Decode failed:", err)
-		}
-
-		return lastProposalNumber, nil
-	}
-
-	log.Fatalln("BUG! Should never execute this command on getLastProposalNumber")
-	return 0, nil
-}
-
-// saveAcceptedProposal to permanent storage.
-// needs to be tested
-func saveAcceptedProposal(consensusId int, proposal *Proposal) {
-	proposalBuffer := new(bytes.Buffer)
-	enc := gob.NewEncoder(proposalBuffer)
-
-	err := enc.Encode(proposal)
-	if err != nil {
-		log.Fatalln("enc.Encode failed:", err)
-	}
-
-	err = database.Set([]byte(fmt.Sprintf("acceptedProposal_%v", consensusId)), proposalBuffer.Bytes())
-	if err != nil {
-		log.Fatalln("ERROR to save acceptedProposal:", err)
-	}
-}
-
-// savePrepareRequest to permanent storage
-// needs to be tested
-func savePrepareRequest(consensusId int, proposal *Prepare) {
-	proposalBuffer := new(bytes.Buffer)
-	enc := gob.NewEncoder(proposalBuffer)
-	err := enc.Encode(proposal)
-	if err != nil {
-		log.Fatalln("enc.Encode failed:", err)
-	}
-
-	err = database.Set([]byte(fmt.Sprintf("prepareRequest_%v", consensusId)), proposalBuffer.Bytes())
-	if err != nil {
-		log.Fatalln("ERROR to save prepareRequest:", err)
-	}
 }
 
 // -------- REQUESTS -----------
 type ConsensusRequest int
 
 type Proposal struct {
-	ConsensusId int //ConsensusId makes possible multiples consensus to run at the same time
+	AssociatedView *view.View
 
 	N int // N is the proposal number
 
@@ -383,7 +312,7 @@ type Learn struct {
 // Prepare Request
 func (r *ConsensusRequest) Prepare(arg Proposal, reply *Proposal) error {
 	log.Println("New Prepare Request")
-	ci := getConsensus(arg.ConsensusId)
+	ci := getOrCreateConsensus(arg.AssociatedView)
 
 	var prepare Prepare
 	prepare.Proposal = &arg
@@ -400,7 +329,7 @@ func (r *ConsensusRequest) Prepare(arg Proposal, reply *Proposal) error {
 // Accept Request
 func (r *ConsensusRequest) Accept(arg Proposal, reply *Proposal) error {
 	log.Println("New Accept Request")
-	ci := getConsensus(arg.ConsensusId)
+	ci := getOrCreateConsensus(arg.AssociatedView)
 
 	var accept Accept
 	accept.Proposal = &arg
@@ -415,9 +344,9 @@ func (r *ConsensusRequest) Accept(arg Proposal, reply *Proposal) error {
 }
 
 // Learn Request
-func (r *ConsensusRequest) Learn(arg Proposal, reply *int) error {
+func (r *ConsensusRequest) Learn(arg Proposal, reply *interface{}) error {
 	log.Println("New Learn Request")
-	ci := getConsensus(arg.ConsensusId)
+	ci := getOrCreateConsensus(arg.AssociatedView)
 
 	var learn Learn
 	learn.Proposal = &arg
@@ -431,19 +360,6 @@ func init() {
 	rpc.Register(new(ConsensusRequest))
 }
 
-// ------- Init database -----------
-func initDatabase() {
-	var err error
-	database, err = kv.CreateMem(new(kv.Options))
-	if err != nil {
-		log.Fatalln("initDatabase error:", err)
-	}
-}
-
-func init() {
-	initDatabase()
-}
-
 // ------- ERRORS -----------
 type OldProposalNumberError struct{}
 
@@ -453,32 +369,33 @@ func (e OldProposalNumberError) Error() string {
 
 func init() {
 	gob.Register(new(OldProposalNumberError))
+	gob.Register(new(Proposal))
 }
 
 // ------- Broadcast functions -----------
 func broadcastPrepareRequest(destinationView *view.View, proposal Proposal, resultChan chan Proposal) {
 	for _, process := range destinationView.GetMembers() {
-		go func() {
+		go func(process view.Process) {
 			var result Proposal
 			err := comm.SendRPCRequest(process, "ConsensusRequest.Prepare", proposal, &result)
 			if err != nil {
 				resultChan <- Proposal{Err: err}
 			}
 			resultChan <- result
-		}()
+		}(process)
 	}
 }
 
 func broadcastAcceptRequest(destinationView *view.View, proposal Proposal, resultChan chan Proposal) {
 	for _, process := range destinationView.GetMembers() {
-		go func() {
+		go func(process view.Process) {
 			var result Proposal
 			err := comm.SendRPCRequest(process, "ConsensusRequest.Accept", proposal, &result)
 			if err != nil {
 				resultChan <- Proposal{Err: err}
 			}
 			resultChan <- result
-		}()
+		}(process)
 	}
 }
 
@@ -487,7 +404,7 @@ func broadcastLearnRequest(destinationView *view.View, proposal Proposal) {
 
 	for _, process := range destinationView.GetMembers() {
 		go func(process view.Process) {
-			var discardResult error
+			var discardResult interface{}
 			errorChan <- comm.SendRPCRequest(process, "ConsensusRequest.Learn", proposal, &discardResult)
 		}(process)
 	}
@@ -497,9 +414,10 @@ func broadcastLearnRequest(destinationView *view.View, proposal Proposal) {
 	for {
 		err := <-errorChan
 		if err != nil {
+			log.Println("err send learn:", err)
 			failedTotal++
 			if failedTotal > destinationView.F() {
-				log.Fatalln("Failed to send Reconfig to a quorum")
+				log.Fatalln("Failed to send Learn to a quorum")
 			}
 		}
 		successTotal++

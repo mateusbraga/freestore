@@ -6,15 +6,13 @@ import (
 	"sync"
 
 	"github.com/mateusbraga/freestore/pkg/comm"
+	"github.com/mateusbraga/freestore/pkg/consensus"
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-const (
-	LEADER_PROCESS_POSITION int = 0
-)
+const LEADER_PROCESS_POSITION int = 0
 
 var (
-	//IMPROV: clean this up periodically
 	viewGenerators   []viewGeneratorInstance
 	viewGeneratorsMu sync.Mutex
 )
@@ -24,7 +22,7 @@ type viewGeneratorInstance struct {
 	jobChan        chan interface{}
 }
 
-func getViewGenerator(associatedView *view.View, initialSeq ViewSeq) viewGeneratorInstance {
+func getOrCreateViewGenerator(associatedView *view.View, initialSeq ViewSeq) viewGeneratorInstance {
 	viewGeneratorsMu.Lock()
 	defer viewGeneratorsMu.Unlock()
 
@@ -34,6 +32,7 @@ func getViewGenerator(associatedView *view.View, initialSeq ViewSeq) viewGenerat
 		}
 	}
 
+	// view generator does not exist. Create it.
 	vgi := viewGeneratorInstance{}
 	vgi.AssociatedView = associatedView.NewCopy()
 	vgi.jobChan = make(chan interface{}, CHANNEL_DEFAULT_SIZE)
@@ -173,27 +172,26 @@ func generateViewSequenceWithoutConsensus(associatedView *view.View, seq ViewSeq
 	log.Println("Running generateViewSequenceWithoutConsensus")
 	assertOnlyUpdatedViews(associatedView, seq)
 
-	_ = getViewGenerator(associatedView, seq)
+	_ = getOrCreateViewGenerator(associatedView, seq)
 }
 
 func generateViewSequenceWithConsensus(associatedView *view.View, seq ViewSeq) {
 	log.Println("start generateViewSequenceWithConsensus")
 	assertOnlyUpdatedViews(associatedView, seq)
 
-	consensusInstance := getConsensus(associatedView.NumberOfEntries())
 	if associatedView.GetProcessPosition(thisProcess) == LEADER_PROCESS_POSITION {
-		log.Println("CONSENSUS: leader")
-		Propose(consensusInstance, &seq)
+		consensus.Propose(associatedView, thisProcess, &seq)
 	}
-	log.Println("CONSENSUS: wait learn message")
-	value := <-consensusInstance.callbackLearnChan
+	log.Println("Waiting for consensus resolution")
+	value := <-consensus.GetConsensusResultChan(associatedView)
 
 	result, ok := value.(*ViewSeq)
 	if !ok {
 		log.Fatalf("FATAL: consensus on generateViewSequenceWithConsensus got %T %v\n", value, value)
 	}
+	log.Println("Consensus result received")
+
 	generatedViewSeqChan <- generatedViewSeq{*result, associatedView}
-	log.Println("end generateViewSequenceWithConsensus")
 }
 
 type viewSeqQuorumCounterType struct {
@@ -283,14 +281,14 @@ func (thisViewSeqMsg ViewSeqMsg) Equal(otherViewSeqMsg ViewSeqMsg) bool {
 type ViewGeneratorRequest int
 
 func (r *ViewGeneratorRequest) ProposeSeqView(arg ViewSeqMsg, reply *error) error {
-	vgi := getViewGenerator(arg.AssociatedView, nil)
+	vgi := getOrCreateViewGenerator(arg.AssociatedView, nil)
 	vgi.jobChan <- arg
 
 	return nil
 }
 
 func (r *ViewGeneratorRequest) SeqConv(arg SeqConvMsg, reply *error) error {
-	vgi := getViewGenerator(arg.AssociatedView, nil)
+	vgi := getOrCreateViewGenerator(arg.AssociatedView, nil)
 	vgi.jobChan <- &arg.SeqConv
 
 	return nil
