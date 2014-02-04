@@ -344,7 +344,7 @@ func (r *ConsensusRequest) Accept(arg Proposal, reply *Proposal) error {
 }
 
 // Learn Request
-func (r *ConsensusRequest) Learn(arg Proposal, reply *interface{}) error {
+func (r *ConsensusRequest) Learn(arg Proposal, reply *struct{}) error {
 	log.Println("New Learn Request")
 	ci := getOrCreateConsensus(arg.AssociatedView)
 
@@ -400,29 +400,5 @@ func broadcastAcceptRequest(destinationView *view.View, proposal Proposal, resul
 }
 
 func broadcastLearnRequest(destinationView *view.View, proposal Proposal) {
-	errorChan := make(chan error, destinationView.N())
-
-	for _, process := range destinationView.GetMembers() {
-		go func(process view.Process) {
-			var discardResult interface{}
-			errorChan <- comm.SendRPCRequest(process, "ConsensusRequest.Learn", proposal, &discardResult)
-		}(process)
-	}
-
-	failedTotal := 0
-	successTotal := 0
-	for {
-		err := <-errorChan
-		if err != nil {
-			log.Println("err send learn:", err)
-			failedTotal++
-			if failedTotal > destinationView.F() {
-				log.Fatalln("Failed to send Learn to a quorum")
-			}
-		}
-		successTotal++
-		if successTotal == destinationView.QuorumSize() {
-			return
-		}
-	}
+	comm.BroadcastRPCRequest(destinationView, "ConsensusRequest.Learn", proposal)
 }

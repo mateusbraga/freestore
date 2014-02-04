@@ -280,14 +280,14 @@ func (thisViewSeqMsg ViewSeqMsg) Equal(otherViewSeqMsg ViewSeqMsg) bool {
 
 type ViewGeneratorRequest int
 
-func (r *ViewGeneratorRequest) ProposeSeqView(arg ViewSeqMsg, reply *error) error {
+func (r *ViewGeneratorRequest) ProposeSeqView(arg ViewSeqMsg, reply *struct{}) error {
 	vgi := getOrCreateViewGenerator(arg.AssociatedView, nil)
 	vgi.jobChan <- arg
 
 	return nil
 }
 
-func (r *ViewGeneratorRequest) SeqConv(arg SeqConvMsg, reply *error) error {
+func (r *ViewGeneratorRequest) SeqConv(arg SeqConvMsg, reply *struct{}) error {
 	vgi := getOrCreateViewGenerator(arg.AssociatedView, nil)
 	vgi.jobChan <- &arg.SeqConv
 
@@ -299,56 +299,10 @@ func init() {
 }
 
 // -------- Broadcast functions -----------
-func broadcastViewSequence(destinationView *view.View, viewSeq ViewSeqMsg) {
-	errorChan := make(chan error, destinationView.N())
-
-	for _, process := range destinationView.GetMembers() {
-		go func(process view.Process) {
-			var discardResult error
-			errorChan <- comm.SendRPCRequest(process, "ViewGeneratorRequest.ProposeSeqView", viewSeq, &discardResult)
-		}(process)
-	}
-
-	failedTotal := 0
-	successTotal := 0
-	for {
-		err := <-errorChan
-		if err != nil {
-			failedTotal++
-			if failedTotal > destinationView.F() {
-				log.Fatalln("Failed to send ProposeSeqView to a quorum")
-			}
-		}
-		successTotal++
-		if successTotal == destinationView.QuorumSize() {
-			return
-		}
-	}
+func broadcastViewSequence(destinationView *view.View, viewSeqMsg ViewSeqMsg) {
+	comm.BroadcastRPCRequest(destinationView, "ViewGeneratorRequest.ProposeSeqView", viewSeqMsg)
 }
 
-func broadcastViewSequenceConv(destinationView *view.View, seqConv SeqConvMsg) {
-	errorChan := make(chan error, destinationView.N())
-
-	for _, process := range destinationView.GetMembers() {
-		go func(process view.Process) {
-			var discardResult error
-			errorChan <- comm.SendRPCRequest(process, "ViewGeneratorRequest.SeqConv", seqConv, &discardResult)
-		}(process)
-	}
-
-	failedTotal := 0
-	successTotal := 0
-	for {
-		err := <-errorChan
-		if err != nil {
-			failedTotal++
-			if failedTotal > destinationView.F() {
-				log.Fatalln("Failed to SeqConv to a quorum")
-			}
-		}
-		successTotal++
-		if successTotal == destinationView.QuorumSize() {
-			return
-		}
-	}
+func broadcastViewSequenceConv(destinationView *view.View, seqConvMsg SeqConvMsg) {
+	comm.BroadcastRPCRequest(destinationView, "ViewGeneratorRequest.SeqConv", seqConvMsg)
 }

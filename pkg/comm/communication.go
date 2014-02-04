@@ -65,8 +65,31 @@ func SendRPCRequest(process view.Process, serviceMethod string, arg interface{},
 	return nil
 }
 
-func SendRPCRequestWithErrorChan(process view.Process, serviceMethod string, arg interface{}, result interface{}, errorChan chan error) {
-	errorChan <- SendRPCRequest(process, serviceMethod, arg, result)
+func BroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}) {
+	errorChan := make(chan error, destinationView.N())
+
+	for _, process := range destinationView.GetMembers() {
+		go func(process view.Process) {
+			var discardResult struct{}
+			errorChan <- SendRPCRequest(process, serviceMethod, arg, &discardResult)
+		}(process)
+	}
+
+	failedTotal := 0
+	successTotal := 0
+	for {
+		err := <-errorChan
+		if err != nil {
+			failedTotal++
+			if failedTotal > destinationView.F() {
+				log.Fatalf("Failed to send %v to a quorum\n", serviceMethod)
+			}
+		}
+		successTotal++
+		if successTotal == destinationView.QuorumSize() {
+			return
+		}
+	}
 }
 
 func repairCommLinkFunc(process view.Process) error {
