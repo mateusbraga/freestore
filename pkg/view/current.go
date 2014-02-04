@@ -12,7 +12,7 @@ type CurrentView struct {
 
 func NewCurrentView() CurrentView {
 	newCurrentView := CurrentView{}
-	newCurrentView.view = New()
+	newCurrentView.view = newView()
 	newCurrentView.mu = &sync.RWMutex{}
 	return newCurrentView
 }

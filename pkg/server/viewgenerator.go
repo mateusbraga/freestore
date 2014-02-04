@@ -34,7 +34,7 @@ func getOrCreateViewGenerator(associatedView *view.View, initialSeq ViewSeq) vie
 
 	// view generator does not exist. Create it.
 	vgi := viewGeneratorInstance{}
-	vgi.AssociatedView = associatedView.NewCopy()
+	vgi.AssociatedView = associatedView
 	vgi.jobChan = make(chan interface{}, CHANNEL_DEFAULT_SIZE)
 	viewGenerators = append(viewGenerators, vgi)
 
@@ -61,7 +61,7 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 		viewSeqMsg.LastConvergedSeq = nil
 		viewSeqMsg.AssociatedView = associatedView
 
-		go broadcastViewSequence(associatedView.NewCopy(), viewSeqMsg)
+		go broadcastViewSequence(associatedView, viewSeqMsg)
 
 		lastProposedSeq = initialSeq
 	}
@@ -123,7 +123,7 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 				viewSeqMsg.ProposedSeq = newProposeSeq
 				viewSeqMsg.LastConvergedSeq = lastConvergedSeq
 
-				go broadcastViewSequence(associatedView.NewCopy(), viewSeqMsg)
+				go broadcastViewSequence(associatedView, viewSeqMsg)
 
 				lastProposedSeq = newProposeSeq
 			}
@@ -140,7 +140,7 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 				seqConvMsg.Seq = newConvergedSeq
 
 				// Send seq-conv to all
-				go broadcastViewSequenceConv(associatedView.NewCopy(), seqConvMsg)
+				go broadcastViewSequenceConv(associatedView, seqConvMsg)
 			}
 
 		case *SeqConv:

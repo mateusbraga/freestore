@@ -11,8 +11,8 @@ func TestViewEqual(t *testing.T) {
 		Update{Type: Leave, Process: Process{"1"}},
 	}
 
-	v1 := New()
-	v2 := New()
+	v1 := newView()
+	v2 := newView()
 
 	if !v1.Equal(v2) {
 		t.Fatalf("Empty views v1 and v2 should be equal")
@@ -138,21 +138,6 @@ func TestViewLessUpdatedThan(t *testing.T) {
 
 	if v2.LessUpdatedThan(v1) {
 		t.Errorf("v2 is not less updated than v1!")
-	}
-}
-
-func TestNewCopy(t *testing.T) {
-	updates := []Update{Update{Type: Join, Process: Process{"1"}},
-		Update{Type: Join, Process: Process{"2"}},
-		Update{Type: Join, Process: Process{"3"}},
-		Update{Type: Leave, Process: Process{"1"}},
-	}
-
-	v1 := NewWithUpdates(updates...)
-
-	v2 := v1.NewCopy()
-	if !v1.Equal(v2) {
-		t.Errorf("v2 is not a copy of v1!")
 	}
 }
 

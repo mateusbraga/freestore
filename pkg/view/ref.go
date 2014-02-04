@@ -11,10 +11,8 @@ type ViewRef struct {
 	digest [sha1.Size]byte
 }
 
+//TODO may need lock since its changing v.viewRef
 func ViewToViewRef(v *View) *ViewRef {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
 	var updates ByUpdate
 	updates = v.getEntries()
 	sort.Sort(updates)

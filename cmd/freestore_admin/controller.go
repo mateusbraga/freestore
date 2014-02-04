@@ -142,12 +142,12 @@ func init() {
 	//sendGetCurrentView(view.Process{addr})
 
 	// Init current view TODO
-	currentView = view.New()
+	var currentView *view.View
 	//currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5000"}})
 	//currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5001"}})
 	//currentView.AddUpdate(view.Update{view.Join, view.Process{"[::]:5002"}})
 
-	systemStatus.CurrentView = (currentView.NewCopy())
+	systemStatus.CurrentView = currentView
 	// Init systemStatus
 	for i := 5000; i < 5020; i++ {
 		systemStatus.ProcessStatus = append(systemStatus.ProcessStatus, &ProcessStatus{view.Process{fmt.Sprintf("[::]:%v", i)}, false})
@@ -273,7 +273,7 @@ func sendGetCurrentView(process view.Process) {
 		log.Fatal(err)
 	}
 
-	currentView = newView.NewCopy()
-	systemStatus.CurrentView = newView.NewCopy()
+	currentView = newView
+	systemStatus.CurrentView = newView
 	fmt.Println("New Current View:", currentView)
 }

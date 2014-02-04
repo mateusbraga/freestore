@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"sync"
 )
 
 type updateType string
@@ -41,13 +40,13 @@ func (thisUpdate Update) Less(otherUpdate Update) bool {
 
 type View struct {
 	entries map[Update]bool
-	mu      sync.RWMutex
 
 	members map[Process]bool // Cache
-	viewRef *ViewRef         // Cache
+	//TODO viewRef may need lock or be set on the 'New' functions
+	viewRef *ViewRef // Cache
 }
 
-func New() *View {
+func newView() *View {
 	v := View{}
 	v.entries = make(map[Update]bool)
 	v.members = make(map[Process]bool)
@@ -56,7 +55,7 @@ func New() *View {
 }
 
 func NewWithUpdates(updates ...Update) *View {
-	newCopy := New()
+	newCopy := newView()
 	newCopy.addUpdate(updates...)
 	return newCopy
 }
@@ -69,30 +68,8 @@ func NewWithProcesses(processes ...Process) *View {
 	return NewWithUpdates(updates...)
 }
 
-func (v *View) NewCopy() *View {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
-	newCopy := New()
-
-	newCopy.viewRef = v.viewRef
-	newCopy.entries = make(map[Update]bool, len(v.entries))
-	newCopy.members = make(map[Process]bool, len(v.members))
-
-	for update, _ := range v.entries {
-		newCopy.entries[update] = true
-	}
-	for process, _ := range v.members {
-		newCopy.members[process] = true
-	}
-	return newCopy
-}
-
 func (v *View) NewCopyWithUpdates(updates ...Update) *View {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
-	newCopy := New()
+	newCopy := newView()
 
 	for update, _ := range v.entries {
 		newCopy.entries[update] = true
@@ -107,9 +84,6 @@ func (v *View) NewCopyWithUpdates(updates ...Update) *View {
 }
 
 func (v *View) String() string {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "{")
 
@@ -127,12 +101,6 @@ func (v *View) String() string {
 }
 
 func (v *View) LessUpdatedThan(v2 *View) bool {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
-	v2.mu.RLock()
-	defer v2.mu.RUnlock()
-
 	if len(v2.entries) > len(v.entries) {
 		return true
 	}
@@ -143,16 +111,9 @@ func (v *View) LessUpdatedThan(v2 *View) bool {
 		}
 	}
 	return false
-
 }
 
 func (v *View) Equal(v2 *View) bool {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
-	v2.mu.RLock()
-	defer v2.mu.RUnlock()
-
 	if len(v.entries) != len(v2.entries) {
 		return false
 	}
@@ -166,9 +127,6 @@ func (v *View) Equal(v2 *View) bool {
 }
 
 func (v *View) addUpdate(updates ...Update) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
 	v.viewRef = nil
 
 	for _, newUpdate := range updates {
@@ -186,23 +144,14 @@ func (v *View) addUpdate(updates ...Update) {
 }
 
 func (v *View) HasUpdate(u Update) bool {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
 	return v.entries[u]
 }
 
 func (v *View) HasMember(p Process) bool {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
 	return v.members[p]
 }
 
 func (v *View) GetEntries() []Update {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
 	return v.getEntries()
 }
 
@@ -215,9 +164,6 @@ func (v *View) getEntries() []Update {
 }
 
 func (v *View) GetMembers() []Process {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
 	var members []Process
 	for process, _ := range v.members {
 		members = append(members, process)
@@ -226,12 +172,6 @@ func (v *View) GetMembers() []Process {
 }
 
 func (v *View) GetMembersNotIn(v2 *View) []Process {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
-	v2.mu.RLock()
-	defer v2.mu.RUnlock()
-
 	var members []Process
 	for process, _ := range v.members {
 		if !v2.members[process] {
@@ -244,9 +184,6 @@ func (v *View) GetMembersNotIn(v2 *View) []Process {
 
 // GetProcessPosition returns an unique number for the process in the view. Returns -1 if process is not a member of the view.
 func (v *View) GetProcessPosition(process Process) int {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
 	if _, ok := v.members[process]; !ok {
 		return -1
 	}
@@ -262,16 +199,10 @@ func (v *View) GetProcessPosition(process Process) int {
 }
 
 func (v *View) NumberOfEntries() int {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
 	return len(v.entries)
 }
 
 func (v *View) QuorumSize() int {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
 	return v.quorumSize()
 }
 
@@ -281,24 +212,15 @@ func (v *View) quorumSize() int {
 }
 
 func (v *View) N() int {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
 	return len(v.members)
 }
 
 func (v *View) F() int {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
 	membersTotal := len(v.members)
 	return membersTotal - v.quorumSize()
 }
 
-func (v *View) GetViewRef() ViewRef {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
+func (v *View) getViewRef() ViewRef {
 	if v.viewRef == nil {
 		v.viewRef = viewToViewRef(v)
 	}

@@ -6,9 +6,6 @@ import (
 )
 
 func (v *View) GobEncode() ([]byte, error) {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
 	buf := new(bytes.Buffer)
 	encoder := gob.NewEncoder(buf)
 	err := encoder.Encode(&v.entries)
@@ -19,9 +16,6 @@ func (v *View) GobEncode() ([]byte, error) {
 }
 
 func (v *View) GobDecode(b []byte) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
 	buf := bytes.NewReader(b)
 	decoder := gob.NewDecoder(buf)
 	err := decoder.Decode(&v.entries)

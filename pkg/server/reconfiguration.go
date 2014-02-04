@@ -65,12 +65,11 @@ func startReconfiguration() {
 	}
 	newView := currentView.View().NewCopyWithUpdates(updates...)
 	initialViewSeq := ViewSeq{newView}
-	currentViewCopy := currentView.View()
 
 	if useConsensus {
-		go generateViewSequenceWithConsensus(currentViewCopy, initialViewSeq)
+		go generateViewSequenceWithConsensus(currentView.View(), initialViewSeq)
 	} else {
-		go generateViewSequenceWithoutConsensus(currentViewCopy, initialViewSeq)
+		go generateViewSequenceWithoutConsensus(currentView.View(), initialViewSeq)
 	}
 }
 
@@ -177,7 +176,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 		stateMsg.AssociatedView = installSeq.AssociatedView
 
 		// Send state-update request to all
-		go broadcastStateUpdate(installSeq.InstallView.NewCopy(), stateMsg)
+		go broadcastStateUpdate(installSeq.InstallView, stateMsg)
 
 		log.Println("State sent!")
 	}
@@ -224,13 +223,11 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 
 			resetReconfigurationTimer <- true
 		} else {
-			currentViewCopy := currentView.View()
-
 			log.Println("Generate next view sequence with:", newSeq)
 			if useConsensus {
-				go generateViewSequenceWithConsensus(currentViewCopy, newSeq)
+				go generateViewSequenceWithConsensus(currentView.View(), newSeq)
 			} else {
-				go generateViewSequenceWithoutConsensus(currentViewCopy, newSeq)
+				go generateViewSequenceWithoutConsensus(currentView.View(), newSeq)
 			}
 		}
 	} else {
@@ -337,6 +334,7 @@ func stateUpdateProcessingLoop() {
 			}
 
 			if stateUpdateQuorum.counter == stateUpdate.AssociatedView.QuorumSize() {
+				// TODO Maybe making State immutable we don't need to worry about copying
 				stateUpdateQuorum.resultChan <- stateUpdateQuorum.State.NewCopy()
 			}
 		case chanRequest := <-stateUpdateChanRequestChan:
