@@ -24,7 +24,6 @@ func main() {
 	flag.Parse()
 
 	initialView := getInitialView()
-	log.Println(initialView)
 	freestoreClient := client.New(initialView)
 
 	var finalValue interface{}
@@ -44,7 +43,7 @@ func main() {
 			log.Fatalln(err)
 		}
 
-		if i%100000 == 1 {
+		if i%1000 == 0 {
 			fmt.Printf("%v: Read %v (%v)-> Write (%v)\n", i, finalValue, endRead.Sub(startRead), endWrite.Sub(startWrite))
 		} else {
 			fmt.Printf(".")

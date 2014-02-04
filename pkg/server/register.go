@@ -17,8 +17,8 @@ var register Value
 type ClientRequest int
 
 func (r *ClientRequest) Read(clientView *view.View, reply *Value) error {
-	if !clientView.Equal(currentView) {
-		reply.Err = view.OldViewError{NewView: currentView}
+	if !clientView.Equal(currentView.View()) {
+		reply.Err = view.OldViewError{NewView: currentView.View()}
 		return nil
 	}
 
@@ -32,8 +32,8 @@ func (r *ClientRequest) Read(clientView *view.View, reply *Value) error {
 }
 
 func (r *ClientRequest) Write(value Value, reply *Value) error {
-	if !value.View.Equal(currentView) {
-		reply.Err = view.OldViewError{NewView: currentView}
+	if !value.View.Equal(currentView.View()) {
+		reply.Err = view.OldViewError{NewView: currentView.View()}
 		return nil
 	}
 
@@ -50,7 +50,7 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 }
 
 func (r *ClientRequest) GetCurrentView(value int, reply *view.View) error {
-	*reply = *currentView
+	*reply = *currentView.View()
 	log.Println("Done GetCurrentView request")
 	return nil
 }

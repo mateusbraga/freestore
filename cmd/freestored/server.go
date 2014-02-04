@@ -58,7 +58,7 @@ func main() {
 	}
 
 	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
+		log.Println("Running pprof:", http.ListenAndServe("localhost:6060", nil))
 	}()
 
 	server.Run(*bindAddr, initialView, *useConsensus)

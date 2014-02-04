@@ -15,7 +15,7 @@ var (
 	useConsensus bool
 
 	// currentView of this server cluster.
-	currentView = view.New()
+	currentView = view.NewCurrentView()
 )
 
 func Run(bindAddr string, initialView *view.View, useConsensusArg bool) {
@@ -28,17 +28,16 @@ func Run(bindAddr string, initialView *view.View, useConsensusArg bool) {
 
 	thisProcess = view.Process{listener.Addr().String()}
 
-	log.Println("Initial View:", initialView)
-	currentView = initialView.NewCopy()
+	currentView.Update(initialView)
 
 	useConsensus = useConsensusArg
 
 	// Enable operations or join View
-	if currentView.HasMember(thisProcess) {
+	if currentView.View().HasMember(thisProcess) {
 		register.mu.Unlock() // Enable r/w operations
 	} else {
 		// try to update currentView with the first member
-		getCurrentView(currentView.GetMembers()...)
+		getCurrentView(currentView.View().GetMembers()...)
 		// join the view
 		Join()
 	}
@@ -57,7 +56,7 @@ func getCurrentView(processes ...view.Process) {
 			continue
 		}
 
-		currentView = receivedView.NewCopy()
+		currentView.Update(receivedView)
 		return
 	}
 

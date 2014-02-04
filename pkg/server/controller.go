@@ -26,7 +26,7 @@ func (r *ControllerRequest) Ping(anything bool, reply *bool) error {
 
 func (r *ControllerRequest) Join(view *view.View, reply *bool) error {
 	log.Println("ControllerRequest to join view", view)
-	currentView = view.NewCopy()
+	currentView.Update(view)
 	Join()
 	return nil
 }
