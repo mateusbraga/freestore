@@ -21,8 +21,8 @@ func ViewToViewRef(v *View) *ViewRef {
 	encoder := gob.NewEncoder(buf)
 	encoder.Encode(updates)
 
-	v.viewRef = &ViewRef{sha1.Sum(buf.Bytes())}
-	return v.viewRef
+	v.Ref = &ViewRef{sha1.Sum(buf.Bytes())}
+	return v.Ref
 }
 
 // viewToViewRef computes view's ViewRef. Caller must lock mutex before calling viewToViewRef.

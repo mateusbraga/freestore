@@ -39,18 +39,17 @@ func (thisUpdate Update) Less(otherUpdate Update) bool {
 // -------- View type -----------
 
 type View struct {
-	entries map[Update]bool
-
-	members map[Process]bool // Cache
-	//TODO viewRef may need lock or be set on the 'New' functions
-	viewRef *ViewRef // Cache
+	Entries map[Update]bool
+	Members map[Process]bool // Cache
+	//TODO Ref may need lock or be set on the 'New' functions
+	Ref *ViewRef // Cache
 }
 
 func newView() *View {
 	v := View{}
-	v.entries = make(map[Update]bool)
-	v.members = make(map[Process]bool)
-	v.viewRef = nil
+	v.Entries = make(map[Update]bool)
+	v.Members = make(map[Process]bool)
+	v.Ref = nil
 	return &v
 }
 
@@ -71,11 +70,11 @@ func NewWithProcesses(processes ...Process) *View {
 func (v *View) NewCopyWithUpdates(updates ...Update) *View {
 	newCopy := newView()
 
-	for update, _ := range v.entries {
-		newCopy.entries[update] = true
+	for update, _ := range v.Entries {
+		newCopy.Entries[update] = true
 	}
-	for process, _ := range v.members {
-		newCopy.members[process] = true
+	for process, _ := range v.Members {
+		newCopy.Members[process] = true
 	}
 
 	newCopy.addUpdate(updates...)
@@ -88,7 +87,7 @@ func (v *View) String() string {
 	fmt.Fprintf(&b, "{")
 
 	first := true
-	for process, _ := range v.members {
+	for process, _ := range v.Members {
 		if !first {
 			fmt.Fprintf(&b, ", ")
 		}
@@ -101,12 +100,12 @@ func (v *View) String() string {
 }
 
 func (v *View) LessUpdatedThan(v2 *View) bool {
-	if len(v2.entries) > len(v.entries) {
+	if len(v2.Entries) > len(v.Entries) {
 		return true
 	}
 
-	for k2, _ := range v2.entries {
-		if _, ok := v.entries[k2]; !ok {
+	for k2, _ := range v2.Entries {
+		if _, ok := v.Entries[k2]; !ok {
 			return true
 		}
 	}
@@ -114,12 +113,12 @@ func (v *View) LessUpdatedThan(v2 *View) bool {
 }
 
 func (v *View) Equal(v2 *View) bool {
-	if len(v.entries) != len(v2.entries) {
+	if len(v.Entries) != len(v2.Entries) {
 		return false
 	}
 
-	for k2, _ := range v2.entries {
-		if _, ok := v.entries[k2]; !ok {
+	for k2, _ := range v2.Entries {
+		if _, ok := v.Entries[k2]; !ok {
 			return false
 		}
 	}
@@ -127,28 +126,28 @@ func (v *View) Equal(v2 *View) bool {
 }
 
 func (v *View) addUpdate(updates ...Update) {
-	v.viewRef = nil
+	v.Ref = nil
 
 	for _, newUpdate := range updates {
-		v.entries[newUpdate] = true
+		v.Entries[newUpdate] = true
 
 		switch newUpdate.Type {
 		case Join:
-			if !v.entries[Update{Leave, newUpdate.Process}] {
-				v.members[newUpdate.Process] = true
+			if !v.Entries[Update{Leave, newUpdate.Process}] {
+				v.Members[newUpdate.Process] = true
 			}
 		case Leave:
-			delete(v.members, newUpdate.Process)
+			delete(v.Members, newUpdate.Process)
 		}
 	}
 }
 
 func (v *View) HasUpdate(u Update) bool {
-	return v.entries[u]
+	return v.Entries[u]
 }
 
 func (v *View) HasMember(p Process) bool {
-	return v.members[p]
+	return v.Members[p]
 }
 
 func (v *View) GetEntries() []Update {
@@ -157,7 +156,7 @@ func (v *View) GetEntries() []Update {
 
 func (v *View) getEntries() []Update {
 	var entries []Update
-	for update, _ := range v.entries {
+	for update, _ := range v.Entries {
 		entries = append(entries, update)
 	}
 	return entries
@@ -165,7 +164,7 @@ func (v *View) getEntries() []Update {
 
 func (v *View) GetMembers() []Process {
 	var members []Process
-	for process, _ := range v.members {
+	for process, _ := range v.Members {
 		members = append(members, process)
 	}
 	return members
@@ -173,8 +172,8 @@ func (v *View) GetMembers() []Process {
 
 func (v *View) GetMembersNotIn(v2 *View) []Process {
 	var members []Process
-	for process, _ := range v.members {
-		if !v2.members[process] {
+	for process, _ := range v.Members {
+		if !v2.Members[process] {
 			members = append(members, process)
 		}
 	}
@@ -184,13 +183,13 @@ func (v *View) GetMembersNotIn(v2 *View) []Process {
 
 // GetProcessPosition returns an unique number for the process in the view. Returns -1 if process is not a member of the view.
 func (v *View) GetProcessPosition(process Process) int {
-	if _, ok := v.members[process]; !ok {
+	if _, ok := v.Members[process]; !ok {
 		return -1
 	}
 
 	// Position will be the position of the process in an ordered list of the members.
 	position := 0
-	for proc, _ := range v.members {
+	for proc, _ := range v.Members {
 		if proc.Addr < process.Addr {
 			position++
 		}
@@ -199,7 +198,7 @@ func (v *View) GetProcessPosition(process Process) int {
 }
 
 func (v *View) NumberOfEntries() int {
-	return len(v.entries)
+	return len(v.Entries)
 }
 
 func (v *View) QuorumSize() int {
@@ -207,24 +206,24 @@ func (v *View) QuorumSize() int {
 }
 
 func (v *View) quorumSize() int {
-	membersTotal := len(v.members)
+	membersTotal := len(v.Members)
 	return (membersTotal+1)/2 + (membersTotal+1)%2
 }
 
 func (v *View) N() int {
-	return len(v.members)
+	return len(v.Members)
 }
 
 func (v *View) F() int {
-	membersTotal := len(v.members)
+	membersTotal := len(v.Members)
 	return membersTotal - v.quorumSize()
 }
 
 func (v *View) getViewRef() ViewRef {
-	if v.viewRef == nil {
-		v.viewRef = viewToViewRef(v)
+	if v.Ref == nil {
+		v.Ref = viewToViewRef(v)
 	}
-	return *v.viewRef
+	return *v.Ref
 }
 
 // ----- ERRORS -----
