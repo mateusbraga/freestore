@@ -1,6 +1,8 @@
 package view
 
 import (
+	"bytes"
+	"encoding/gob"
 	"testing"
 )
 
@@ -165,5 +167,34 @@ func TestGetProcessPosition(t *testing.T) {
 
 	if position := v1.GetProcessPosition(Process{"2"}); position != 0 {
 		t.Errorf("GetProcessPosition: expected 0, got %v", position)
+	}
+}
+
+func TestViewGob(t *testing.T) {
+	updates := []Update{Update{Type: Join, Process: Process{"1"}},
+		Update{Type: Join, Process: Process{"2"}},
+		Update{Type: Join, Process: Process{"3"}},
+	}
+
+	v1 := NewWithUpdates(updates...)
+
+	buf := new(bytes.Buffer)
+	encoder := gob.NewEncoder(buf)
+	err := encoder.Encode(v1)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	var v2 *View
+
+	buf2 := bytes.NewReader(buf.Bytes())
+	decoder := gob.NewDecoder(buf2)
+	err = decoder.Decode(&v2)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	if !v1.Equal(v2) {
+		t.Errorf("gob is wrong")
 	}
 }

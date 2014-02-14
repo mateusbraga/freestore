@@ -8,7 +8,7 @@ import (
 )
 
 type ViewRef struct {
-	digest [sha1.Size]byte
+	Digest [sha1.Size]byte
 }
 
 //TODO may need lock since its changing v.viewRef
