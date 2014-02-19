@@ -31,6 +31,7 @@ func (thisClient *Client) UpdateCurrentView(newView *view.View) {
 }
 
 // Write v to the system's register.
+// TODO make Write call a function write that receives v and the view or think about another way to make it ok for view to change concurrently with Write and Read
 func (thisClient *Client) Write(v interface{}) error {
 	readValue, err := readQuorum(thisClient.View())
 	if err != nil {
@@ -83,7 +84,7 @@ func (thisClient *Client) Read() (interface{}, error) {
 
 			return thisClient.read2ndPhase(thisClient.View(), readMsg)
 		} else {
-			return 0, err
+			return nil, err
 		}
 	}
 
