@@ -1,0 +1,195 @@
+Freestore's Fault Tolerance Model
+=================================
+
+This document is a fault tolerance specification of the system. The
+intent is to get all of the assumptions out on the table. 
+
+Each identified possible error is classified as one of the following:
+untolerated, detected and tolerated. Also, each error's probability of
+occurrence is estimated. Ideally, all untolerated errors should have
+a negligible probability, all detected error should specify its
+detection procedure, and all tolerated error should specify its masking
+method. 
+
+The classification of each error takes into account the system design,
+the estimated probability, the cost of turning them into detected or
+tolerated, and the potential consequences of its occurrence. It is
+recommended to contain detected errors in fail-fast modules (modules
+that reports at its interface that something has gone wrong).
+
+#####################################
+
+Freestore Client's end-to-end layer which masks old view and divergence in the
+responses.
+
+Read() (value, error)
+Write(value) error
+
+Untolerated errors
+------------------
+
+Untolerated errors from the platforms used to run the client and the
+servers. This includes the wide range of possible rare errors in using
+hardware and low-level software (OS).
+
+Communication errors not catch by TCP error detection that represents
+valid RPC request or response.
+
+Detected errors
+---------------
+
+All RPC errors with more than 'floor((N-1)/2)' processes. The failure to
+acquire the response from a majority of processes is a failure of the
+system assumption that a majority of processes is always working. This
+error is detected in the Quorum layer and passed to the caller of Read
+an Write.
+
+Tolerated errors
+---------------
+
+A majority of servers disagree on their register's value. Read masks
+this error by sending the correct value (the one returned by Quorum-Read
+with the highest timestamp) to all servers before returning the correct
+value. This is required to guarantee read and write coherence. Write
+masks this error by using the returned value from Quorum-Read as the one
+with the highest associated timestamp to determine which is the next
+timestamp.  
+
+The Client has an old View of the system. Read and Write mask this error
+by updating the new view of the system which Quorum-Read and
+Quorum-Write returns, and then retrying the operation.
+
+======================================
+
+Freestore Client's quorum layer which implements the N-modular redundancy.
+
+Quorum-Read(view) (value, error)
+Quorum-Write(view, value) error
+
+Untolerated errors
+------------------
+
+Untolerated errors from the platforms used to run the client and the
+servers. This includes the wide range of possible rare errors in using
+hardware and low-level software (OS).
+
+Communication errors not catch by TCP error detection that represents
+valid RPC request or response.
+
+Detected errors
+---------------
+
+The Client has an old View of the system. Quorum-Read and Quorum-Write
+return this error (which has the new view) if a server reports that
+there is a new view of the system.
+
+All RPC errors with more than 'floor((N-1)/2)' processes. The failure to
+acquire the response from a majority of processes causes Quorum-Read and
+Quorum-Write to return an error. This error is detected by counting the
+number of errors returned by the communication service (RPC).
+
+A majority of servers disagree on the register's value. Quorum-Read
+detect this error by comparing the received values from a majority of
+servers and returning the value with the highest associated timestamp
+along with an error. This error does not affect Quorum-Write. 
+
+Tolerated errors
+---------------
+
+All RPC errors in up to 'floor((N-1)/2)' processes. Read and Write mask
+these error by using N-modular redundancy (it implements a voter that
+uses the response of a majority).
+
+======================================
+
+Freestore Communication module which provides the interface to the RPC service.
+
+SendRPCRequest(arg, *reply) error
+
+Untolerated errors
+------------------
+
+Untolerated errors from the platforms used to run the client and the
+servers. This includes the wide range of possible rare errors in using
+hardware and low-level software (OS).
+
+Communication errors not catch by TCP error detection that represents
+valid RPC request or response.
+
+Detected errors
+---------------
+
+Communication Hard errors. SendRPCRequest returns errors returned from the
+RPC/TCP implementation.
+
+Tolerated errors
+---------------
+
+None.
+
+======================================
+
+Freestore Server's register
+
+Read() (value, error)
+Write(value) error
+
+
+Untolerated errors
+------------------
+
+Untolerated errors from the platforms used to run the server. This
+includes the wide range of possible rare errors in using hardware and
+low-level software (OS).
+
+Communication errors not catch by TCP error detection that represents
+valid RPC request or response.
+
+Detected errors
+---------------
+
+Communication errors. The server will detect and report any invalid
+request and then discard it.
+
+Request to an old view. The server will compare its current view with
+the request associated view and return an error in the reply along with
+the newer view. Both in Read and in Write.
+
+Tolerated errors
+---------------
+
+None.
+
+======================================
+
+Freestore Server's Reconfiguration module
+
+
+
+Untolerated errors
+------------------
+
+Untolerated errors from the platforms used to run the server. This
+includes the wide range of possible rare errors in using hardware and
+low-level software (OS).
+
+Communication errors not catch by TCP error detection that represents
+valid RPC request or response.
+
+Detected errors
+---------------
+
+Communication errors. The server will detect and report any invalid
+request and then discard it.
+
+Request to an old view. The server will compare its current view with
+the request associated view and return an error in the reply along with
+the newer view. Both in Read and in Write.
+
+Tolerated errors
+---------------
+
+None.
+
+
+
