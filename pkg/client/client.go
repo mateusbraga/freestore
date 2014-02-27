@@ -80,7 +80,7 @@ func (thisClient *Client) read2ndPhase(readMsg RegisterMsg) (interface{}, error)
 
 	err := thisClient.writeQuorum(readMsg)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	return readMsg.Value, nil
