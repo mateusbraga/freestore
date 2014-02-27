@@ -1,5 +1,3 @@
-// +build !staticRegister
-
 //TODO make it a key value storage
 package server
 
