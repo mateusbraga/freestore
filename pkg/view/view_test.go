@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"testing"
+	"time"
 )
 
 func TestViewEqual(t *testing.T) {
@@ -171,21 +172,25 @@ func TestGetProcessPosition(t *testing.T) {
 }
 
 func TestViewGob(t *testing.T) {
-	updates := []Update{Update{Type: Join, Process: Process{"1"}},
-		Update{Type: Join, Process: Process{"2"}},
-		Update{Type: Join, Process: Process{"3"}},
+	updates := []Update{Update{Type: Join, Process: Process{"10.1.1.2:5000"}},
+		Update{Type: Join, Process: Process{"10.1.1.3:5000"}},
+		Update{Type: Join, Process: Process{"10.1.1.4:5000"}},
 	}
 
 	v1 := NewWithUpdates(updates...)
 
 	buf := new(bytes.Buffer)
 	encoder := gob.NewEncoder(buf)
+	startTime := time.Now()
 	err := encoder.Encode(v1)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
+	endTime := time.Now()
 
 	var v2 *View
+
+	t.Logf("View %v encoded is %v bytes long and took %v to encode\n", v1, len(buf.Bytes()), endTime.Sub(startTime))
 
 	buf2 := bytes.NewReader(buf.Bytes())
 	decoder := gob.NewDecoder(buf2)

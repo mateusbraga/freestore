@@ -25,44 +25,33 @@ func (thisClient Client) View() *view.View {
 	return thisClient.view.View()
 }
 
-// UpdateCurrentView sets newView as the client's view.
-func (thisClient *Client) UpdateCurrentView(newView *view.View) {
+// updateCurrentView sets newView as the client's view.
+func (thisClient *Client) updateCurrentView(newView *view.View) {
 	thisClient.view.Update(newView)
 }
 
-// Write v to the system's register.
-// TODO make Write call a function write that receives v and the view or think about another way to make it ok for view to change concurrently with Write and Read
+// Write v to the system's register. Can be run concurrently.
 func (thisClient *Client) Write(v interface{}) error {
-	readValue, err := readQuorum(thisClient.View())
+	readValue, err := thisClient.readQuorum()
 	if err != nil {
 		// Special cases:
-		//  oldViewError: thisClient.view is old, update it and retry
 		//  diffResultsErr: can be ignored
-		if oldViewError, ok := err.(*view.OldViewError); ok {
-			log.Println("View updated during basic read quorum of Write op")
-			thisClient.UpdateCurrentView(oldViewError.NewView)
-			return thisClient.Write(v)
-		} else if err == diffResultsErr {
+		if err == diffResultsErr {
 			// Do nothing - we will write a new value anyway
 		} else {
 			return err
 		}
 	}
 
+	//TODO append writer id to timestamp? or test if values and timestamps are equal instead of just the timestamps
 	writeMsg := RegisterMsg{}
 	writeMsg.Value = v
 	writeMsg.Timestamp = readValue.Timestamp + 1
 	writeMsg.View = thisClient.View()
 
-	err = writeQuorum(thisClient.View(), writeMsg)
+	err = thisClient.writeQuorum(writeMsg)
 	if err != nil {
-		if oldViewError, ok := err.(*view.OldViewError); ok {
-			log.Println("View updated during basic write quorum of Write op")
-			thisClient.UpdateCurrentView(oldViewError.NewView)
-			return thisClient.Write(v)
-		} else {
-			return err
-		}
+		return err
 	}
 
 	return nil
@@ -70,19 +59,12 @@ func (thisClient *Client) Write(v interface{}) error {
 
 // Read executes the quorum read protocol.
 func (thisClient *Client) Read() (interface{}, error) {
-	readMsg, err := readQuorum(thisClient.View())
+	readMsg, err := thisClient.readQuorum()
 	if err != nil {
-		// Expected: oldViewError (will retry) or diffResultsErr (will write most current value to view).
-		if oldViewError, ok := err.(*view.OldViewError); ok {
-			log.Println("View updated during basic read quorum of Read op")
-			thisClient.UpdateCurrentView(oldViewError.NewView)
-			return thisClient.Read()
-		} else if err == diffResultsErr {
+		// Expected: diffResultsErr (will write most current value to view).
+		if err == diffResultsErr {
 			log.Println("Found divergence: Going to 2nd phase of read protocol")
-
-			readMsg.View = thisClient.View()
-
-			return thisClient.read2ndPhase(thisClient.View(), readMsg)
+			return thisClient.read2ndPhase(readMsg)
 		} else {
 			return nil, err
 		}
@@ -91,17 +73,16 @@ func (thisClient *Client) Read() (interface{}, error) {
 	return readMsg.Value, nil
 }
 
-func (thisClient *Client) read2ndPhase(destinationView *view.View, readMsg RegisterMsg) (interface{}, error) {
-	err := writeQuorum(destinationView, readMsg)
+func (thisClient *Client) read2ndPhase(readMsg RegisterMsg) (interface{}, error) {
+	destinationView := thisClient.View()
+
+	readMsg.View = destinationView
+
+	err := thisClient.writeQuorum(readMsg)
 	if err != nil {
-		if oldViewError, ok := err.(*view.OldViewError); ok {
-			log.Println("View updated during basic write quorum of Read op (2nd phase)")
-			thisClient.UpdateCurrentView(oldViewError.NewView)
-			return thisClient.Read()
-		} else {
-			return 0, err
-		}
+		return 0, err
 	}
+
 	return readMsg.Value, nil
 }
 

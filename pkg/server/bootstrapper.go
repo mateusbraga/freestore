@@ -7,6 +7,7 @@ import (
 
 	"github.com/mateusbraga/freestore/pkg/comm"
 	"github.com/mateusbraga/freestore/pkg/view"
+	// TODO create stats module to count faults, faults masked, errors, failures, ...
 )
 
 var (

@@ -12,8 +12,10 @@ import (
 var diffResultsErr = errors.New("Read Divergence")
 
 // readQuorum asks for the register value from all members of the view, returning the most recent one after it receives answers from a majority.
-// If the view needs to be updated, it will return a *view.OldViewError.  If values returned by the processes differ, it will return diffResultsErr.
-func readQuorum(destinationView *view.View) (RegisterMsg, error) {
+// If the client's view needs to be updated, it will update it and retry.  If values returned by the processes differ, it will return diffResultsErr.
+func (thisClient *Client) readQuorum() (RegisterMsg, error) {
+	destinationView := thisClient.View()
+
 	// Send write request to all
 	resultChan := make(chan RegisterMsg, destinationView.N())
 	go broadcastRead(destinationView, resultChan)
@@ -55,7 +57,9 @@ func readQuorum(destinationView *view.View) (RegisterMsg, error) {
 
 		if receivedValue.Err != nil {
 			if oldViewError, ok := receivedValue.Err.(*view.OldViewError); ok {
-				return RegisterMsg{}, oldViewError
+				log.Println("View updated during read quorum")
+				thisClient.updateCurrentView(oldViewError.NewView)
+				return thisClient.readQuorum()
 			}
 
 			ok := countError(receivedValue.Err)
@@ -80,8 +84,10 @@ func readQuorum(destinationView *view.View) (RegisterMsg, error) {
 }
 
 // writeQuorum tries to write the value in writeMsg to the register of all processes on the view, returning when it gets confirmation from a majority.
-// If the view needs to be updated, it will return the new view in a *view.OldViewError.
-func writeQuorum(destinationView *view.View, writeMsg RegisterMsg) error {
+// If the client's view needs to be updated, it will update it and retry.
+func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
+	destinationView := thisClient.View()
+
 	// Send write request to all
 	resultChan := make(chan RegisterMsg, destinationView.N())
 	go broadcastWrite(destinationView, writeMsg, resultChan)
@@ -117,7 +123,9 @@ func writeQuorum(destinationView *view.View, writeMsg RegisterMsg) error {
 
 		if receivedValue.Err != nil {
 			if oldViewError, ok := receivedValue.Err.(*view.OldViewError); ok {
-				return oldViewError
+				log.Println("View updated during write quorum")
+				thisClient.updateCurrentView(oldViewError.NewView)
+				return thisClient.writeQuorum(writeMsg)
 			}
 
 			ok := countError(receivedValue.Err)
