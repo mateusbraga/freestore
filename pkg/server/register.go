@@ -21,6 +21,7 @@ type ClientRequest int
 
 func (r *ClientRequest) Read(clientView *view.View, reply *Value) error {
 	if !clientView.Equal(currentView.View()) {
+		log.Printf("Got old view: %v, sending new one: %v\n", clientView, currentView.View())
 		reply.Err = view.OldViewError{NewView: currentView.View()}
 		return nil
 	}
