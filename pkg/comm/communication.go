@@ -136,7 +136,7 @@ func repairCommLinkLoop() {
 	commLinkRepairPeriod := initialCommLinkRepairPeriod
 	faultyCommLinks := make(map[view.Process]bool)
 
-	repairTicker := time.NewTicker(commLinkRepairPeriod)
+	repairTimer := time.NewTimer(commLinkRepairPeriod)
 
 	for {
 		select {
@@ -146,8 +146,9 @@ func repairCommLinkLoop() {
 				log.Printf("Failed to repair communication link to process %v: %v\n", commLink.Process, err)
 				faultyCommLinks[commLink.Process] = true
 			}
-			repairTicker = time.NewTicker(commLinkRepairPeriod)
-		case _ = <-repairTicker.C:
+
+			commLinkRepairPeriod = initialCommLinkRepairPeriod
+		case _ = <-repairTimer.C:
 			for process, _ := range faultyCommLinks {
 				err := repairCommLinkFunc(process)
 				if err != nil {
@@ -158,7 +159,8 @@ func repairCommLinkLoop() {
 				delete(faultyCommLinks, process)
 			}
 
-			repairTicker = time.NewTicker(2 * commLinkRepairPeriod)
+			commLinkRepairPeriod = 2 * commLinkRepairPeriod
+
 			if len(faultyCommLinks) != 0 && commLinkRepairPeriod > 30*time.Second {
 				for process, _ := range faultyCommLinks {
 					deleteCommLink(process)
@@ -166,6 +168,7 @@ func repairCommLinkLoop() {
 			}
 		}
 
+		repairTimer.Reset(commLinkRepairPeriod)
 	}
 }
 

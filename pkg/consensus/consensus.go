@@ -380,6 +380,7 @@ func broadcastPrepareRequest(destinationView *view.View, proposal Proposal, resu
 			err := comm.SendRPCRequest(process, "ConsensusRequest.Prepare", proposal, &result)
 			if err != nil {
 				resultChan <- Proposal{Err: err}
+				return
 			}
 			resultChan <- result
 		}(process)
@@ -393,6 +394,7 @@ func broadcastAcceptRequest(destinationView *view.View, proposal Proposal, resul
 			err := comm.SendRPCRequest(process, "ConsensusRequest.Accept", proposal, &result)
 			if err != nil {
 				resultChan <- Proposal{Err: err}
+				return
 			}
 			resultChan <- result
 		}(process)

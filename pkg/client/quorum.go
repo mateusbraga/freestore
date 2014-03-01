@@ -149,7 +149,9 @@ func broadcastRead(destinationView *view.View, resultChan chan RegisterMsg) {
 			err := comm.SendRPCRequest(process, "ClientRequest.Read", destinationView, &result)
 			if err != nil {
 				resultChan <- RegisterMsg{Err: err}
+				return
 			}
+
 			resultChan <- result
 		}(process)
 	}
@@ -162,6 +164,7 @@ func broadcastWrite(destinationView *view.View, writeMsg RegisterMsg, resultChan
 			err := comm.SendRPCRequest(process, "ClientRequest.Write", writeMsg, &result)
 			if err != nil {
 				resultChan <- RegisterMsg{Err: err}
+				return
 			}
 			resultChan <- result
 		}(process)
