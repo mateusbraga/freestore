@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/mateusbraga/freestore/pkg/client"
 	"github.com/mateusbraga/freestore/pkg/server"
 	"github.com/mateusbraga/freestore/pkg/view"
 
@@ -33,9 +34,46 @@ func init() {
 func main() {
 	flag.Parse()
 
+	initialView := getInitialView()
+
+	go func() {
+		log.Println("Running pprof:", http.ListenAndServe("localhost:6060", nil))
+	}()
+
+	server.Run(*bindAddr, initialView, *useConsensus)
+}
+
+func getInitialView() *view.View {
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Fatalln(err)
+	}
+
+	switch {
+	case strings.Contains(hostname, "node-"): // emulab.net
+		for i := 0; i < 7; i++ {
+			process := view.Process{fmt.Sprintf("10.1.1.%d:5000", i+2)}
+
+			initialView, err := client.GetCurrentView(process)
+			if err != nil {
+				log.Printf("Failed to get current view of process %v: %v\n", process, err)
+				continue
+			}
+
+			return initialView
+		}
+	default:
+		for i := 0; i < 7; i++ {
+			process := view.Process{fmt.Sprintf("[::]:500%v", i)}
+
+			initialView, err := client.GetCurrentView(process)
+			if err != nil {
+				log.Printf("Failed to get current view of process %v: %v\n", process, err)
+				continue
+			}
+
+			return initialView
+		}
 	}
 
 	var initialView *view.View
@@ -56,10 +94,5 @@ func main() {
 		}
 		initialView = view.NewWithUpdates(updates...)
 	}
-
-	go func() {
-		log.Println("Running pprof:", http.ListenAndServe("localhost:6060", nil))
-	}()
-
-	server.Run(*bindAddr, initialView, *useConsensus)
+	return initialView
 }
