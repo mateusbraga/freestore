@@ -260,7 +260,7 @@ func getInitialView() *view.View {
 
 	initialView, err := client.GetCurrentView(process)
 	if err != nil {
-		log.Fatalln("Failed to get current view of process %v: %v\n", process, err)
+		log.Fatalf("Failed to get current view of process %v: %v\n", process, err)
 	}
 	return initialView
 }
