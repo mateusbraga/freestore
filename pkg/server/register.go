@@ -38,6 +38,7 @@ func (r *ClientRequest) Read(clientView *view.View, reply *Value) error {
 
 func (r *ClientRequest) Write(value Value, reply *Value) error {
 	if !value.View.Equal(currentView.View()) {
+		log.Printf("Got old view: %v, sending new one: %v\n", value.View, currentView.View())
 		reply.Err = view.OldViewError{NewView: currentView.View()}
 		return nil
 	}
