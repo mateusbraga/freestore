@@ -86,7 +86,7 @@ var throughput uint64
 var throughputBuffer = make(map[time.Time]uint64, 70)
 
 func collectThroughputWorker() {
-	writeLength := rand.Intn(60)
+	writeLength := rand.Intn(20)
 	var lastThroughput uint64
 
 	for now := range time.Tick(time.Second) {
@@ -95,7 +95,7 @@ func collectThroughputWorker() {
 		lastThroughput = aux
 
 		if len(throughputBuffer) == writeLength {
-			writeLength = rand.Intn(60)
+			writeLength = rand.Intn(20)
 			saveThroughput()
 		}
 	}
