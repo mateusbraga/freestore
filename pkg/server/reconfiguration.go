@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/rpc"
+	"os"
 	"sync"
 	"time"
 
@@ -247,10 +248,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 		}
 
 		log.Println("Terminating...")
-		err := listener.Close()
-		if err != nil {
-			log.Panic(err)
-		}
+		os.Exit(0)
 	}
 }
 
