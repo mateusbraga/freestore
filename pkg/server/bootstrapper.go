@@ -37,10 +37,15 @@ func Run(bindAddr string, initialView *view.View, useConsensusArg bool) {
 	if currentView.View().HasMember(thisProcess) {
 		register.mu.Unlock() // Enable r/w operations
 	} else {
-		// try to update currentView with the first member
+		// try to update currentView
 		getCurrentView(currentView.View().GetMembers()...)
-		// join the view
-		Join()
+
+		if currentView.View().HasMember(thisProcess) {
+			register.mu.Unlock() // Enable r/w operations
+		} else {
+			// join the view
+			Join()
+		}
 	}
 
 	// Accept connections forever
