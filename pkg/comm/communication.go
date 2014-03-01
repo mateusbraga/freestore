@@ -11,7 +11,7 @@ import (
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-const commLinkRepairPeriod = 20 * time.Second
+const commLinkRepairPeriod = 3 * time.Second
 
 var (
 	commLinkTable   = make(map[view.Process]communicationLink)
