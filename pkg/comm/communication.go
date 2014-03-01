@@ -11,7 +11,7 @@ import (
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-const commLinkRepairPeriod = 3 * time.Second
+const initialCommLinkRepairPeriod = 3 * time.Second
 
 var (
 	commLinkTable   = make(map[view.Process]communicationLink)
@@ -56,6 +56,13 @@ func setCommLinkFaulty(process view.Process) {
 	commLink := commLinkTable[process]
 	commLink.rpcClient = nil
 	commLinkTable[process] = commLink
+}
+
+func deleteCommLink(process view.Process) {
+	commLinkTableMu.Lock()
+	defer commLinkTableMu.Unlock()
+
+	delete(commLinkTable, process)
 }
 
 func SendRPCRequest(process view.Process, serviceMethod string, arg interface{}, result interface{}) error {
@@ -126,7 +133,9 @@ func repairCommLinkFunc(process view.Process) error {
 }
 
 func repairCommLinkLoop() {
-	faultyCommLinks := make(map[view.Process]time.Time)
+	commLinkRepairPeriod := initialCommLinkRepairPeriod
+	faultyCommLinks := make(map[view.Process]bool)
+
 	repairTicker := time.NewTicker(commLinkRepairPeriod)
 
 	for {
@@ -135,20 +144,25 @@ func repairCommLinkLoop() {
 			err := repairCommLinkFunc(commLink.Process)
 			if err != nil {
 				log.Printf("Failed to repair communication link to process %v: %v\n", commLink.Process, err)
-				faultyCommLinks[commLink.Process] = time.Now()
+				faultyCommLinks[commLink.Process] = true
 			}
-		case tickTime := <-repairTicker.C:
-			for process, loopTime := range faultyCommLinks {
+			repairTicker = time.NewTicker(commLinkRepairPeriod)
+		case _ = <-repairTicker.C:
+			for process, _ := range faultyCommLinks {
 				err := repairCommLinkFunc(process)
 				if err != nil {
 					log.Printf("Failed to repair communication link to process %v: %v\n", process, err)
-
-					if tickTime.Sub(loopTime) < 10*time.Second {
-						continue
-					}
+					continue
 				}
 
 				delete(faultyCommLinks, process)
+			}
+
+			repairTicker = time.NewTicker(2 * commLinkRepairPeriod)
+			if len(faultyCommLinks) != 0 && commLinkRepairPeriod > 30*time.Second {
+				for process, _ := range faultyCommLinks {
+					deleteCommLink(process)
+				}
 			}
 		}
 
