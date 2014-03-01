@@ -28,7 +28,7 @@ func (currentView *CurrentView) Update(newView *View) {
 	currentView.mu.Lock()
 	defer currentView.mu.Unlock()
 
-	if newView.LessUpdatedThan(currentView.view) {
+	if newView.LessUpdatedThan(currentView.view) || newView.Equal(currentView.view) {
 		return
 	}
 
