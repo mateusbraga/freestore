@@ -380,6 +380,7 @@ func syncState(installSeq InstallSeq) {
 // ------------- Join and Leave ---------------------
 
 func Join() {
+	log.Println("Asked to Join current view:", currentView.View())
 	reconfig := ReconfigMsg{AssociatedView: currentView.View(), Update: view.Update{view.Join, thisProcess}}
 
 	// Send reconfig request to currentView
@@ -387,6 +388,7 @@ func Join() {
 }
 
 func Leave() {
+	log.Println("Asked to Leave current view:", currentView.View())
 	reconfig := ReconfigMsg{AssociatedView: currentView.View(), Update: view.Update{view.Leave, thisProcess}}
 
 	// Send reconfig request to all
