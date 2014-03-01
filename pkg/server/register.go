@@ -2,9 +2,14 @@
 package server
 
 import (
+	"bufio"
+	"fmt"
 	"log"
+	"math/rand"
 	"net/rpc"
+	"os"
 	"sync"
+	"time"
 
 	"github.com/mateusbraga/freestore/pkg/view"
 )
@@ -25,6 +30,8 @@ func (r *ClientRequest) Read(clientView *view.View, reply *Value) error {
 
 	reply.Value = register.Value
 	reply.Timestamp = register.Timestamp
+
+	throughput++
 
 	return nil
 }
@@ -73,4 +80,50 @@ type Value struct {
 	Err  error
 
 	mu sync.RWMutex
+}
+
+var throughput uint64
+var throughputBuffer = make(map[time.Time]uint64, 70)
+
+func collectThroughputWorker() {
+	writeLength := rand.Intn(60)
+	var lastThroughput uint64
+
+	for now := range time.Tick(time.Second) {
+		aux := throughput
+		throughputBuffer[now] = aux - lastThroughput
+		lastThroughput = aux
+
+		if len(throughputBuffer) == writeLength {
+			writeLength = rand.Intn(60)
+			saveThroughput()
+		}
+	}
+}
+
+func saveThroughput() {
+	file, err := os.OpenFile("/proj/freestore/throughputs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
+	if err != nil {
+		//log.Println(err)
+		for loopTime, loopThroughput := range throughputBuffer {
+			fmt.Printf("%v %v %v\n", thisProcess, loopThroughput, loopTime.Format(time.RFC3339))
+			delete(throughputBuffer, loopTime)
+		}
+		return
+	}
+	defer file.Close()
+
+	w := bufio.NewWriter(file)
+	defer w.Flush()
+
+	for loopTime, loopThroughput := range throughputBuffer {
+		if _, err = w.Write([]byte(fmt.Sprintf("%v %v %v\n", thisProcess, loopThroughput, loopTime.Format(time.RFC3339)))); err != nil {
+			log.Fatalln(err)
+		}
+		delete(throughputBuffer, loopTime)
+	}
+}
+
+func init() {
+	go collectThroughputWorker()
 }

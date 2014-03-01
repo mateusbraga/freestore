@@ -34,8 +34,9 @@ operations by returning a status to the user.
 tolerated error: The user who has initiated an action notices that the
 system failed by checking the status returned by the action. This error
 indicate that the assumption that at least a majority of servers is
-running and reachable is flawed. The action may have been performed but
-all users should stop using the distributed register at this point.
+running and reachable is flawed. In this case, the action may have been
+performed, but the user should stop using the distributed register at
+this point.
 
 untolerated error: The system fails without the user checking the status
 returned of an action, so the user does not realize that its action may
@@ -62,8 +63,8 @@ design does not try to detect and neither tolerate.
 
 untolerated error: Communication errors that cause the client or servers
 to malfunction silently, like an error that the TCP error detection
-mechanism do not detect and that also represents a valid RPC request or
-response.
+mechanism does not detect and that also represents a valid RPC request
+or response.
 
 -------------------------------------------------------------------------
 
