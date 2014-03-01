@@ -247,7 +247,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 			}
 		}
 
-		log.Println("Terminating...")
+		log.Println("Leaving...")
 		os.Exit(0)
 	}
 }

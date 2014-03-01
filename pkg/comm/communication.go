@@ -11,7 +11,8 @@ import (
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-const initialCommLinkRepairPeriod = 3 * time.Second
+const initialCommLinkRepairPeriod = 1 * time.Second
+const maxCommLinkRepairPeriod = 3 * time.Second
 
 var (
 	commLinkTable   = make(map[view.Process]communicationLink)
@@ -143,25 +144,23 @@ func repairCommLinkLoop() {
 		case commLink := <-repairLinkChan:
 			err := repairCommLinkFunc(commLink.Process)
 			if err != nil {
-				log.Printf("Failed to repair communication link to process %v: %v\n", commLink.Process, err)
 				faultyCommLinks[commLink.Process] = true
+				commLinkRepairPeriod = initialCommLinkRepairPeriod
 			}
-
-			commLinkRepairPeriod = initialCommLinkRepairPeriod
 		case _ = <-repairTimer.C:
 			for process, _ := range faultyCommLinks {
 				err := repairCommLinkFunc(process)
 				if err != nil {
-					log.Printf("Failed to repair communication link to process %v: %v\n", process, err)
 					continue
 				}
 
 				delete(faultyCommLinks, process)
 			}
 
+			// exponential backoff
 			commLinkRepairPeriod = 2 * commLinkRepairPeriod
 
-			if len(faultyCommLinks) != 0 && commLinkRepairPeriod > 30*time.Second {
+			if commLinkRepairPeriod > maxCommLinkRepairPeriod {
 				for process, _ := range faultyCommLinks {
 					deleteCommLink(process)
 				}
