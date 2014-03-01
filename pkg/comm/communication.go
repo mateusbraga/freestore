@@ -138,18 +138,13 @@ func repairCommLinkLoop() {
 				faultyCommLinks[commLink.Process] = true
 			}
 		case _ = <-repairTicker.C:
-			var repairedSucessfully []view.Process
-
 			for process, _ := range faultyCommLinks {
 				err := repairCommLinkFunc(process)
 				if err != nil {
 					log.Printf("Failed to repair communication link to process %v: %v\n", process, err)
+					continue
 				}
 
-				repairedSucessfully = append(repairedSucessfully, process)
-			}
-
-			for _, process := range repairedSucessfully {
 				delete(faultyCommLinks, process)
 			}
 		}
