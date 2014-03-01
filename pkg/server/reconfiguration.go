@@ -502,13 +502,13 @@ func broadcastViewInstalled(destinationView *view.View, viewInstalledMsg ViewIns
 }
 
 func broadcastStateUpdate(destinationView *view.View, stateUpdateMsg StateUpdateMsg) {
-	comm.BroadcastRPCRequest(destinationView, "ReconfigurationRequest.StateUpdate", stateUpdateMsg)
+	comm.BroadcastQuorumRPCRequest(destinationView, "ReconfigurationRequest.StateUpdate", stateUpdateMsg)
 }
 
 func broadcastInstallSeq(destinationView *view.View, installSeqMsg InstallSeqMsg) {
-	comm.BroadcastRPCRequest(destinationView, "ReconfigurationRequest.InstallSeq", installSeqMsg)
+	comm.BroadcastQuorumRPCRequest(destinationView, "ReconfigurationRequest.InstallSeq", installSeqMsg)
 }
 
 func broadcastReconfigRequest(destinationView *view.View, reconfigMsg ReconfigMsg) {
-	comm.BroadcastRPCRequest(destinationView, "ReconfigurationRequest.Reconfig", reconfigMsg)
+	comm.BroadcastQuorumRPCRequest(destinationView, "ReconfigurationRequest.Reconfig", reconfigMsg)
 }

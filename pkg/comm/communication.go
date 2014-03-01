@@ -75,6 +75,15 @@ func SendRPCRequest(process view.Process, serviceMethod string, arg interface{},
 }
 
 func BroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}) {
+	for _, process := range destinationView.GetMembers() {
+		go func(process view.Process) {
+			var discardResult struct{}
+			_ = SendRPCRequest(process, serviceMethod, arg, &discardResult)
+		}(process)
+	}
+}
+
+func BroadcastQuorumRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}) {
 	errorChan := make(chan error, destinationView.N())
 
 	for _, process := range destinationView.GetMembers() {
