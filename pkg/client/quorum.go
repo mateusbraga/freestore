@@ -142,31 +142,35 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 	}
 }
 
+func sendRead(process view.Process, destinationView *view.View, resultChan chan RegisterMsg) {
+	var result RegisterMsg
+	err := comm.SendRPCRequest(process, "ClientRequest.Read", destinationView, &result)
+	if err != nil {
+		resultChan <- RegisterMsg{Err: err}
+		return
+	}
+
+	resultChan <- result
+}
+
 func broadcastRead(destinationView *view.View, resultChan chan RegisterMsg) {
 	for _, process := range destinationView.GetMembers() {
-		go func(process view.Process) {
-			var result RegisterMsg
-			err := comm.SendRPCRequest(process, "ClientRequest.Read", destinationView, &result)
-			if err != nil {
-				resultChan <- RegisterMsg{Err: err}
-				return
-			}
-
-			resultChan <- result
-		}(process)
+		go sendRead(process, destinationView, resultChan)
 	}
+}
+
+func sendWrite(process view.Process, writeMsg *RegisterMsg, resultChan chan RegisterMsg) {
+	var result RegisterMsg
+	err := comm.SendRPCRequest(process, "ClientRequest.Write", writeMsg, &result)
+	if err != nil {
+		resultChan <- RegisterMsg{Err: err}
+		return
+	}
+	resultChan <- result
 }
 
 func broadcastWrite(destinationView *view.View, writeMsg RegisterMsg, resultChan chan RegisterMsg) {
 	for _, process := range destinationView.GetMembers() {
-		go func(process view.Process) {
-			var result RegisterMsg
-			err := comm.SendRPCRequest(process, "ClientRequest.Write", writeMsg, &result)
-			if err != nil {
-				resultChan <- RegisterMsg{Err: err}
-				return
-			}
-			resultChan <- result
-		}(process)
+		go sendWrite(process, &writeMsg, resultChan)
 	}
 }

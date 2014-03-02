@@ -124,7 +124,8 @@ func saveResults(latenciesMean int64, latenciesStandardDeviation int64, opsPerSe
 
 	file, err := os.OpenFile(*resultFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
 	if err != nil {
-		log.Fatalln(err)
+		log.Println(err)
+		return
 	}
 	defer file.Close()
 
@@ -250,17 +251,32 @@ func getInitialView() *view.View {
 		log.Fatalln(err)
 	}
 
-	var process view.Process
 	switch {
 	case strings.Contains(hostname, "node-"): // emulab.net
-		process = view.Process{"10.1.1.2:5000"}
+		for i := 0; i < 7; i++ {
+			process := view.Process{fmt.Sprintf("10.1.1.%d:5000", i+2)}
+
+			initialView, err := client.GetCurrentView(process)
+			if err != nil {
+				log.Printf("Failed to get current view of process %v: %v\n", process, err)
+				continue
+			}
+
+			return initialView
+		}
 	default:
-		process = view.Process{"[::]:5000"}
+		for i := 0; i < 7; i++ {
+			process := view.Process{fmt.Sprintf("[::]:500%v", i)}
+
+			initialView, err := client.GetCurrentView(process)
+			if err != nil {
+				log.Printf("Failed to get current view of process %v: %v\n", process, err)
+				continue
+			}
+
+			return initialView
+		}
 	}
 
-	initialView, err := client.GetCurrentView(process)
-	if err != nil {
-		log.Fatalf("Failed to get current view of process %v: %v\n", process, err)
-	}
-	return initialView
+	return nil
 }

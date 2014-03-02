@@ -500,17 +500,17 @@ func init() {
 // -------- Send functions -----------
 
 func broadcastViewInstalled(destinationView *view.View, viewInstalledMsg ViewInstalledMsg) {
-	comm.BroadcastRPCRequest(destinationView, "ReconfigurationRequest.ViewInstalled", viewInstalledMsg)
+	comm.TryBroadcastRPCRequest(destinationView, "ReconfigurationRequest.ViewInstalled", viewInstalledMsg)
 }
 
 func broadcastStateUpdate(destinationView *view.View, stateUpdateMsg StateUpdateMsg) {
-	comm.BroadcastQuorumRPCRequest(destinationView, "ReconfigurationRequest.StateUpdate", stateUpdateMsg)
+	comm.MustBroadcastRPCRequest(destinationView, "ReconfigurationRequest.StateUpdate", stateUpdateMsg)
 }
 
 func broadcastInstallSeq(destinationView *view.View, installSeqMsg InstallSeqMsg) {
-	comm.BroadcastQuorumRPCRequest(destinationView, "ReconfigurationRequest.InstallSeq", installSeqMsg)
+	comm.MustBroadcastRPCRequest(destinationView, "ReconfigurationRequest.InstallSeq", installSeqMsg)
 }
 
 func broadcastReconfigRequest(destinationView *view.View, reconfigMsg ReconfigMsg) {
-	comm.BroadcastQuorumRPCRequest(destinationView, "ReconfigurationRequest.Reconfig", reconfigMsg)
+	comm.MustBroadcastRPCRequest(destinationView, "ReconfigurationRequest.Reconfig", reconfigMsg)
 }

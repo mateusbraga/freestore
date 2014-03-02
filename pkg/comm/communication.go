@@ -6,19 +6,13 @@ import (
 	"log"
 	"net/rpc"
 	"sync"
-	"time"
 
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-const initialCommLinkRepairPeriod = 1 * time.Second
-const maxCommLinkRepairPeriod = 3 * time.Second
-
 var (
 	commLinkTable   = make(map[view.Process]communicationLink)
 	commLinkTableMu sync.Mutex
-
-	repairLinkChan = make(chan communicationLink)
 )
 
 type communicationLink struct {
@@ -69,20 +63,20 @@ func deleteCommLink(process view.Process) {
 func SendRPCRequest(process view.Process, serviceMethod string, arg interface{}, result interface{}) error {
 	commLink := getCommLink(process)
 	if commLink.isFaulty() {
-		return errors.New(fmt.Sprintf("process %v is unreachable", process))
+		return errors.New(fmt.Sprintf("SendRPCRequest: Process %v is currently unreachable", process))
 	}
 
 	err := commLink.rpcClient.Call(serviceMethod, arg, result)
 	if err != nil {
 		setCommLinkFaulty(commLink.Process)
 		repairLinkChan <- commLink
-		return errors.New(fmt.Sprintf("sendRPCRequest to process %v failed: %v", commLink.Process, err))
+		return errors.New(fmt.Sprintf("SendRPCRequest: %v call to process %v failed: %v", serviceMethod, commLink.Process, err))
 	}
 
 	return nil
 }
 
-func BroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}) {
+func TryBroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}) {
 	for _, process := range destinationView.GetMembers() {
 		go func(process view.Process) {
 			var discardResult struct{}
@@ -91,7 +85,7 @@ func BroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg i
 	}
 }
 
-func BroadcastQuorumRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}) {
+func MustBroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}) {
 	errorChan := make(chan error, destinationView.N())
 
 	for _, process := range destinationView.GetMembers() {
@@ -108,7 +102,7 @@ func BroadcastQuorumRPCRequest(destinationView *view.View, serviceMethod string,
 		if err != nil {
 			failedTotal++
 			if failedTotal > destinationView.F() {
-				log.Fatalf("Failed to send %v to a quorum\n", serviceMethod)
+				log.Fatalf("FATAL: failed to send %v to a quorum\n", serviceMethod)
 			}
 		}
 		successTotal++
@@ -116,61 +110,4 @@ func BroadcastQuorumRPCRequest(destinationView *view.View, serviceMethod string,
 			return
 		}
 	}
-}
-
-func repairCommLinkFunc(process view.Process) error {
-	newRpcClient, err := rpc.Dial("tcp", process.Addr)
-	if err != nil {
-		return err
-	}
-
-	commLinkTableMu.Lock()
-	defer commLinkTableMu.Unlock()
-
-	commLink := commLinkTable[process]
-	commLink.rpcClient = newRpcClient
-	commLinkTable[process] = commLink
-	return nil
-}
-
-func repairCommLinkLoop() {
-	commLinkRepairPeriod := initialCommLinkRepairPeriod
-	faultyCommLinks := make(map[view.Process]bool)
-
-	repairTimer := time.NewTimer(commLinkRepairPeriod)
-
-	for {
-		select {
-		case commLink := <-repairLinkChan:
-			err := repairCommLinkFunc(commLink.Process)
-			if err != nil {
-				faultyCommLinks[commLink.Process] = true
-				commLinkRepairPeriod = initialCommLinkRepairPeriod
-			}
-		case _ = <-repairTimer.C:
-			for process, _ := range faultyCommLinks {
-				err := repairCommLinkFunc(process)
-				if err != nil {
-					continue
-				}
-
-				delete(faultyCommLinks, process)
-			}
-
-			// exponential backoff
-			commLinkRepairPeriod = 2 * commLinkRepairPeriod
-
-			if commLinkRepairPeriod > maxCommLinkRepairPeriod {
-				for process, _ := range faultyCommLinks {
-					deleteCommLink(process)
-				}
-			}
-		}
-
-		repairTimer.Reset(commLinkRepairPeriod)
-	}
-}
-
-func init() {
-	go repairCommLinkLoop()
 }
