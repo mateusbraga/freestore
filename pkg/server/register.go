@@ -104,7 +104,8 @@ func collectThroughputWorker() {
 }
 
 func saveThroughput() {
-	file, err := os.OpenFile("/proj/freestore/throughputs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
+	filename := fmt.Sprintf("/proj/freestore/throughputs_%v.txt", currentView.View().GetProcessPosition(thisProcess))
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
 	if err != nil {
 		//log.Println(err)
 		for loopTime, loopThroughput := range throughputBuffer {
