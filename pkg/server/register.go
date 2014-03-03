@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net/rpc"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -104,7 +105,7 @@ func collectThroughputWorker() {
 }
 
 func saveThroughput() {
-	filename := fmt.Sprintf("/proj/freestore/throughputs_%v.txt", currentView.View().GetProcessPosition(thisProcess))
+	filename := fmt.Sprintf("/proj/freestore/throughputs_%v.txt", strings.Split(thisProcess.Addr, ":")[0])
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
 	if err != nil {
 		//log.Println(err)
