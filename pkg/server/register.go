@@ -97,12 +97,12 @@ func collectThroughputWorker() {
 		throughputBuffer[now] = aux - lastThroughput
 		lastThroughput = aux
 
-		if len(throughputBuffer) == writeLength {
+		if len(throughputBuffer) > writeLength {
 			writeLength = rand.Intn(20)
 			saveThroughput()
 		}
 	}
-	log.Println("NOT COLLECTING THROUGHPUT!")
+	log.Fatalln("STOPPED COLLECTING THROUGHPUT!")
 }
 
 func saveThroughput() {
