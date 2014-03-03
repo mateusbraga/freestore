@@ -310,7 +310,7 @@ func stateUpdateProcessingLoop() {
 				continue
 			}
 
-			log.Println("processing stateUpdate:", stateUpdate)
+			//log.Println("processing stateUpdate:", stateUpdate)
 
 			stateUpdateQuorum, ok := getStateUpdateQuorumCounter(stateUpdateQuorumCounterList, stateUpdate.AssociatedView)
 			if !ok {

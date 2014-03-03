@@ -93,7 +93,7 @@ func TryBroadcastRPCRequest(destinationView *view.View, serviceMethod string, ar
 		if err != nil {
 			failedTotal++
 			if failedTotal > destinationView.F() {
-				log.Println("WARN: failed to send %v to a quorum\n", serviceMethod)
+				log.Printf("WARN: failed to send %v to a quorum\n", serviceMethod)
 				return
 			}
 		}
