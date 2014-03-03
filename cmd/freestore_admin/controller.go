@@ -5,7 +5,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	//"html/template"
 	"log"
 	//"net"
@@ -24,7 +23,8 @@ import (
 )
 
 var (
-	leave = flag.String("leave", "", "Process to leave the system")
+	leave          = flag.String("leave", "", "Process to leave the system")
+	initialProcess = flag.String("initial", "", "Process to ask for the initial view")
 )
 
 //var (
@@ -297,32 +297,27 @@ func getInitialView() *view.View {
 		log.Fatalln(err)
 	}
 
-	switch {
-	case strings.Contains(hostname, "node-"): // emulab.net
-		for i := 0; i < 7; i++ {
-			process := view.Process{fmt.Sprintf("10.1.1.%d:5000", i+2)}
-
-			initialView, err := client.GetCurrentView(process)
-			if err != nil {
-				log.Printf("Failed to get current view of process %v: %v\n", process, err)
-				continue
+	if *initialProcess == "" {
+		switch {
+		case strings.Contains(hostname, "node-"): // emulab.net
+			updates := []view.Update{view.Update{Type: view.Join, Process: view.Process{"10.1.1.2:5000"}},
+				view.Update{Type: view.Join, Process: view.Process{"10.1.1.3:5000"}},
+				view.Update{Type: view.Join, Process: view.Process{"10.1.1.4:5000"}},
 			}
-
-			return initialView
-		}
-	default:
-		for i := 0; i < 7; i++ {
-			process := view.Process{fmt.Sprintf("[::]:500%v", i)}
-
-			initialView, err := client.GetCurrentView(process)
-			if err != nil {
-				log.Printf("Failed to get current view of process %v: %v\n", process, err)
-				continue
+			return view.NewWithUpdates(updates...)
+		default:
+			updates := []view.Update{view.Update{Type: view.Join, Process: view.Process{"[::]:5000"}},
+				view.Update{Type: view.Join, Process: view.Process{"[::]:5001"}},
+				view.Update{Type: view.Join, Process: view.Process{"[::]:5002"}},
 			}
-
-			return initialView
+			return view.NewWithUpdates(updates...)
 		}
+	} else {
+		process := view.Process{*initialProcess}
+		initialView, err := client.GetCurrentView(process)
+		if err != nil {
+			log.Fatalf("Failed to get current view from process %v: %v\n", process, err)
+		}
+		return initialView
 	}
-
-	return nil
 }
