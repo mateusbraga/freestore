@@ -105,7 +105,7 @@ func collectThroughputWorker() {
 }
 
 func saveThroughput() {
-	filename := fmt.Sprintf("/proj/freestore/throughputs_%v.txt", strings.Split(thisProcess.Addr, ":")[0])
+	filename := fmt.Sprintf("/home/mateus/throughputs_%v.txt", strings.Split(thisProcess.Addr, ":")[0])
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
 	if err != nil {
 		//log.Println(err)
