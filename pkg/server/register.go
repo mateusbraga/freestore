@@ -102,6 +102,7 @@ func collectThroughputWorker() {
 			saveThroughput()
 		}
 	}
+	log.Println("NOT COLLECTING THROUGHPUT!")
 }
 
 func saveThroughput() {
@@ -130,4 +131,5 @@ func saveThroughput() {
 
 func init() {
 	go collectThroughputWorker()
+	rand.Seed(int64(time.Now().Nanosecond()))
 }
