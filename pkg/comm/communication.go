@@ -77,11 +77,30 @@ func SendRPCRequest(process view.Process, serviceMethod string, arg interface{},
 }
 
 func TryBroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}) {
+	errorChan := make(chan error, destinationView.N())
+
 	for _, process := range destinationView.GetMembers() {
 		go func(process view.Process) {
 			var discardResult struct{}
-			_ = SendRPCRequest(process, serviceMethod, arg, &discardResult)
+			errorChan <- SendRPCRequest(process, serviceMethod, arg, &discardResult)
 		}(process)
+	}
+
+	failedTotal := 0
+	successTotal := 0
+	for {
+		err := <-errorChan
+		if err != nil {
+			failedTotal++
+			if failedTotal > destinationView.F() {
+				log.Println("WARN: failed to send %v to a quorum\n", serviceMethod)
+				return
+			}
+		}
+		successTotal++
+		if successTotal == destinationView.QuorumSize() {
+			return
+		}
 	}
 }
 
