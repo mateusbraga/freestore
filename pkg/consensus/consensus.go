@@ -402,5 +402,5 @@ func broadcastAcceptRequest(destinationView *view.View, proposal Proposal, resul
 }
 
 func broadcastLearnRequest(destinationView *view.View, proposal Proposal) {
-	comm.MustBroadcastRPCRequest(destinationView, "ConsensusRequest.Learn", proposal)
+	comm.BroadcastRPCRequest(destinationView, "ConsensusRequest.Learn", proposal)
 }

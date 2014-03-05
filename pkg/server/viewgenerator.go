@@ -300,9 +300,9 @@ func init() {
 
 // -------- Broadcast functions -----------
 func broadcastViewSequence(destinationView *view.View, viewSeqMsg ViewSeqMsg) {
-	comm.MustBroadcastRPCRequest(destinationView, "ViewGeneratorRequest.ProposeSeqView", viewSeqMsg)
+	comm.BroadcastRPCRequest(destinationView, "ViewGeneratorRequest.ProposeSeqView", viewSeqMsg)
 }
 
 func broadcastViewSequenceConv(destinationView *view.View, seqConvMsg SeqConvMsg) {
-	comm.MustBroadcastRPCRequest(destinationView, "ViewGeneratorRequest.SeqConv", seqConvMsg)
+	comm.BroadcastRPCRequest(destinationView, "ViewGeneratorRequest.SeqConv", seqConvMsg)
 }

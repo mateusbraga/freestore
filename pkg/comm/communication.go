@@ -62,6 +62,7 @@ func deleteCommLink(process view.Process) {
 	delete(commLinkTable, process)
 }
 
+// SendRPCRequest invokes serviceMethod at process with arg and puts the result at result. Any communication error that occurs is returned.
 func SendRPCRequest(process view.Process, serviceMethod string, arg interface{}, result interface{}) error {
 	commLink := getCommLink(process)
 	if commLink.isFaulty() {
@@ -77,7 +78,8 @@ func SendRPCRequest(process view.Process, serviceMethod string, arg interface{},
 	return nil
 }
 
-func TryBroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}) {
+// BroadcastRPCRequest invokes serviceMethod at all members of the destinationView with arg. It returns an error if it fails to receive a quorum of error-free answers.
+func BroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}) error {
 	errorChan := make(chan error, destinationView.NumberOfMembers())
 
 	for _, process := range destinationView.GetMembers() {
@@ -94,40 +96,13 @@ func TryBroadcastRPCRequest(destinationView *view.View, serviceMethod string, ar
 		if err != nil {
 			failedTotal++
 			if failedTotal > destinationView.NumberOfToleratedFaults() {
-				log.Printf("WARN: failed to send %v to a quorum\n", serviceMethod)
-				return
+				log.Printf("WARN: BroadcastRPCRequest failed to send %v to a quorum\n", serviceMethod)
+				return err
 			}
 		}
 		successTotal++
 		if successTotal == destinationView.QuorumSize() {
-			return
-		}
-	}
-}
-
-func MustBroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}) {
-	errorChan := make(chan error, destinationView.NumberOfMembers())
-
-	for _, process := range destinationView.GetMembers() {
-		go func(process view.Process) {
-			var discardResult struct{}
-			errorChan <- SendRPCRequest(process, serviceMethod, arg, &discardResult)
-		}(process)
-	}
-
-	failedTotal := 0
-	successTotal := 0
-	for {
-		err := <-errorChan
-		if err != nil {
-			failedTotal++
-			if failedTotal > destinationView.NumberOfToleratedFaults() {
-				log.Fatalf("FATAL: failed to send %v to a quorum\n", serviceMethod)
-			}
-		}
-		successTotal++
-		if successTotal == destinationView.QuorumSize() {
-			return
+			return nil
 		}
 	}
 }
