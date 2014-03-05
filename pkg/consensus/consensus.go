@@ -28,7 +28,7 @@ type consensusInstance struct {
 }
 
 func (ci consensusInstance) Id() int {
-	return ci.associatedView.NumberOfEntries()
+	return ci.associatedView.NumberOfUpdates()
 }
 
 type consensusTask interface{}
@@ -42,10 +42,10 @@ func getOrCreateConsensus(associatedView *view.View) consensusInstance {
 	consensusTableMu.Lock()
 	defer consensusTableMu.Unlock()
 
-	ci, ok := consensusTable[associatedView.NumberOfEntries()]
+	ci, ok := consensusTable[associatedView.NumberOfUpdates()]
 	if !ok {
 		ci = consensusInstance{associatedView: associatedView, taskChan: make(chan consensusTask, CHANNEL_DEFAULT_BUFFER_SIZE), callbackLearnChan: make(chan interface{}, 1)}
-		consensusTable[associatedView.NumberOfEntries()] = ci
+		consensusTable[associatedView.NumberOfUpdates()] = ci
 		log.Println("Created consensus instance:", ci)
 
 		go consensusWorker(ci)
@@ -140,7 +140,7 @@ func Propose(associatedView *view.View, thisProcess view.Process, defaultValue i
 // prepare is a stage of the Propose funcion
 func prepare(proposal Proposal) (interface{}, error) {
 	// Send read request to all
-	resultChan := make(chan Proposal, proposal.AssociatedView.N())
+	resultChan := make(chan Proposal, proposal.AssociatedView.NumberOfMembers())
 	go broadcastPrepareRequest(proposal.AssociatedView, proposal, resultChan)
 
 	// Wait for quorum
@@ -152,8 +152,8 @@ func prepare(proposal Proposal) (interface{}, error) {
 		log.Println("+1 error to prepare:", err)
 		failedTotal++
 
-		allFailed := failedTotal == proposal.AssociatedView.N()
-		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > proposal.AssociatedView.F()
+		allFailed := failedTotal == proposal.AssociatedView.NumberOfMembers()
+		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > proposal.AssociatedView.NumberOfToleratedFaults()
 
 		if mostFailedInspiteSomeSuccess || allFailed {
 			return false
@@ -196,7 +196,7 @@ func prepare(proposal Proposal) (interface{}, error) {
 // accept is a stage of the Propose funcion.
 func accept(proposal Proposal) error {
 	// Send accept request to all
-	resultChan := make(chan Proposal, proposal.AssociatedView.N())
+	resultChan := make(chan Proposal, proposal.AssociatedView.NumberOfMembers())
 	go broadcastAcceptRequest(proposal.AssociatedView, proposal, resultChan)
 
 	// Wait for quorum
@@ -207,8 +207,8 @@ func accept(proposal Proposal) error {
 		log.Println("+1 error to accept:", err)
 		failedTotal++
 
-		allFailed := failedTotal == proposal.AssociatedView.N()
-		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > proposal.AssociatedView.F()
+		allFailed := failedTotal == proposal.AssociatedView.NumberOfMembers()
+		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > proposal.AssociatedView.NumberOfToleratedFaults()
 
 		if mostFailedInspiteSomeSuccess || allFailed {
 			return false
@@ -263,20 +263,20 @@ func accept(proposal Proposal) error {
 
 // getNextProposalNumber to be used by this process. This function is a stage of the Propose funcion.
 func getNextProposalNumber(associatedView *view.View, thisProcess view.Process) (proposalNumber int) {
-	if associatedView.N() == 0 {
+	if associatedView.NumberOfMembers() == 0 {
 		log.Fatalln("associatedView is empty")
 	}
 
 	thisProcessPosition := associatedView.GetProcessPosition(thisProcess)
 
-	lastProposalNumber, err := getLastProposalNumber(associatedView.NumberOfEntries())
+	lastProposalNumber, err := getLastProposalNumber(associatedView.NumberOfUpdates())
 	if err != nil {
-		proposalNumber = associatedView.N() + thisProcessPosition
+		proposalNumber = associatedView.NumberOfMembers() + thisProcessPosition
 	} else {
-		proposalNumber = (lastProposalNumber - (lastProposalNumber % associatedView.N()) + associatedView.N()) + thisProcessPosition
+		proposalNumber = (lastProposalNumber - (lastProposalNumber % associatedView.NumberOfMembers()) + associatedView.NumberOfMembers()) + thisProcessPosition
 	}
 
-	saveProposalNumberOnStorage(associatedView.NumberOfEntries(), proposalNumber)
+	saveProposalNumberOnStorage(associatedView.NumberOfUpdates(), proposalNumber)
 	return
 }
 

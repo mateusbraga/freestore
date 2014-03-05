@@ -21,12 +21,12 @@ func TestDatabaseFunctions(t *testing.T) {
 		t.Errorf("storage is not empty or unitinialized")
 	}
 
-	if proposalNumber, err := getLastProposalNumber(associatedView.NumberOfEntries()); proposalNumber != 0 || err == nil {
+	if proposalNumber, err := getLastProposalNumber(associatedView.NumberOfUpdates()); proposalNumber != 0 || err == nil {
 		t.Errorf("getLastProposalNumber should return proposalNumber == 0 and err != nil, got %v and %v", proposalNumber, err)
 	}
 
-	saveProposalNumberOnStorage(associatedView.NumberOfEntries(), 1)
-	if proposalNumber, err := getLastProposalNumber(associatedView.NumberOfEntries()); proposalNumber != 1 || err != nil {
+	saveProposalNumberOnStorage(associatedView.NumberOfUpdates(), 1)
+	if proposalNumber, err := getLastProposalNumber(associatedView.NumberOfUpdates()); proposalNumber != 1 || err != nil {
 		t.Errorf("getLastProposalNumber should return proposalNumber == 1 and err == nil, got %v and %v", proposalNumber, err)
 	}
 
@@ -34,7 +34,7 @@ func TestDatabaseFunctions(t *testing.T) {
 		t.Errorf("getNextProposalNumber: expected proposalNumber == 4, got %v", proposalNumber)
 	}
 
-	if proposalNumber, err := getLastProposalNumber(associatedView.NumberOfEntries()); proposalNumber != 4 || err != nil {
+	if proposalNumber, err := getLastProposalNumber(associatedView.NumberOfUpdates()); proposalNumber != 4 || err != nil {
 		t.Errorf("getNextProposalNumber: expted proposalNumber == 4 and err == <nil>, got %v and %v", proposalNumber, err)
 	}
 }

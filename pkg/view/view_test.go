@@ -77,7 +77,7 @@ func TestViewSize(t *testing.T) {
 
 	v1 := NewWithUpdates(updates...)
 
-	if n := v1.N(); n != 2 {
+	if n := v1.NumberOfMembers(); n != 2 {
 		t.Errorf("v1 should have 2 members, not %d", n)
 	}
 
@@ -85,7 +85,7 @@ func TestViewSize(t *testing.T) {
 		t.Errorf("Quorum of 2 processes should be 2, not %d", q)
 	}
 
-	if f := v1.F(); f != 0 {
+	if f := v1.NumberOfToleratedFaults(); f != 0 {
 		t.Errorf("Number of tolerable failures of 2 processes should be 0, not %d", f)
 	}
 
@@ -95,7 +95,7 @@ func TestViewSize(t *testing.T) {
 		t.Errorf("Quorum of 3 processes should be 2, not %d", q)
 	}
 
-	if f := v1.F(); f != 1 {
+	if f := v1.NumberOfToleratedFaults(); f != 1 {
 		t.Errorf("Number of tolerable failures of 3 processes should be 1, not %d", f)
 	}
 
@@ -105,7 +105,7 @@ func TestViewSize(t *testing.T) {
 		t.Errorf("Quorum of 4 processes should be 3, not %d", q)
 	}
 
-	if f := v1.F(); f != 1 {
+	if f := v1.NumberOfToleratedFaults(); f != 1 {
 		t.Errorf("Number of tolerable failures of 4 processes should be 1, not %d", f)
 	}
 }

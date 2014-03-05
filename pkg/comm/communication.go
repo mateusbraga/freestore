@@ -77,7 +77,7 @@ func SendRPCRequest(process view.Process, serviceMethod string, arg interface{},
 }
 
 func TryBroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}) {
-	errorChan := make(chan error, destinationView.N())
+	errorChan := make(chan error, destinationView.NumberOfMembers())
 
 	for _, process := range destinationView.GetMembers() {
 		go func(process view.Process) {
@@ -92,7 +92,7 @@ func TryBroadcastRPCRequest(destinationView *view.View, serviceMethod string, ar
 		err := <-errorChan
 		if err != nil {
 			failedTotal++
-			if failedTotal > destinationView.F() {
+			if failedTotal > destinationView.NumberOfToleratedFaults() {
 				log.Printf("WARN: failed to send %v to a quorum\n", serviceMethod)
 				return
 			}
@@ -105,7 +105,7 @@ func TryBroadcastRPCRequest(destinationView *view.View, serviceMethod string, ar
 }
 
 func MustBroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}) {
-	errorChan := make(chan error, destinationView.N())
+	errorChan := make(chan error, destinationView.NumberOfMembers())
 
 	for _, process := range destinationView.GetMembers() {
 		go func(process view.Process) {
@@ -120,7 +120,7 @@ func MustBroadcastRPCRequest(destinationView *view.View, serviceMethod string, a
 		err := <-errorChan
 		if err != nil {
 			failedTotal++
-			if failedTotal > destinationView.F() {
+			if failedTotal > destinationView.NumberOfToleratedFaults() {
 				log.Fatalf("FATAL: failed to send %v to a quorum\n", serviceMethod)
 			}
 		}

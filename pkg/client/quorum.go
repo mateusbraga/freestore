@@ -21,7 +21,7 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 	destinationView := thisClient.View()
 
 	// Send write request to all
-	resultChan := make(chan RegisterMsg, destinationView.N())
+	resultChan := make(chan RegisterMsg, destinationView.NumberOfMembers())
 	go broadcastRead(destinationView, resultChan)
 
 	// Wait for quorum
@@ -33,8 +33,8 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 		log.Println("+1 error to read:", err)
 		failedTotal++
 
-		allFailed := failedTotal == destinationView.N()
-		mostFailedInspiteSomeSuccess := len(resultArray) > 0 && failedTotal > destinationView.F()
+		allFailed := failedTotal == destinationView.NumberOfMembers()
+		mostFailedInspiteSomeSuccess := len(resultArray) > 0 && failedTotal > destinationView.NumberOfToleratedFaults()
 
 		if mostFailedInspiteSomeSuccess || allFailed {
 			return false
@@ -97,7 +97,7 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 	writeMsg.View = destinationView
 
 	// Send write request to all
-	resultChan := make(chan RegisterMsg, destinationView.N())
+	resultChan := make(chan RegisterMsg, destinationView.NumberOfMembers())
 	go broadcastWrite(destinationView, writeMsg, resultChan)
 
 	// Wait for quorum
@@ -108,8 +108,8 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 		log.Println("+1 error to write:", err)
 		failedTotal++
 
-		allFailed := failedTotal == destinationView.N()
-		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > destinationView.F()
+		allFailed := failedTotal == destinationView.NumberOfMembers()
+		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > destinationView.NumberOfToleratedFaults()
 
 		if mostFailedInspiteSomeSuccess || allFailed {
 			return false

@@ -6,50 +6,16 @@ import (
 	"fmt"
 )
 
-type updateType string
-
-const (
-	Join  updateType = "+"
-	Leave updateType = "-"
-)
-
-type Process struct {
-	Addr string
-}
-
-func (thisProcess Process) Less(otherProcess Process) bool {
-	return thisProcess.Addr < otherProcess.Addr
-}
-
-type Update struct {
-	Type    updateType
-	Process Process
-}
-
-func (thisUpdate Update) Less(otherUpdate Update) bool {
-	if thisUpdate.Type < otherUpdate.Type {
-		return true
-	} else if thisUpdate.Type == otherUpdate.Type {
-		return thisUpdate.Process.Less(otherUpdate.Process)
-	} else {
-		return false
-	}
-}
-
-// -------- View type -----------
-
+// View represents a server's view of the members of the distributed system. A View once created is immutable, for a mutable View, see CurrentView type.
 type View struct {
 	Entries map[Update]bool
-	Members map[Process]bool // Cache
-	//TODO Ref may need lock or be set on the 'New' functions
-	Ref *ViewRef // Cache
+	Members map[Process]bool // Cache, can be rebuilt from Entries
 }
 
 func newView() *View {
 	v := View{}
 	v.Entries = make(map[Update]bool)
 	v.Members = make(map[Process]bool)
-	v.Ref = nil
 	return &v
 }
 
@@ -80,6 +46,21 @@ func (v *View) NewCopyWithUpdates(updates ...Update) *View {
 	newCopy.addUpdate(updates...)
 
 	return newCopy
+}
+
+func (v *View) addUpdate(updates ...Update) {
+	for _, newUpdate := range updates {
+		v.Entries[newUpdate] = true
+
+		switch newUpdate.Type {
+		case Join:
+			if !v.Entries[Update{Leave, newUpdate.Process}] {
+				v.Members[newUpdate.Process] = true
+			}
+		case Leave:
+			delete(v.Members, newUpdate.Process)
+		}
+	}
 }
 
 func (v *View) String() string {
@@ -125,23 +106,6 @@ func (v *View) Equal(v2 *View) bool {
 	return true
 }
 
-func (v *View) addUpdate(updates ...Update) {
-	v.Ref = nil
-
-	for _, newUpdate := range updates {
-		v.Entries[newUpdate] = true
-
-		switch newUpdate.Type {
-		case Join:
-			if !v.Entries[Update{Leave, newUpdate.Process}] {
-				v.Members[newUpdate.Process] = true
-			}
-		case Leave:
-			delete(v.Members, newUpdate.Process)
-		}
-	}
-}
-
 func (v *View) HasUpdate(u Update) bool {
 	return v.Entries[u]
 }
@@ -150,16 +114,12 @@ func (v *View) HasMember(p Process) bool {
 	return v.Members[p]
 }
 
-func (v *View) GetEntries() []Update {
-	return v.getEntries()
-}
-
-func (v *View) getEntries() []Update {
-	var entries []Update
+func (v *View) GetUpdates() []Update {
+	var updates []Update
 	for update, _ := range v.Entries {
-		entries = append(entries, update)
+		updates = append(updates, update)
 	}
-	return entries
+	return updates
 }
 
 func (v *View) GetMembers() []Process {
@@ -197,33 +157,22 @@ func (v *View) GetProcessPosition(process Process) int {
 	return position
 }
 
-func (v *View) NumberOfEntries() int {
+func (v *View) NumberOfMembers() int {
+	return len(v.Members)
+}
+
+func (v *View) NumberOfUpdates() int {
 	return len(v.Entries)
 }
 
 func (v *View) QuorumSize() int {
-	return v.quorumSize()
-}
-
-func (v *View) quorumSize() int {
 	membersTotal := len(v.Members)
 	return (membersTotal+1)/2 + (membersTotal+1)%2
 }
 
-func (v *View) N() int {
-	return len(v.Members)
-}
-
-func (v *View) F() int {
+func (v *View) NumberOfToleratedFaults() int {
 	membersTotal := len(v.Members)
-	return membersTotal - v.quorumSize()
-}
-
-func (v *View) getViewRef() ViewRef {
-	if v.Ref == nil {
-		v.Ref = viewToViewRef(v)
-	}
-	return *v.Ref
+	return membersTotal - v.QuorumSize()
 }
 
 // ----- ERRORS -----
@@ -233,19 +182,39 @@ type OldViewError struct {
 }
 
 func (e OldViewError) Error() string {
-	return fmt.Sprint("OLD_VIEW")
+	return fmt.Sprintf("Client's current view is old, update to '%v'", e.NewView)
 }
 
-type WriteOlderError struct {
-	WriteTimestamp  int
-	ServerTimestamp int
+func init() { gob.Register(new(OldViewError)) }
+
+// ----- Auxiliary types ---------
+
+type updateType string
+
+const (
+	Join  updateType = "+"
+	Leave updateType = "-"
+)
+
+type Process struct {
+	Addr string
 }
 
-func (e WriteOlderError) Error() string {
-	return fmt.Sprintf("error: write request has timestamp %v but server has more updated timestamp %v", e.WriteTimestamp, e.ServerTimestamp)
+func (thisProcess Process) Less(otherProcess Process) bool {
+	return thisProcess.Addr < otherProcess.Addr
 }
 
-func init() {
-	gob.Register(new(OldViewError))
-	gob.Register(new(WriteOlderError))
+type Update struct {
+	Type    updateType
+	Process Process
+}
+
+func (thisUpdate Update) Less(otherUpdate Update) bool {
+	if thisUpdate.Type < otherUpdate.Type {
+		return true
+	} else if thisUpdate.Type == otherUpdate.Type {
+		return thisUpdate.Process.Less(otherUpdate.Process)
+	} else {
+		return false
+	}
 }

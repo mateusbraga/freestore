@@ -370,7 +370,7 @@ func syncState(installSeq InstallSeq) {
 	register.Value = state.finalValue.Value
 	register.Timestamp = state.finalValue.Timestamp
 
-	for _, update := range installSeq.InstallView.GetEntries() {
+	for _, update := range installSeq.InstallView.GetUpdates() {
 		delete(recv, update)
 	}
 
