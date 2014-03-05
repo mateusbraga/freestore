@@ -16,7 +16,7 @@ var (
 )
 
 type communicationLink struct {
-	Process   view.Process
+	process   view.Process
 	rpcClient *rpc.Client
 }
 
@@ -30,7 +30,7 @@ func getCommLink(process view.Process) communicationLink {
 
 	commLink, ok := commLinkTable[process]
 	if !ok {
-		commLink = communicationLink{Process: process}
+		commLink = communicationLink{process: process}
 
 		newRpcClient, err := rpc.Dial("tcp", process.Addr)
 		if err != nil {
@@ -51,6 +51,8 @@ func setCommLinkFaulty(process view.Process) {
 	commLink := commLinkTable[process]
 	commLink.rpcClient = nil
 	commLinkTable[process] = commLink
+
+	repairLinkChan <- commLink
 }
 
 func deleteCommLink(process view.Process) {
@@ -68,9 +70,8 @@ func SendRPCRequest(process view.Process, serviceMethod string, arg interface{},
 
 	err := commLink.rpcClient.Call(serviceMethod, arg, result)
 	if err != nil {
-		setCommLinkFaulty(commLink.Process)
-		repairLinkChan <- commLink
-		return errors.New(fmt.Sprintf("SendRPCRequest: %v call to process %v failed: %v", serviceMethod, commLink.Process, err))
+		setCommLinkFaulty(commLink.process)
+		return errors.New(fmt.Sprintf("SendRPCRequest: %v call to process %v failed: %v", serviceMethod, commLink.process, err))
 	}
 
 	return nil

@@ -7,16 +7,21 @@ import (
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-const initialCommLinkRepairPeriod = 1 * time.Second
-const maxCommLinkRepairPeriod = 3 * time.Second
+const (
+	// initialCommLinkRepairPeriod is how long it will take to first try to
+	// repair a commLink
+	initialCommLinkRepairPeriod = 1 * time.Second
 
-var (
-	repairLinkChan = make(chan communicationLink, 20)
+	// maxCommLinkRepairPeriod is the max period on which higher periods will
+	// not be retried. When repairPeriod gets higher then this because of the
+	// exponential backoff, we will stop trying to repair faulty links.
+	maxCommLinkRepairPeriod = 3 * time.Second
 )
 
-func init() {
-	go repairCommLinkLoop()
-}
+var (
+	// chan which new faulty links arrive
+	repairLinkChan = make(chan communicationLink, 20)
+)
 
 func repairCommLinkFunc(process view.Process) error {
 	newRpcClient, err := rpc.Dial("tcp", process.Addr)
@@ -41,9 +46,9 @@ func repairCommLinkLoop() {
 	for {
 		select {
 		case commLink := <-repairLinkChan:
-			err := repairCommLinkFunc(commLink.Process)
+			err := repairCommLinkFunc(commLink.process)
 			if err != nil {
-				faultyCommLinks[commLink.Process] = true
+				faultyCommLinks[commLink.process] = true
 
 				commLinkRepairPeriod = initialCommLinkRepairPeriod
 				repairTimer.Reset(commLinkRepairPeriod)
@@ -76,3 +81,5 @@ func repairCommLinkLoop() {
 		}
 	}
 }
+
+func init() { go repairCommLinkLoop() }
