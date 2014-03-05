@@ -15,4 +15,4 @@ BIND_ADDR=10.1.1.`expr $NODE_NUMBER + 1`:5000
 
 #echo $BIND_ADDR
 
-/home/mateus/go/bin/freestored -bind $BIND_ADDR
+/home/mateus/go/bin/freestored -bind $BIND_ADDR $@

@@ -29,3 +29,4 @@ set lan0 [$ns make-lan "$lanstr" 100000.0kb 0.0ms]
 
 $ns rtproto Static
 $ns run
+

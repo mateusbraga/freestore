@@ -1,0 +1,41 @@
+latency vs throughput e latency vs size
+3 servidores -> read -> size 1 -> 8-1 clients
+3 servidores -> read -> size 256 -> 8-1 clients
+3 servidores -> read -> size 512 -> 8-1 clients
+3 servidores -> read -> size 1024 -> 8-1 clients
+
+latency vs throughput e latency vs size
+3 servidores -> write -> size 1 -> 8-1 clients
+3 servidores -> write -> size 256 -> 8-1 clients
+3 servidores -> write -> size 512 -> 8-1 clients
+3 servidores -> write -> size 1024 -> 8-1 clients
+
+throughput max vs size
+5 servidores -> read -> size 1 -> 8 clients
+5 servidores -> read -> size 256 -> 8 clients
+5 servidores -> read -> size 512 -> 8 clients
+5 servidores -> read -> size 1024 -> 8 clients
+
+throughput max vs size
+5 servidores -> write -> size 1 -> 8 clients
+5 servidores -> write -> size 256 -> 8 clients
+5 servidores -> write -> size 512 -> 8 clients
+5 servidores -> write -> size 1024 -> 8 clients
+
+throughput max vs size
+7 servidores -> read -> size 1 -> 8 clients
+7 servidores -> read -> size 256 -> 8 clients
+7 servidores -> read -> size 512 -> 8 clients
+7 servidores -> read -> size 1024 -> 8 clients
+
+throughput max vs size
+7 servidores -> write -> size 1 -> 8 clients
+7 servidores -> write -> size 256 -> 8 clients
+7 servidores -> write -> size 512 -> 8 clients
+7 servidores -> write -> size 1024 -> 8 clients
+
+server 1,2,3: ~/runserver.sh
+
+clients: sleep 2; ((/home/mateus/go/bin/freestore_measures -n 100000
+-size 0) &); /home/mateus/go/bin/freestore_measures -n 100000 -size
+0 ; sleep 10; 
