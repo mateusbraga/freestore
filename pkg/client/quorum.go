@@ -8,11 +8,15 @@ import (
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-// diffResultsErr is returned by readQuorum if not all answers from the servers were the same. Returned to indicate that Read() should do 2nd phase of the read protocol.
+// diffResultsErr is returned by readQuorum if not all answers from the servers
+// were the same. It is used to indicate that Read() should do 2nd phase of the
+// read protocol.
 var diffResultsErr = errors.New("Read Divergence")
 
-// readQuorum asks for the register value from all members of the view, returning the most recent one after it receives answers from a majority.
-// If the client's view needs to be updated, it will update it and retry.  If values returned by the processes differ, it will return diffResultsErr.
+// readQuorum asks for the register value of all members from the current view.
+// It returns the most recent value after it receives answers from a majority.
+// If the client's view needs to be updated, it will update it and retry.  If
+// values returned by the processes differ, it will return diffResultsErr.
 func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 	destinationView := thisClient.View()
 
@@ -62,8 +66,8 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 				return thisClient.readQuorum()
 			}
 
-			ok := countError(receivedValue.Err)
-			if !ok {
+			stillOk := countError(receivedValue.Err)
+			if !stillOk {
 				return RegisterMsg{}, errors.New("Failed to get read quorun")
 			}
 			continue
@@ -71,7 +75,7 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 
 		done := countSuccess(receivedValue)
 		if done {
-			// Look for different values returned from the processes
+			// Look for divergence on values received
 			for _, val := range resultArray {
 				if finalValue.Timestamp != val.Timestamp {
 					return finalValue, diffResultsErr
@@ -83,10 +87,14 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 
 }
 
-// writeQuorum tries to write the value in writeMsg to the register of all processes on the view, returning when it gets confirmation from a majority.
-// If the client's view needs to be updated, it will update it and retry.
+// writeQuorum tries to write the value on writeMsg in the register of all
+// processes on client's current view. It returns when it gets confirmation
+// from a majority.  If the client's view needs to be updated, it will update
+// it and retry.
 func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 	destinationView := thisClient.View()
+
+	writeMsg.View = destinationView
 
 	// Send write request to all
 	resultChan := make(chan RegisterMsg, destinationView.N())
@@ -128,8 +136,8 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 				return thisClient.writeQuorum(writeMsg)
 			}
 
-			ok := countError(receivedValue.Err)
-			if !ok {
+			stillOk := countError(receivedValue.Err)
+			if !stillOk {
 				return errors.New("Failed to get write quorun")
 			}
 			continue

@@ -2,6 +2,7 @@ package client
 
 import (
 	"errors"
+	"fmt"
 	"github.com/mateusbraga/freestore/pkg/comm"
 	"github.com/mateusbraga/freestore/pkg/view"
 	"log"
@@ -19,5 +20,5 @@ func GetCurrentView(processes ...view.Process) (*view.View, error) {
 
 		return receivedView, nil
 	}
-	return nil, errors.New("Failed to get current view from processes")
+	return nil, errors.New(fmt.Sprintf("Failed to get current view from any of the processes: %v", processes))
 }
