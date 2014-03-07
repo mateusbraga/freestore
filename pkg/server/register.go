@@ -21,7 +21,7 @@ type RegisterService int
 
 func (r *RegisterService) Read(clientViewRef view.ViewRef, reply *Value) error {
 	if clientViewRef != currentView.ViewRef() {
-		log.Printf("Got old view with ViewRef: %v, sending new View: %v\n", clientViewRef, currentView.View())
+		log.Printf("Got old view with ViewRef: %v, sending new View %v with ViewRef: %v\n", clientViewRef, currentView.View(), currentView.ViewRef())
 		reply.Err = view.OldViewError{NewView: currentView.View()}
 		return nil
 	}
@@ -39,7 +39,7 @@ func (r *RegisterService) Read(clientViewRef view.ViewRef, reply *Value) error {
 
 func (r *RegisterService) Write(value Value, reply *Value) error {
 	if value.ViewRef != currentView.ViewRef() {
-		log.Printf("Got old view with ViewRef: %v, sending new View: %v\n", value.ViewRef, currentView.View())
+		log.Printf("Got old view with ViewRef: %v, sending new View %v with ViewRef: %v\n", value.ViewRef, currentView.View(), currentView.ViewRef())
 		reply.Err = view.OldViewError{NewView: currentView.View()}
 		return nil
 	}
