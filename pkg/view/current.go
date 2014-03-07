@@ -33,7 +33,7 @@ func (currentView *CurrentView) Update(newView *View) {
 		if newView.LessUpdatedThan(currentView.view) {
 			log.Println("Tried to Update current view with a less updated view")
 		} else {
-			log.Fatalln("Tried to Update current view with the same view")
+			log.Println("Tried to Update current view with the same view")
 		}
 		return
 	}
