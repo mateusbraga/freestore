@@ -49,15 +49,12 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 			}
 		}
 
-		// check conditions. this is done here to handle when a quorum of the
-		// system leaves the system. In this case, most processes would fail
-		// but we should wait for one that will tell the client which is the
-		// updated view.  if we have any success, this is not the case, so we
-		// can return an error
-		allFailed := failedTotal == destinationView.NumberOfMembers()
-		mostFailedInspiteSomeSuccess := len(resultArray) > 0 && failedTotal > destinationView.NumberOfToleratedFaults()
-
-		if mostFailedInspiteSomeSuccess || allFailed {
+		// check conditions. this is done here to handle when a quorum leaves
+		// the system. In this case, most processes would fail but we should
+		// wait for one that will tell the client the updated view.
+		everyProcessReturned := len(resultArray)+failedTotal == destinationView.NumberOfMembers()
+		systemFailed := everyProcessReturned && failedTotal > destinationView.NumberOfToleratedFaults()
+		if systemFailed {
 			return RegisterMsg{}, errors.New("Failed to get read quorun")
 		}
 
@@ -106,15 +103,12 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 			successTotal++
 		}
 
-		// check conditions. this is done here to handle when a quorum of the
-		// system leaves the system. In this case, most processes would fail
-		// but we should wait for one that will tell the client which is the
-		// updated view.  if we have any success, this is not the case, so we
-		// can return an error
-		allFailed := failedTotal == destinationView.NumberOfMembers()
-		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > destinationView.NumberOfToleratedFaults()
-
-		if mostFailedInspiteSomeSuccess || allFailed {
+		// check conditions. this is done here to handle when a quorum leaves
+		// the system. In this case, most processes would fail but we should
+		// wait for one that will tell the client the updated view.
+		everyProcessReturned := successTotal+failedTotal == destinationView.NumberOfMembers()
+		systemFailed := everyProcessReturned && failedTotal > destinationView.NumberOfToleratedFaults()
+		if systemFailed {
 			return errors.New("Failed to get write quorun")
 		}
 
