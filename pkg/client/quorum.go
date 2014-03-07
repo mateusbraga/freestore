@@ -28,37 +28,10 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 	var failedTotal int
 	var resultArray []RegisterMsg
 	var finalValue RegisterMsg
-
-	countError := func(err error) bool {
-		//log.Println("+1 error to read:", err)
-		failedTotal++
-
-		allFailed := failedTotal == destinationView.NumberOfMembers()
-		mostFailedInspiteSomeSuccess := len(resultArray) > 0 && failedTotal > destinationView.NumberOfToleratedFaults()
-
-		if mostFailedInspiteSomeSuccess || allFailed {
-			return false
-		}
-
-		return true
-	}
-
-	countSuccess := func(receivedValue RegisterMsg) bool {
-		resultArray = append(resultArray, receivedValue)
-
-		if receivedValue.Timestamp > finalValue.Timestamp {
-			finalValue = receivedValue
-		}
-
-		if len(resultArray) == destinationView.QuorumSize() {
-			return true
-		}
-		return false
-	}
-
 	for {
 		receivedValue := <-resultChan
 
+		// count success or fail
 		if receivedValue.Err != nil {
 			if oldViewError, ok := receivedValue.Err.(*view.OldViewError); ok {
 				log.Println("View updated during read quorum")
@@ -66,15 +39,29 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 				return thisClient.readQuorum()
 			}
 
-			stillOk := countError(receivedValue.Err)
-			if !stillOk {
-				return RegisterMsg{}, errors.New("Failed to get read quorun")
+			//log.Println("+1 error to read:", err)
+			failedTotal++
+		} else {
+			resultArray = append(resultArray, receivedValue)
+
+			if receivedValue.Timestamp > finalValue.Timestamp {
+				finalValue = receivedValue
 			}
-			continue
 		}
 
-		done := countSuccess(receivedValue)
-		if done {
+		// check conditions. this is done here to handle when a quorum of the
+		// system leaves the system. In this case, most processes would fail
+		// but we should wait for one that will tell the client which is the
+		// updated view.  if we have any success, this is not the case, so we
+		// can return an error
+		allFailed := failedTotal == destinationView.NumberOfMembers()
+		mostFailedInspiteSomeSuccess := len(resultArray) > 0 && failedTotal > destinationView.NumberOfToleratedFaults()
+
+		if mostFailedInspiteSomeSuccess || allFailed {
+			return RegisterMsg{}, errors.New("Failed to get read quorun")
+		}
+
+		if len(resultArray) == destinationView.QuorumSize() {
 			// Look for divergence on values received
 			for _, val := range resultArray {
 				if finalValue.Timestamp != val.Timestamp {
@@ -84,7 +71,6 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 			return finalValue, nil
 		}
 	}
-
 }
 
 // writeQuorum tries to write the value on writeMsg in the register of all
@@ -103,32 +89,10 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 	// Wait for quorum
 	var successTotal int
 	var failedTotal int
-
-	countError := func(err error) bool {
-		//log.Println("+1 error to write:", err)
-		failedTotal++
-
-		allFailed := failedTotal == destinationView.NumberOfMembers()
-		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > destinationView.NumberOfToleratedFaults()
-
-		if mostFailedInspiteSomeSuccess || allFailed {
-			return false
-		}
-
-		return true
-	}
-
-	countSuccess := func() bool {
-		successTotal++
-		if successTotal == destinationView.QuorumSize() {
-			return true
-		}
-		return false
-	}
-
 	for {
 		receivedValue := <-resultChan
 
+		// count success or fail
 		if receivedValue.Err != nil {
 			if oldViewError, ok := receivedValue.Err.(*view.OldViewError); ok {
 				log.Println("View updated during write quorum")
@@ -136,15 +100,25 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 				return thisClient.writeQuorum(writeMsg)
 			}
 
-			stillOk := countError(receivedValue.Err)
-			if !stillOk {
-				return errors.New("Failed to get write quorun")
-			}
-			continue
+			//log.Println("+1 error to write:", err)
+			failedTotal++
+		} else {
+			successTotal++
 		}
 
-		done := countSuccess()
-		if done {
+		// check conditions. this is done here to handle when a quorum of the
+		// system leaves the system. In this case, most processes would fail
+		// but we should wait for one that will tell the client which is the
+		// updated view.  if we have any success, this is not the case, so we
+		// can return an error
+		allFailed := failedTotal == destinationView.NumberOfMembers()
+		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > destinationView.NumberOfToleratedFaults()
+
+		if mostFailedInspiteSomeSuccess || allFailed {
+			return errors.New("Failed to get write quorun")
+		}
+
+		if successTotal == destinationView.QuorumSize() {
 			return nil
 		}
 	}

@@ -93,16 +93,18 @@ func BroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg i
 	successTotal := 0
 	for {
 		err := <-errorChan
+
 		if err != nil {
 			failedTotal++
 			if failedTotal > destinationView.NumberOfToleratedFaults() {
 				log.Printf("WARN: BroadcastRPCRequest failed to send %v to a quorum\n", serviceMethod)
 				return err
 			}
-		}
-		successTotal++
-		if successTotal == destinationView.QuorumSize() {
-			return nil
+		} else {
+			successTotal++
+			if successTotal == destinationView.QuorumSize() {
+				return nil
+			}
 		}
 	}
 }

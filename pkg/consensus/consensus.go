@@ -147,48 +147,25 @@ func prepare(proposal Proposal) (interface{}, error) {
 	var successTotal int
 	var failedTotal int
 	var highestNumberedAcceptedProposal Proposal
-
-	countError := func(err error) bool {
-		log.Println("+1 error to prepare:", err)
-		failedTotal++
-
-		allFailed := failedTotal == proposal.AssociatedView.NumberOfMembers()
-		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > proposal.AssociatedView.NumberOfToleratedFaults()
-
-		if mostFailedInspiteSomeSuccess || allFailed {
-			return false
-		}
-
-		return true
-	}
-
-	countSuccess := func(receivedProposal Proposal) bool {
-		successTotal++
-		if highestNumberedAcceptedProposal.N < receivedProposal.N {
-			highestNumberedAcceptedProposal = receivedProposal
-		}
-
-		if successTotal == proposal.AssociatedView.QuorumSize() {
-			return true
-		}
-
-		return false
-	}
-
 	for {
 		receivedProposal := <-resultChan
 
 		if receivedProposal.Err != nil {
-			ok := countError(receivedProposal.Err)
-			if !ok {
+			log.Println("+1 error to prepare:", receivedProposal.Err)
+			failedTotal++
+
+			if failedTotal > proposal.AssociatedView.NumberOfToleratedFaults() {
 				return nil, errors.New("Failed to get prepare quorun")
 			}
-			continue
-		}
+		} else {
+			successTotal++
+			if highestNumberedAcceptedProposal.N < receivedProposal.N {
+				highestNumberedAcceptedProposal = receivedProposal
+			}
 
-		done := countSuccess(receivedProposal)
-		if done {
-			return highestNumberedAcceptedProposal.Value, nil
+			if successTotal == proposal.AssociatedView.QuorumSize() {
+				return highestNumberedAcceptedProposal.Value, nil
+			}
 		}
 	}
 }
@@ -202,45 +179,22 @@ func accept(proposal Proposal) error {
 	// Wait for quorum
 	var successTotal int
 	var failedTotal int
-
-	countError := func(err error) bool {
-		log.Println("+1 error to accept:", err)
-		failedTotal++
-
-		allFailed := failedTotal == proposal.AssociatedView.NumberOfMembers()
-		mostFailedInspiteSomeSuccess := successTotal > 0 && failedTotal > proposal.AssociatedView.NumberOfToleratedFaults()
-
-		if mostFailedInspiteSomeSuccess || allFailed {
-			return false
-		}
-
-		return true
-	}
-
-	countSuccess := func() bool {
-		successTotal++
-
-		if successTotal == proposal.AssociatedView.QuorumSize() {
-			return true
-		}
-
-		return false
-	}
-
 	for {
 		receivedProposal := <-resultChan
 
 		if receivedProposal.Err != nil {
-			ok := countError(receivedProposal.Err)
-			if !ok {
+			log.Println("+1 error to prepare:", receivedProposal.Err)
+			failedTotal++
+
+			if failedTotal > proposal.AssociatedView.NumberOfToleratedFaults() {
 				return errors.New("Failed to get accept quorun")
 			}
-			continue
-		}
+		} else {
+			successTotal++
 
-		done := countSuccess()
-		if done {
-			return nil
+			if successTotal == proposal.AssociatedView.QuorumSize() {
+				return nil
+			}
 		}
 	}
 }
