@@ -86,22 +86,31 @@ type Value struct {
 
 var throughput uint64
 var throughputBuffer = make(map[time.Time]uint64, 70)
+var shutdownChan = make(chan bool)
 
 func collectThroughputWorker() {
 	writeLength := rand.Intn(20)
 	var lastThroughput uint64
 
-	for now := range time.Tick(time.Second) {
-		aux := throughput
-		throughputBuffer[now] = aux - lastThroughput
-		lastThroughput = aux
+	ticker := time.Tick(time.Second)
+	for {
+		select {
+		case now := <-ticker:
+			aux := throughput
+			throughputBuffer[now] = aux - lastThroughput
+			lastThroughput = aux
 
-		if len(throughputBuffer) > writeLength {
-			writeLength = rand.Intn(20)
+			if len(throughputBuffer) > writeLength {
+				writeLength = rand.Intn(20)
+				saveThroughput()
+			}
+		case _ = <-shutdownChan:
 			saveThroughput()
+			break
 		}
 	}
-	log.Fatalln("STOPPED COLLECTING THROUGHPUT!")
+	log.Println("STOPPED COLLECTING THROUGHPUT!")
+	log.Fatalln("Terminated")
 }
 
 func saveThroughput() {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/rpc"
-	"os"
 	"sync"
 	"time"
 
@@ -248,7 +247,8 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 		}
 
 		log.Println("Leaving...")
-		os.Exit(0)
+		shutdownChan <- true
+		//os.Exit(0)
 	}
 }
 
