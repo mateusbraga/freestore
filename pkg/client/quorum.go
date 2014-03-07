@@ -61,7 +61,7 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 
 		if receivedValue.Err != nil {
 			if oldViewError, ok := receivedValue.Err.(*view.OldViewError); ok {
-				log.Println("View updated during read quorum")
+				log.Printf("View updated during read quorum: old '%v' new '%v'\n", thisClient.View(), oldViewError.NewView)
 				thisClient.updateCurrentView(oldViewError.NewView)
 				return thisClient.readQuorum()
 			}
