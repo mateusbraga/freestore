@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"fmt"
-	"log"
 	"sort"
 )
 
