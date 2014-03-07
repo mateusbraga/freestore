@@ -24,8 +24,6 @@ func ViewToViewRef(v *View) ViewRef {
 		fmt.Fprintf(buf, "%v", loopUpdate)
 	}
 
-	log.Println(buf.Bytes())
-
 	return ViewRef{sha1.Sum(buf.Bytes())}
 }
 
