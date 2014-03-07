@@ -30,7 +30,7 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 	var finalValue RegisterMsg
 
 	countError := func(err error) bool {
-		log.Println("+1 error to read:", err)
+		//log.Println("+1 error to read:", err)
 		failedTotal++
 
 		allFailed := failedTotal == destinationView.NumberOfMembers()
@@ -105,7 +105,7 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 	var failedTotal int
 
 	countError := func(err error) bool {
-		log.Println("+1 error to write:", err)
+		//log.Println("+1 error to write:", err)
 		failedTotal++
 
 		allFailed := failedTotal == destinationView.NumberOfMembers()
