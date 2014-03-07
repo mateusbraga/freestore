@@ -12,7 +12,7 @@ import (
 func GetCurrentView(processes ...view.Process) (*view.View, error) {
 	for _, loopProcess := range processes {
 		var receivedView *view.View
-		err := comm.SendRPCRequest(loopProcess, "ClientRequest.GetCurrentView", 0, &receivedView)
+		err := comm.SendRPCRequest(loopProcess, "RegisterService.GetCurrentView", 0, &receivedView)
 		if err != nil {
 			log.Println(err)
 			continue

@@ -23,7 +23,7 @@ func TestRegisterMsgGob(t *testing.T) {
 	msg := RegisterMsg{}
 	msg.Value = createFakeData(512)
 	msg.Timestamp = 1
-	msg.View = v1
+	msg.ViewRef = view.ViewToViewRef(v1)
 
 	buf := new(bytes.Buffer)
 	encoder := gob.NewEncoder(buf)

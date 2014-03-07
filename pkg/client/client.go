@@ -21,7 +21,11 @@ func New(initialView *view.View) *Client {
 	return newClient
 }
 
-func (thisClient Client) View() *view.View                      { return thisClient.view.View() }
+func (thisClient Client) View() *view.View      { return thisClient.view.View() }
+func (thisClient Client) ViewRef() view.ViewRef { return thisClient.view.ViewRef() }
+func (thisClient Client) ViewAndViewRef() (*view.View, view.ViewRef) {
+	return thisClient.view.ViewAndViewRef()
+}
 func (thisClient *Client) updateCurrentView(newView *view.View) { thisClient.view.Update(newView) }
 
 // Write v to the system's register. Can be run concurrently.
@@ -40,7 +44,7 @@ func (thisClient *Client) Write(v interface{}) error {
 	writeMsg.Value = v
 	//TODO append writer id to timestamp
 	writeMsg.Timestamp = readValue.Timestamp + 1
-	writeMsg.View = thisClient.View()
+	writeMsg.ViewRef = thisClient.ViewRef()
 
 	err = thisClient.writeQuorum(writeMsg)
 	if err != nil {
@@ -76,8 +80,8 @@ func (thisClient *Client) read2ndPhase(readMsg RegisterMsg) (interface{}, error)
 }
 
 type RegisterMsg struct {
-	Value     interface{} // Value of the register
-	Timestamp int         // Timestamp of the register
-	View      *view.View  // Current client's view
-	Err       error       // Any RPC or register service errors
+	Value     interface{}  // Value of the register
+	Timestamp int          // Timestamp of the register
+	ViewRef   view.ViewRef // Current client's view
+	Err       error        // Any RPC or register service errors
 }

@@ -6,8 +6,9 @@ import (
 )
 
 type CurrentView struct {
-	view *View
-	mu   *sync.RWMutex
+	viewRef ViewRef
+	view    *View
+	mu      *sync.RWMutex
 }
 
 func NewCurrentView() CurrentView {
@@ -38,6 +39,7 @@ func (currentView *CurrentView) Update(newView *View) {
 	}
 
 	currentView.view = newView
+	currentView.viewRef = ViewToViewRef(newView)
 	log.Println("CurrentView updated to:", currentView.view)
 }
 
@@ -46,4 +48,18 @@ func (currentView *CurrentView) View() *View {
 	defer currentView.mu.RUnlock()
 
 	return currentView.view
+}
+
+func (currentView *CurrentView) ViewRef() ViewRef {
+	currentView.mu.RLock()
+	defer currentView.mu.RUnlock()
+
+	return currentView.viewRef
+}
+
+func (currentView *CurrentView) ViewAndViewRef() (*View, ViewRef) {
+	currentView.mu.RLock()
+	defer currentView.mu.RUnlock()
+
+	return currentView.view, currentView.viewRef
 }

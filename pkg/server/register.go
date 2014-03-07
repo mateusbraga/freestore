@@ -17,11 +17,11 @@ import (
 var register Value
 
 //  ---------- RPC Requests -------------
-type ClientRequest int
+type RegisterService int
 
-func (r *ClientRequest) Read(clientView *view.View, reply *Value) error {
-	if !clientView.Equal(currentView.View()) {
-		log.Printf("Got old view: %v, sending new one: %v\n", clientView, currentView.View())
+func (r *RegisterService) Read(clientViewRef view.ViewRef, reply *Value) error {
+	if clientViewRef != currentView.ViewRef() {
+		log.Printf("Got old view with ViewRef: %v, sending new View: %v\n", clientViewRef, currentView.View())
 		reply.Err = view.OldViewError{NewView: currentView.View()}
 		return nil
 	}
@@ -37,9 +37,9 @@ func (r *ClientRequest) Read(clientView *view.View, reply *Value) error {
 	return nil
 }
 
-func (r *ClientRequest) Write(value Value, reply *Value) error {
-	if !value.View.Equal(currentView.View()) {
-		log.Printf("Got old view: %v, sending new one: %v\n", value.View, currentView.View())
+func (r *RegisterService) Write(value Value, reply *Value) error {
+	if value.ViewRef != currentView.ViewRef() {
+		log.Printf("Got old view with ViewRef: %v, sending new View: %v\n", value.ViewRef, currentView.View())
 		reply.Err = view.OldViewError{NewView: currentView.View()}
 		return nil
 	}
@@ -56,7 +56,7 @@ func (r *ClientRequest) Write(value Value, reply *Value) error {
 	return nil
 }
 
-func (r *ClientRequest) GetCurrentView(value int, reply *view.View) error {
+func (r *RegisterService) GetCurrentView(value int, reply *view.View) error {
 	*reply = *currentView.View()
 	log.Println("Done GetCurrentView request")
 	return nil
@@ -70,7 +70,7 @@ func init() {
 }
 
 func init() {
-	rpc.Register(new(ClientRequest))
+	rpc.Register(new(RegisterService))
 }
 
 // --------- Types ---------
@@ -78,8 +78,8 @@ type Value struct {
 	Value     interface{}
 	Timestamp int
 
-	View *view.View
-	Err  error
+	ViewRef view.ViewRef
+	Err     error
 
 	mu sync.RWMutex
 }

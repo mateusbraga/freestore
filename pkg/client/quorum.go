@@ -18,11 +18,11 @@ var diffResultsErr = errors.New("Read Divergence")
 // If the client's view needs to be updated, it will update it and retry.  If
 // values returned by the processes differ, it will return diffResultsErr.
 func (thisClient *Client) readQuorum() (RegisterMsg, error) {
-	destinationView := thisClient.View()
+	destinationView, viewRef := thisClient.ViewAndViewRef()
 
 	// Send write request to all
 	resultChan := make(chan RegisterMsg, destinationView.NumberOfMembers())
-	go broadcastRead(destinationView, resultChan)
+	go broadcastRead(destinationView, viewRef, resultChan)
 
 	// Wait for quorum
 	var failedTotal int
@@ -92,9 +92,9 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 // from a majority.  If the client's view needs to be updated, it will update
 // it and retry.
 func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
-	destinationView := thisClient.View()
+	destinationView, viewRef := thisClient.ViewAndViewRef()
 
-	writeMsg.View = destinationView
+	writeMsg.ViewRef = viewRef
 
 	// Send write request to all
 	resultChan := make(chan RegisterMsg, destinationView.NumberOfMembers())
@@ -150,9 +150,9 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 	}
 }
 
-func sendRead(process view.Process, destinationView *view.View, resultChan chan RegisterMsg) {
+func sendRead(process view.Process, viewRef view.ViewRef, resultChan chan RegisterMsg) {
 	var result RegisterMsg
-	err := comm.SendRPCRequest(process, "ClientRequest.Read", destinationView, &result)
+	err := comm.SendRPCRequest(process, "RegisterService.Read", viewRef, &result)
 	if err != nil {
 		resultChan <- RegisterMsg{Err: err}
 		return
@@ -161,15 +161,15 @@ func sendRead(process view.Process, destinationView *view.View, resultChan chan 
 	resultChan <- result
 }
 
-func broadcastRead(destinationView *view.View, resultChan chan RegisterMsg) {
+func broadcastRead(destinationView *view.View, viewRef view.ViewRef, resultChan chan RegisterMsg) {
 	for _, process := range destinationView.GetMembers() {
-		go sendRead(process, destinationView, resultChan)
+		go sendRead(process, viewRef, resultChan)
 	}
 }
 
 func sendWrite(process view.Process, writeMsg *RegisterMsg, resultChan chan RegisterMsg) {
 	var result RegisterMsg
-	err := comm.SendRPCRequest(process, "ClientRequest.Write", writeMsg, &result)
+	err := comm.SendRPCRequest(process, "RegisterService.Write", writeMsg, &result)
 	if err != nil {
 		resultChan <- RegisterMsg{Err: err}
 		return

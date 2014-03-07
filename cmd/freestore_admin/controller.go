@@ -259,7 +259,7 @@ var (
 //defer client.Close()
 
 //var newView *view.View
-//client.Call("ClientRequest.GetCurrentView", 0, &newView)
+//client.Call("RegisterService.GetCurrentView", 0, &newView)
 //if err != nil {
 //log.Fatal(err)
 //}
