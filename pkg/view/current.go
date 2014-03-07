@@ -40,7 +40,7 @@ func (currentView *CurrentView) Update(newView *View) {
 
 	currentView.view = newView
 	currentView.viewRef = ViewToViewRef(newView)
-	log.Println("CurrentView updated to:", currentView.view)
+	log.Printf("CurrentView updated to: %v, ref: %v\n", currentView.view, currentView.viewRef)
 }
 
 func (currentView *CurrentView) View() *View {

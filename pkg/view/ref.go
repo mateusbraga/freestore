@@ -3,7 +3,8 @@ package view
 import (
 	"bytes"
 	"crypto/sha1"
-	"encoding/gob"
+	"fmt"
+	"log"
 	"sort"
 )
 
@@ -19,8 +20,11 @@ func ViewToViewRef(v *View) ViewRef {
 	sort.Sort(updates)
 
 	buf := new(bytes.Buffer)
-	encoder := gob.NewEncoder(buf)
-	encoder.Encode(updates)
+	for _, loopUpdate := range updates {
+		fmt.Fprintf(buf, "%v", loopUpdate)
+	}
+
+	log.Println(buf.Bytes())
 
 	return ViewRef{sha1.Sum(buf.Bytes())}
 }
