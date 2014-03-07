@@ -64,20 +64,21 @@ func (v *View) addUpdate(updates ...Update) {
 }
 
 func (v *View) String() string {
-	var b bytes.Buffer
-	fmt.Fprintf(&b, "{")
+	buf := new(bytes.Buffer)
+
+	fmt.Fprintf(buf, "{")
 
 	first := true
 	for process, _ := range v.Members {
 		if !first {
-			fmt.Fprintf(&b, ", ")
+			fmt.Fprintf(buf, ", ")
 		}
-		fmt.Fprintf(&b, "%v", process.Addr)
+		fmt.Fprintf(buf, "%v", process.Addr)
 		first = false
 	}
 
-	fmt.Fprintf(&b, "}")
-	return b.String()
+	fmt.Fprintf(buf, "}")
+	return buf.String()
 }
 
 func (v *View) LessUpdatedThan(v2 *View) bool {

@@ -71,11 +71,21 @@ func TestViewGetMembers(t *testing.T) {
 }
 
 func TestViewSize(t *testing.T) {
-	updates := []Update{Update{Type: Join, Process: Process{"1"}},
-		Update{Type: Join, Process: Process{"2"}},
+	v1 := NewWithUpdates(Update{Type: Join, Process: Process{"1"}})
+
+	if n := v1.NumberOfMembers(); n != 1 {
+		t.Errorf("v1 should have 1 member, not %d", n)
 	}
 
-	v1 := NewWithUpdates(updates...)
+	if q := v1.QuorumSize(); q != 1 {
+		t.Errorf("Quorum of 1 processes should be 1, not %d", q)
+	}
+
+	if f := v1.NumberOfToleratedFaults(); f != 0 {
+		t.Errorf("Number of tolerable failures of 1 process should be 0, not %d", f)
+	}
+
+	v1 = v1.NewCopyWithUpdates(Update{Type: Join, Process: Process{"2"}})
 
 	if n := v1.NumberOfMembers(); n != 2 {
 		t.Errorf("v1 should have 2 members, not %d", n)
@@ -188,18 +198,18 @@ func TestViewGob(t *testing.T) {
 	}
 	endTime := time.Now()
 
-	var v2 *View
-
 	t.Logf("View %v encoded is %v bytes long and took %v to encode\n", v1, len(buf.Bytes()), endTime.Sub(startTime))
 
 	buf2 := bytes.NewReader(buf.Bytes())
 	decoder := gob.NewDecoder(buf2)
+
+	var v2 *View
 	err = decoder.Decode(&v2)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
 	if !v1.Equal(v2) {
-		t.Errorf("gob is wrong")
+		t.Errorf("View gob encoder got it wrong")
 	}
 }

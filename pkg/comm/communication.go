@@ -34,6 +34,7 @@ func getCommLink(process view.Process) communicationLink {
 
 		newRpcClient, err := rpc.Dial("tcp", process.Addr)
 		if err != nil {
+			newRpcClient = nil
 			repairLinkChan <- commLink
 		}
 		commLink.rpcClient = newRpcClient
@@ -78,7 +79,9 @@ func SendRPCRequest(process view.Process, serviceMethod string, arg interface{},
 	return nil
 }
 
-// BroadcastRPCRequest invokes serviceMethod at all members of the destinationView with arg. It returns an error if it fails to receive a quorum of error-free answers.
+// BroadcastRPCRequest invokes serviceMethod at all members of the
+// destinationView with arg. It returns an error if it fails to receive
+// a response from a quorum of processes.
 func BroadcastRPCRequest(destinationView *view.View, serviceMethod string, arg interface{}) error {
 	errorChan := make(chan error, destinationView.NumberOfMembers())
 
