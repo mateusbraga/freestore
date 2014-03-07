@@ -210,7 +210,7 @@ var (
 //defer client.Close()
 
 //var value bool
-//err = client.Call("ControllerRequest.Join", currentView, &value)
+//err = client.Call("AdminService.Join", currentView, &value)
 //if err != nil {
 //log.Println(err)
 //return
@@ -227,7 +227,7 @@ var (
 
 //var value bool
 
-//err = client.Call("ControllerRequest.Terminate", true, &value)
+//err = client.Call("AdminService.Terminate", true, &value)
 //if err != nil {
 //log.Println(err)
 //return
@@ -243,7 +243,7 @@ var (
 
 //var value bool
 
-//err = client.Call("ControllerRequest.Ping", true, &value)
+//err = client.Call("AdminService.Ping", true, &value)
 //if err != nil {
 //return false
 //}
@@ -284,7 +284,7 @@ func main() {
 func sendLeaveProcess(process view.Process) {
 	var unused bool
 
-	err := comm.SendRPCRequest(process, "ControllerRequest.Leave", false, &unused)
+	err := comm.SendRPCRequest(process, "AdminService.Leave", false, &unused)
 	if err != nil {
 		log.Println(err)
 		return
