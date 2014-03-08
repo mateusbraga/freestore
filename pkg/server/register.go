@@ -106,11 +106,10 @@ func collectThroughputWorker() {
 			}
 		case _ = <-shutdownChan:
 			saveThroughput()
-			break
+			log.Fatalln("Terminated")
 		}
 	}
 	log.Println("STOPPED COLLECTING THROUGHPUT!")
-	log.Fatalln("Terminated")
 }
 
 func saveThroughput() {
