@@ -3,12 +3,17 @@ package view
 import (
 	"bytes"
 	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"sort"
 )
 
 type ViewRef struct {
 	Digest [sha1.Size]byte
+}
+
+func (vr ViewRef) String() string {
+	return hex.EncodeToString(vr.Digest[:])
 }
 
 func ViewToViewRef(v *View) ViewRef {
