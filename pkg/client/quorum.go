@@ -34,9 +34,13 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 		// count success or fail
 		if receivedValue.Err != nil {
 			if oldViewError, ok := receivedValue.Err.(*view.OldViewError); ok {
-				log.Println("View updated during read quorum")
-				thisClient.updateCurrentView(oldViewError.NewView)
-				return thisClient.readQuorum()
+				if destinationView.LessUpdatedThan(oldViewError.NewView) {
+					log.Println("View updated during read quorum")
+					thisClient.updateCurrentView(oldViewError.NewView)
+					return thisClient.readQuorum()
+				}
+				// oldViewError.NewView is actually not more updated than current view, count as failed
+				log.Println("+1 process has old view")
 			}
 
 			//log.Println("+1 error to read:", err)
@@ -51,7 +55,7 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 
 		// check conditions. this is done here to handle when a quorum leaves
 		// the system. In this case, most processes would fail but we should
-		// wait for one that will tell the client the updated view.
+		// wait for one (or all) that will tell the client the updated view.
 		everyProcessReturned := len(resultArray)+failedTotal == destinationView.NumberOfMembers()
 		systemFailed := everyProcessReturned && failedTotal > destinationView.NumberOfToleratedFaults()
 		if systemFailed {
@@ -92,9 +96,13 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 		// count success or fail
 		if receivedValue.Err != nil {
 			if oldViewError, ok := receivedValue.Err.(*view.OldViewError); ok {
-				log.Println("View updated during write quorum")
-				thisClient.updateCurrentView(oldViewError.NewView)
-				return thisClient.writeQuorum(writeMsg)
+				if destinationView.LessUpdatedThan(oldViewError.NewView) {
+					log.Println("View updated during write quorum")
+					thisClient.updateCurrentView(oldViewError.NewView)
+					return thisClient.writeQuorum(writeMsg)
+				}
+				// oldViewError.NewView is actually not more updated than current view, count as failed
+				log.Println("+1 process has old view")
 			}
 
 			//log.Println("+1 error to write:", err)
@@ -105,7 +113,7 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 
 		// check conditions. this is done here to handle when a quorum leaves
 		// the system. In this case, most processes would fail but we should
-		// wait for one that will tell the client the updated view.
+		// wait for one (or all) that will tell the client the updated view.
 		everyProcessReturned := successTotal+failedTotal == destinationView.NumberOfMembers()
 		systemFailed := everyProcessReturned && failedTotal > destinationView.NumberOfToleratedFaults()
 		if systemFailed {
