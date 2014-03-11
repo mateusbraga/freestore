@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/rpc"
 	"sync"
+	"time"
 
 	"github.com/mateusbraga/freestore/pkg/comm"
 	"github.com/mateusbraga/freestore/pkg/view"
@@ -25,6 +26,9 @@ type consensusInstance struct {
 	associatedView    *view.View
 	taskChan          chan consensusTask
 	callbackLearnChan chan interface{}
+
+	//TODO this is temporary, remove this after getting the data
+	startTime time.Time
 }
 
 func (ci consensusInstance) Id() int {
@@ -38,6 +42,12 @@ func GetConsensusResultChan(associatedView *view.View) chan interface{} {
 	return ci.callbackLearnChan
 }
 
+//TODO this is temporary, remove this after getting the data
+func GetConsensusStartTime(associatedView *view.View) time.Time {
+	ci := getOrCreateConsensus(associatedView)
+	return ci.startTime
+}
+
 func getOrCreateConsensus(associatedView *view.View) consensusInstance {
 	consensusTableMu.Lock()
 	defer consensusTableMu.Unlock()
@@ -45,6 +55,7 @@ func getOrCreateConsensus(associatedView *view.View) consensusInstance {
 	ci, ok := consensusTable[associatedView.NumberOfUpdates()]
 	if !ok {
 		ci = consensusInstance{associatedView: associatedView, taskChan: make(chan consensusTask, CHANNEL_DEFAULT_BUFFER_SIZE), callbackLearnChan: make(chan interface{}, 1)}
+		ci.startTime = time.Now()
 		consensusTable[associatedView.NumberOfUpdates()] = ci
 		log.Println("Created consensus instance:", ci)
 

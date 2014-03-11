@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	CHANNEL_DEFAULT_SIZE              int = 20
-	reconfigurationPeriod                 = 1 * time.Minute
-	firstReconfigurationTimerDuration     = 10 * time.Second
+	CHANNEL_DEFAULT_SIZE              = 20
+	reconfigurationPeriod             = 1 * time.Minute
+	firstReconfigurationTimerDuration = 1 * time.Minute
 )
 
 var (
@@ -29,6 +29,10 @@ var (
 	newViewInstalledChan       = make(chan ViewInstalledMsg, CHANNEL_DEFAULT_SIZE)
 
 	resetReconfigurationTimer = make(chan bool, 5)
+)
+
+var (
+	startReconfigurationTime time.Time
 )
 
 // ---------- Bootstrapping ------------
@@ -152,7 +156,7 @@ func installSeqProcessingLoop() {
 func gotInstallSeqQuorum(installSeq InstallSeq) {
 	log.Println("Running gotInstallSeqQuorum")
 
-	startTime := time.Now()
+	registerLockTime := time.Now()
 
 	cvIsLessUpdatedThanInstallView := currentView.View().LessUpdatedThan(installSeq.InstallView)
 
@@ -216,7 +220,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 
 			endTime := time.Now()
 			if installSeq.AssociatedView.HasMember(thisProcess) {
-				log.Printf("Reconfiguration completed, the system was unavailable for %v.\n", endTime.Sub(startTime))
+				log.Printf("Reconfiguration completed in %v, the system was unavailable for %v.\n", endTime.Sub(startReconfigurationTime), endTime.Sub(registerLockTime))
 			} else {
 				log.Println("Reconfiguration completed, this process is now part of the system.")
 			}
