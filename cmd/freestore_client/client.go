@@ -25,7 +25,10 @@ var (
 func main() {
 	flag.Parse()
 
-	freestoreClient := client.New(getInitialView, getFurtherViews)
+	freestoreClient, err := client.New(getInitialView, getFurtherViews)
+	if err != nil {
+		log.Fatalln("FATAL:", err)
+	}
 
 	var finalValue interface{}
 	var err error

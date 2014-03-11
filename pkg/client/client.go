@@ -17,19 +17,20 @@ type Client struct {
 type GetViewFunc func() (*view.View, error)
 
 // New returns a new Client with initialView.
-func New(getInitialViewFunc GetViewFunc, getFurtherViewsFunc GetViewFunc) *Client {
+func New(getInitialViewFunc GetViewFunc, getFurtherViewsFunc GetViewFunc) (*Client, error) {
 	newClient := &Client{}
 	newClient.view = view.NewCurrentView()
 
 	initialView, err := getInitialViewFunc()
 	if err != nil {
-		log.Panicln("Could not get initialView from func")
+		return nil, err
 	}
+
 	newClient.view.Update(initialView)
 
 	newClient.getFurtherViewsFunc = getFurtherViewsFunc
 
-	return newClient
+	return newClient, nil
 }
 
 func (thisClient Client) View() *view.View      { return thisClient.view.View() }

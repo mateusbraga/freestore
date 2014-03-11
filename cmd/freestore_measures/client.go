@@ -45,7 +45,11 @@ func init() {
 func main() {
 	flag.Parse()
 
-	freestoreClient = client.New(getInitialView, getFurtherViews)
+	var err error
+	freestoreClient, err = client.New(getInitialView, getFurtherViews)
+	if err != nil {
+		log.Fatalln("FATAL:", err)
+	}
 
 	stopChan = time.After(*totalDuration)
 
