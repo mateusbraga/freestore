@@ -10,14 +10,25 @@ import (
 )
 
 type Client struct {
-	view view.CurrentView
+	view                view.CurrentView
+	getFurtherViewsFunc GetViewFunc
 }
 
+type GetViewFunc func() (*view.View, error)
+
 // New returns a new Client with initialView.
-func New(initialView *view.View) *Client {
+func New(getInitialViewFunc GetViewFunc, getFurtherViewsFunc GetViewFunc) *Client {
 	newClient := &Client{}
 	newClient.view = view.NewCurrentView()
+
+	initialView, err := getInitialViewFunc()
+	if err != nil {
+		log.Panicln("Could not get initialView from func")
+	}
 	newClient.view.Update(initialView)
+
+	newClient.getFurtherViewsFunc = getFurtherViewsFunc
+
 	return newClient
 }
 
@@ -36,7 +47,11 @@ func (thisClient *Client) Write(v interface{}) error {
 		if err == diffResultsErr {
 			// Do nothing - we will write a new value anyway
 		} else {
-			return err
+			if thisClient.fixView() {
+				return thisClient.Write(v)
+			} else {
+				return err
+			}
 		}
 	}
 
@@ -48,7 +63,11 @@ func (thisClient *Client) Write(v interface{}) error {
 
 	err = thisClient.writeQuorum(writeMsg)
 	if err != nil {
-		return err
+		if thisClient.fixView() {
+			return thisClient.Write(v)
+		} else {
+			return err
+		}
 	}
 
 	return nil
@@ -63,7 +82,11 @@ func (thisClient *Client) Read() (interface{}, error) {
 			log.Println("Found divergence: Going to 2nd phase of read protocol")
 			return thisClient.read2ndPhase(readMsg)
 		} else {
-			return nil, err
+			if thisClient.fixView() {
+				return thisClient.Read()
+			} else {
+				return nil, err
+			}
 		}
 	}
 
@@ -73,10 +96,28 @@ func (thisClient *Client) Read() (interface{}, error) {
 func (thisClient *Client) read2ndPhase(readMsg RegisterMsg) (interface{}, error) {
 	err := thisClient.writeQuorum(readMsg)
 	if err != nil {
-		return nil, err
+		if thisClient.fixView() {
+			return thisClient.read2ndPhase(readMsg)
+		} else {
+			return nil, err
+		}
 	}
 
 	return readMsg.Value, nil
+}
+
+func (thisClient *Client) fixView() bool {
+	view, err := thisClient.getFurtherViewsFunc()
+	if err != nil {
+		return false
+	}
+
+	if view.LessUpdatedThan(thisClient.View()) {
+		return false
+	}
+
+	thisClient.updateCurrentView(view)
+	return true
 }
 
 type RegisterMsg struct {

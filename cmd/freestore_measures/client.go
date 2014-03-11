@@ -27,6 +27,7 @@ var (
 	totalDuration      = flag.Duration("duration", 10*time.Second, "Duration to run operations (throughput measurement)")
 	resultFile         = flag.String("o", "/proj/freestore/results.txt", "Result file filename")
 	initialProcess     = flag.String("initial", "", "Process to ask for the initial view")
+	retryProcess       = flag.String("retry", "", "Process to ask for a newer view")
 )
 
 var (
@@ -44,8 +45,7 @@ func init() {
 func main() {
 	flag.Parse()
 
-	initialView := getInitialView()
-	freestoreClient = client.New(initialView)
+	freestoreClient = client.New(getInitialView, getFurtherViews)
 
 	stopChan = time.After(*totalDuration)
 
@@ -246,10 +246,10 @@ func createFakeData() []byte {
 	return data
 }
 
-func getInitialView() *view.View {
+func getInitialView() (*view.View, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
-		log.Fatalln(err)
+		log.Panicln(err)
 	}
 
 	if *initialProcess == "" {
@@ -259,13 +259,13 @@ func getInitialView() *view.View {
 				view.Update{Type: view.Join, Process: view.Process{"10.1.1.3:5000"}},
 				view.Update{Type: view.Join, Process: view.Process{"10.1.1.4:5000"}},
 			}
-			return view.NewWithUpdates(updates...)
+			return view.NewWithUpdates(updates...), nil
 		default:
 			updates := []view.Update{view.Update{Type: view.Join, Process: view.Process{"[::]:5000"}},
 				view.Update{Type: view.Join, Process: view.Process{"[::]:5001"}},
 				view.Update{Type: view.Join, Process: view.Process{"[::]:5002"}},
 			}
-			return view.NewWithUpdates(updates...)
+			return view.NewWithUpdates(updates...), nil
 		}
 	} else {
 		process := view.Process{*initialProcess}
@@ -273,6 +273,15 @@ func getInitialView() *view.View {
 		if err != nil {
 			log.Fatalf("Failed to get current view from process %v: %v\n", process, err)
 		}
-		return initialView
+		return initialView, nil
 	}
+}
+
+func getFurtherViews() (*view.View, error) {
+	view, err := client.GetCurrentView(view.Process{*retryProcess})
+	if err != nil {
+		return nil, err
+	}
+
+	return view, nil
 }
