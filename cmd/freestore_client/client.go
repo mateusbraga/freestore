@@ -31,7 +31,6 @@ func main() {
 	}
 
 	var finalValue interface{}
-	var err error
 	for i := uint64(0); i < *nTotal; i++ {
 		startRead := time.Now()
 		finalValue, err = freestoreClient.Read()

@@ -48,11 +48,7 @@ func (thisClient *Client) Write(v interface{}) error {
 		if err == diffResultsErr {
 			// Do nothing - we will write a new value anyway
 		} else {
-			if thisClient.fixView() {
-				return thisClient.Write(v)
-			} else {
-				return err
-			}
+			return err
 		}
 	}
 
@@ -64,11 +60,7 @@ func (thisClient *Client) Write(v interface{}) error {
 
 	err = thisClient.writeQuorum(writeMsg)
 	if err != nil {
-		if thisClient.fixView() {
-			return thisClient.Write(v)
-		} else {
-			return err
-		}
+		return err
 	}
 
 	return nil
@@ -83,11 +75,7 @@ func (thisClient *Client) Read() (interface{}, error) {
 			log.Println("Found divergence: Going to 2nd phase of read protocol")
 			return thisClient.read2ndPhase(readMsg)
 		} else {
-			if thisClient.fixView() {
-				return thisClient.Read()
-			} else {
-				return nil, err
-			}
+			return nil, err
 		}
 	}
 
@@ -97,28 +85,10 @@ func (thisClient *Client) Read() (interface{}, error) {
 func (thisClient *Client) read2ndPhase(readMsg RegisterMsg) (interface{}, error) {
 	err := thisClient.writeQuorum(readMsg)
 	if err != nil {
-		if thisClient.fixView() {
-			return thisClient.read2ndPhase(readMsg)
-		} else {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	return readMsg.Value, nil
-}
-
-func (thisClient *Client) fixView() bool {
-	view, err := thisClient.getFurtherViewsFunc()
-	if err != nil {
-		return false
-	}
-
-	if view.LessUpdatedThan(thisClient.View()) {
-		return false
-	}
-
-	thisClient.updateCurrentView(view)
-	return true
 }
 
 type RegisterMsg struct {

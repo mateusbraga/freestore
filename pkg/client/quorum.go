@@ -59,7 +59,12 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 		everyProcessReturned := len(resultArray)+failedTotal == destinationView.NumberOfMembers()
 		systemFailed := everyProcessReturned && failedTotal > destinationView.NumberOfToleratedFaults()
 		if systemFailed {
-			return RegisterMsg{}, errors.New("Failed to get read quorun")
+			// maybe all processes from the view left, try to get the new view
+			if thisClient.couldGetNewView() {
+				return thisClient.readQuorum()
+			} else {
+				return RegisterMsg{}, errors.New("Failed to get read quorun")
+			}
 		}
 
 		if len(resultArray) == destinationView.QuorumSize() {
@@ -117,13 +122,32 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 		everyProcessReturned := successTotal+failedTotal == destinationView.NumberOfMembers()
 		systemFailed := everyProcessReturned && failedTotal > destinationView.NumberOfToleratedFaults()
 		if systemFailed {
-			return errors.New("Failed to get write quorun")
+			// maybe all processes from the view left, try to get the new view
+			if thisClient.couldGetNewView() {
+				return thisClient.writeQuorum(writeMsg)
+			} else {
+				return errors.New("Failed to get write quorun")
+			}
 		}
 
 		if successTotal == destinationView.QuorumSize() {
 			return nil
 		}
 	}
+}
+
+func (thisClient *Client) couldGetNewView() bool {
+	view, err := thisClient.getFurtherViewsFunc()
+	if err != nil {
+		return false
+	}
+
+	if view.LessUpdatedThan(thisClient.View()) {
+		return false
+	}
+
+	thisClient.updateCurrentView(view)
+	return true
 }
 
 func sendRead(process view.Process, viewRef view.ViewRef, resultChan chan RegisterMsg) {
