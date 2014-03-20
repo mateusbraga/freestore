@@ -33,16 +33,16 @@ func New(getInitialViewFunc GetViewFunc, getFurtherViewsFunc GetViewFunc) (*Clie
 	return newClient, nil
 }
 
-func (thisClient Client) View() *view.View      { return thisClient.view.View() }
-func (thisClient Client) ViewRef() view.ViewRef { return thisClient.view.ViewRef() }
-func (thisClient Client) ViewAndViewRef() (*view.View, view.ViewRef) {
-	return thisClient.view.ViewAndViewRef()
+func (cl Client) View() *view.View      { return cl.view.View() }
+func (cl Client) ViewRef() view.ViewRef { return cl.view.ViewRef() }
+func (cl Client) ViewAndViewRef() (*view.View, view.ViewRef) {
+	return cl.view.ViewAndViewRef()
 }
-func (thisClient *Client) updateCurrentView(newView *view.View) { thisClient.view.Update(newView) }
+func (cl *Client) updateCurrentView(newView *view.View) { cl.view.Update(newView) }
 
 // Write v to the system's register. Can be run concurrently.
-func (thisClient *Client) Write(v interface{}) error {
-	readValue, err := thisClient.readQuorum()
+func (cl *Client) Write(v interface{}) error {
+	readValue, err := cl.readQuorum()
 	if err != nil {
 		// Special case: diffResultsErr
 		if err == diffResultsErr {
@@ -56,9 +56,9 @@ func (thisClient *Client) Write(v interface{}) error {
 	writeMsg.Value = v
 	//TODO append writer id to timestamp
 	writeMsg.Timestamp = readValue.Timestamp + 1
-	writeMsg.ViewRef = thisClient.ViewRef()
+	writeMsg.ViewRef = cl.ViewRef()
 
-	err = thisClient.writeQuorum(writeMsg)
+	err = cl.writeQuorum(writeMsg)
 	if err != nil {
 		return err
 	}
@@ -67,13 +67,13 @@ func (thisClient *Client) Write(v interface{}) error {
 }
 
 // Read executes the quorum read protocol.
-func (thisClient *Client) Read() (interface{}, error) {
-	readMsg, err := thisClient.readQuorum()
+func (cl *Client) Read() (interface{}, error) {
+	readMsg, err := cl.readQuorum()
 	if err != nil {
 		// Special case: diffResultsErr
 		if err == diffResultsErr {
 			log.Println("Found divergence: Going to 2nd phase of read protocol")
-			return thisClient.read2ndPhase(readMsg)
+			return cl.read2ndPhase(readMsg)
 		} else {
 			return nil, err
 		}
@@ -82,8 +82,8 @@ func (thisClient *Client) Read() (interface{}, error) {
 	return readMsg.Value, nil
 }
 
-func (thisClient *Client) read2ndPhase(readMsg RegisterMsg) (interface{}, error) {
-	err := thisClient.writeQuorum(readMsg)
+func (cl *Client) read2ndPhase(readMsg RegisterMsg) (interface{}, error) {
+	err := cl.writeQuorum(readMsg)
 	if err != nil {
 		return nil, err
 	}

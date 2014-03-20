@@ -1,4 +1,5 @@
 //TODO make it a key value storage
+
 package server
 
 import (
@@ -17,6 +18,7 @@ import (
 var register Value
 
 //  ---------- RPC Requests -------------
+
 type RegisterService int
 
 func (r *RegisterService) Read(clientViewRef view.ViewRef, reply *Value) error {
@@ -63,6 +65,7 @@ func (r *RegisterService) GetCurrentView(value int, reply *view.View) error {
 }
 
 // --------- Init ---------
+
 func init() {
 	register.mu.Lock() // The register starts locked
 	register.Value = nil
@@ -74,6 +77,7 @@ func init() {
 }
 
 // --------- Types ---------
+
 type Value struct {
 	Value     interface{}
 	Timestamp int
