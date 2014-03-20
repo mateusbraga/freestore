@@ -108,6 +108,8 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 				}
 				// oldViewError.NewView is actually not more updated than current view, count as failed
 				log.Println("+1 process has old view")
+				// TODO remove continue, and try resending request
+				continue
 			}
 
 			//log.Println("+1 error to write:", err)
