@@ -49,3 +49,15 @@ func TestViewRef(t *testing.T) {
 		t.Errorf("V1 and v6 should have same ViewRefs\n")
 	}
 }
+
+func BenchmarkViewToViewRef(b *testing.B) {
+	updates := []Update{Update{Type: Join, Process: Process{"10.1.1.2:5000"}},
+		Update{Type: Join, Process: Process{"10.1.1.3:5000"}},
+		Update{Type: Join, Process: Process{"10.1.1.4:5000"}},
+	}
+	v1 := NewWithUpdates(updates...)
+
+	for i := 0; i < b.N; i++ {
+		ViewToViewRef(v1)
+	}
+}
