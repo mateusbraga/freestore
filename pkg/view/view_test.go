@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"testing"
-	"time"
 )
 
 func TestViewEqual(t *testing.T) {
@@ -186,24 +185,18 @@ func TestViewGob(t *testing.T) {
 		Update{Type: Join, Process: Process{"10.1.1.3:5000"}},
 		Update{Type: Join, Process: Process{"10.1.1.4:5000"}},
 	}
-
 	v1 := NewWithUpdates(updates...)
 
 	buf := new(bytes.Buffer)
 	encoder := gob.NewEncoder(buf)
-	startTime := time.Now()
 	err := encoder.Encode(v1)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
-	endTime := time.Now()
-
-	t.Logf("View %v encoded is %v bytes long and took %v to encode\n", v1, len(buf.Bytes()), endTime.Sub(startTime))
-
-	buf2 := bytes.NewReader(buf.Bytes())
-	decoder := gob.NewDecoder(buf2)
 
 	var v2 *View
+	buf2 := bytes.NewReader(buf.Bytes())
+	decoder := gob.NewDecoder(buf2)
 	err = decoder.Decode(&v2)
 	if err != nil {
 		t.Errorf(err.Error())
@@ -211,5 +204,52 @@ func TestViewGob(t *testing.T) {
 
 	if !v1.Equal(v2) {
 		t.Errorf("View gob encoder got it wrong")
+	}
+}
+
+func BenchmarkViewGobEncode(b *testing.B) {
+	updates := []Update{Update{Type: Join, Process: Process{"10.1.1.2:5000"}},
+		Update{Type: Join, Process: Process{"10.1.1.3:5000"}},
+		Update{Type: Join, Process: Process{"10.1.1.4:5000"}},
+	}
+	v1 := NewWithUpdates(updates...)
+
+	buf := new(bytes.Buffer)
+
+	for i := 0; i < b.N; i++ {
+		encoder := gob.NewEncoder(buf)
+		err := encoder.Encode(v1)
+		if err != nil {
+			b.Errorf(err.Error())
+		}
+		buf.Reset()
+	}
+}
+
+func BenchmarkViewGobDecode(b *testing.B) {
+	updates := []Update{Update{Type: Join, Process: Process{"10.1.1.2:5000"}},
+		Update{Type: Join, Process: Process{"10.1.1.3:5000"}},
+		Update{Type: Join, Process: Process{"10.1.1.4:5000"}},
+	}
+	v1 := NewWithUpdates(updates...)
+	buf := new(bytes.Buffer)
+	var v2 *View
+
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		buf.Reset()
+		encoder := gob.NewEncoder(buf)
+		err := encoder.Encode(v1)
+		if err != nil {
+			b.Errorf(err.Error())
+		}
+		buf2 := bytes.NewReader(buf.Bytes())
+		decoder := gob.NewDecoder(buf2)
+		b.StartTimer()
+
+		err = decoder.Decode(&v2)
+		if err != nil {
+			b.Errorf(err.Error())
+		}
 	}
 }
