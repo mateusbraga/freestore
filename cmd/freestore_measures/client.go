@@ -1,4 +1,4 @@
-// Freestore_measures is a client that measures latency and throughput of freestore.
+// Command freestore_measures runs a sample client that measures freestore's latency and throughput.
 package main
 
 import (

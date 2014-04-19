@@ -1,4 +1,4 @@
-// Freestored runs a sample implementation of a freestore server.
+// Command freestored runs a sample implementation of a freestore server.
 //
 // Most of the work is done at github.com/mateusbraga/freestore/pkg/server.
 package main

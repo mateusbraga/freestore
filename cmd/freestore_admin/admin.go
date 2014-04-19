@@ -1,6 +1,4 @@
-/*
-This is a controller to monitor servers
-*/
+// Command freestore_admin runs a sample controller of servers.
 package main
 
 import (

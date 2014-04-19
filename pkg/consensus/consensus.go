@@ -1,3 +1,4 @@
+// Package consensus implements a simplified version of Paxos consensus protocol.
 package consensus
 
 import (

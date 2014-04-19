@@ -1,3 +1,4 @@
+// Package view implements the view type. A view is a set of processes, and it is used to put together all the system's processes.
 package view
 
 import (

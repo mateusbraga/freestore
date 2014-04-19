@@ -1,3 +1,4 @@
+// Package comm implements the communication module of freestore's clients and servers.
 package comm
 
 import (

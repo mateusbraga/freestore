@@ -1,6 +1,6 @@
-/*
-Freestore_client is a sample implementation of a freestore client.
-*/
+// Command freestore_client runs a sample implementation of a freestore client.
+//
+// Most of the work is done at github.com/mateusbraga/freestore/pkg/client.
 package main
 
 import (
