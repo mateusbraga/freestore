@@ -154,7 +154,7 @@ func installSeqProcessingLoop() {
 }
 
 func gotInstallSeqQuorum(installSeq InstallSeq) {
-	log.Println("Running gotInstallSeqQuorum")
+	log.Println("Running gotInstallSeqQuorum", installSeq)
 
 	registerLockTime := time.Now()
 
