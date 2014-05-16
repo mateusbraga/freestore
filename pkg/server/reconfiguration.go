@@ -16,7 +16,7 @@ import (
 const (
 	CHANNEL_DEFAULT_SIZE              = 20
 	reconfigurationPeriod             = 1 * time.Minute
-	firstReconfigurationTimerDuration = 1 * time.Minute
+	firstReconfigurationTimerDuration = 10 * time.Second
 )
 
 var (
@@ -53,23 +53,15 @@ func resetTimerLoop() {
 }
 
 func startReconfiguration() {
-	recvMutex.Lock()
-	defer recvMutex.Unlock()
-
-	if len(recv) == 0 {
-		// No configuration changes, restart reconfiguration timer
+	if shouldDoReconfiguration() {
+		// restart reconfiguration timer
 		resetReconfigurationTimer <- true
 		return
 	}
 
 	log.Println("Start reconfiguration of currentView:", currentView)
 
-	updates := []view.Update{}
-	for update, _ := range recv {
-		updates = append(updates, update)
-	}
-	newView := currentView.View().NewCopyWithUpdates(updates...)
-	initialViewSeq := ViewSeq{newView}
+	initialViewSeq := getInitialViewSeq()
 
 	if useConsensus {
 		go generateViewSequenceWithConsensus(currentView.View(), initialViewSeq)
@@ -79,6 +71,13 @@ func startReconfiguration() {
 }
 
 // ---------- Others ------------
+
+func shouldDoReconfiguration() bool {
+	recvMutex.Lock()
+	defer recvMutex.Unlock()
+
+	return len(recv) != 0
+}
 
 type generatedViewSeq struct {
 	ViewSeq        ViewSeq

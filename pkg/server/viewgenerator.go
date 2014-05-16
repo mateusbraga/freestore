@@ -42,6 +42,10 @@ func getOrCreateViewGenerator(associatedView *view.View, initialSeq ViewSeq) vie
 	vgi.jobChan = make(chan interface{}, CHANNEL_DEFAULT_SIZE)
 	viewGenerators = append(viewGenerators, vgi)
 
+	workerSeq := initialSeq
+	if workerSeq == nil {
+		workerSeq = getInitialViewSeq()
+	}
 	go viewGeneratorWorker(vgi, initialSeq)
 
 	return vgi
@@ -160,6 +164,19 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 		}
 
 	}
+}
+
+// getInitialViewSeq creates the first ViewSeq to pass to a generateViewSequence function. The caller must lock recvMutex before calling.
+func getInitialViewSeq() ViewSeq {
+	recvMutex.Lock()
+	defer recvMutex.Unlock()
+
+	updates := []view.Update{}
+	for update, _ := range recv {
+		updates = append(updates, update)
+	}
+	newView := currentView.View().NewCopyWithUpdates(updates...)
+	return ViewSeq{newView}
 }
 
 // assertOnlyUpdatedViews exits the program if any view from seq is less updated than view.
