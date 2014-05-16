@@ -83,6 +83,10 @@ func getInitialViewSeq() ViewSeq {
 	recvMutex.Lock()
 	defer recvMutex.Unlock()
 
+	if len(recv) == 0 {
+		return ViewSeq{}
+	}
+
 	updates := []view.Update{}
 	for update, _ := range recv {
 		updates = append(updates, update)
