@@ -63,7 +63,7 @@ func getCurrentView(processes ...view.Process) {
 		}
 
 		if receivedView.Equal(currentView.View()) {
-			continue
+			return
 		}
 
 		currentView.Update(receivedView)
