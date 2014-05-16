@@ -43,6 +43,10 @@ func (viewSeq ViewSeq) GetLeastUpdatedView() *view.View {
 }
 
 func (viewSeq ViewSeq) GetMostUpdatedView() *view.View {
+	if len(viewSeq) == 0 {
+		return view.NewWithUpdates()
+	}
+
 	mostUpdatedViewIndex := 0
 	for loopIndex, loopView := range viewSeq {
 		if viewSeq[mostUpdatedViewIndex].LessUpdatedThan(loopView) {
