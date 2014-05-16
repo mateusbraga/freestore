@@ -79,6 +79,18 @@ func shouldDoReconfiguration() bool {
 	return len(recv) != 0
 }
 
+func getInitialViewSeq() ViewSeq {
+	recvMutex.Lock()
+	defer recvMutex.Unlock()
+
+	updates := []view.Update{}
+	for update, _ := range recv {
+		updates = append(updates, update)
+	}
+	newView := currentView.View().NewCopyWithUpdates(updates...)
+	return ViewSeq{newView}
+}
+
 type generatedViewSeq struct {
 	ViewSeq        ViewSeq
 	AssociatedView *view.View
