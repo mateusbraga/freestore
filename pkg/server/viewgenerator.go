@@ -47,7 +47,7 @@ func getOrCreateViewGenerator(associatedView *view.View, initialSeq ViewSeq) vie
 		workerSeq = getInitialViewSeq()
 		log.Println("GOT INITIALVIEWSEQ", workerSeq)
 	}
-	go viewGeneratorWorker(vgi, initialSeq)
+	go viewGeneratorWorker(vgi, workerSeq)
 
 	return vgi
 }
