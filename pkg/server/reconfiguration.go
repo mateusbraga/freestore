@@ -53,7 +53,7 @@ func resetTimerLoop() {
 }
 
 func startReconfiguration() {
-	if shouldDoReconfiguration() {
+	if !shouldDoReconfiguration() {
 		// restart reconfiguration timer
 		resetReconfigurationTimer <- true
 		return
