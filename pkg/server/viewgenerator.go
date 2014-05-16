@@ -93,7 +93,7 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 
 				// check if v conflicts with any view from lastProposedSeq
 				for _, v2 := range lastProposedSeq {
-					if !v.LessUpdatedThan(v2) && !v2.LessUpdatedThan(v) {
+					if v.LessUpdatedThan(v2) && v2.LessUpdatedThan(v) {
 						log.Printf("Has conflict between %v and %v!\n", v, v2)
 						hasConflict = true
 						break OuterLoop
