@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/rpc"
 	"sync"
 	"time"
@@ -471,6 +472,11 @@ func (r *ReconfigurationRequest) Reconfig(arg ReconfigMsg, reply *struct{}) erro
 	if currentView.View().HasUpdate(arg.Update) {
 		log.Printf("Reconfig request's Update %v already in currentView\n", arg.Update)
 		return nil
+	}
+
+	i := rand.Float32()
+	if i < 0.6 {
+		return fmt.Errorf("Reconfig request ignored")
 	}
 
 	recvMutex.Lock()
