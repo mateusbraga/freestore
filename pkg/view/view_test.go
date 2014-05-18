@@ -153,6 +153,40 @@ func TestViewLessUpdatedThan(t *testing.T) {
 	}
 }
 
+func TestViewMoreUpdatedThan(t *testing.T) {
+	updates := []Update{Update{Type: Join, Process: Process{"1"}},
+		Update{Type: Join, Process: Process{"2"}},
+	}
+
+	v1 := NewWithUpdates(updates...)
+	v2 := NewWithUpdates(updates[0])
+
+	if !v1.MoreUpdatedThan(v2) {
+		t.Errorf("v1 is more updated than v2!")
+	}
+
+	if v2.MoreUpdatedThan(v1) {
+		t.Errorf("v2 is not more updated than v1!")
+	}
+
+	v2 = v2.NewCopyWithUpdates(Update{Join, Process{"3"}})
+
+	if v1.MoreUpdatedThan(v2) {
+		t.Errorf("v1 is not more updated than v2!")
+	}
+
+	if v2.MoreUpdatedThan(v1) {
+		t.Errorf("v2 is not more updated than v1!")
+	}
+
+	v1 = v1.NewCopyWithUpdates(Update{Join, Process{"3"}})
+	v2 = v2.NewCopyWithUpdates(Update{Join, Process{"2"}})
+
+	if v2.MoreUpdatedThan(v1) {
+		t.Errorf("v2 is not more updated than v1!")
+	}
+}
+
 func TestGetProcessPosition(t *testing.T) {
 	updates := []Update{Update{Type: Join, Process: Process{"1"}},
 		Update{Type: Join, Process: Process{"2"}},

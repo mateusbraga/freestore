@@ -95,6 +95,25 @@ func (v *View) LessUpdatedThan(v2 *View) bool {
 	return false
 }
 
+func (v *View) MoreUpdatedThan(v2 *View) bool {
+	if len(v2.Entries) > len(v.Entries) {
+		return false
+	}
+
+	for k2, _ := range v2.Entries {
+		if _, ok := v.Entries[k2]; !ok {
+			return false
+		}
+	}
+
+	if len(v2.Entries) == len(v.Entries) {
+		// they are equal
+		return false
+	}
+
+	return true
+}
+
 func (v *View) Equal(v2 *View) bool {
 	if len(v.Entries) != len(v2.Entries) {
 		return false
