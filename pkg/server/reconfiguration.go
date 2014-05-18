@@ -220,6 +220,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 	if !installViewIsMoreUpdatedThanCv {
 		if installSeq.ViewSeq.HasViewMoreUpdatedThan(currentView.View()) {
 			installOthersViewsFromViewSeq(installSeq)
+			return
 		} else {
 			log.Println("installSeq does not lead to a more updated view than current view. Skipping...")
 			return
