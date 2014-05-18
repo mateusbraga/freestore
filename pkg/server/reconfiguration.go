@@ -181,18 +181,21 @@ func installSeqProcessingLoop() {
 func gotInstallSeqQuorum(installSeq InstallSeq) {
 	log.Println("Running gotInstallSeqQuorum", installSeq)
 
-	cvIsLessUpdatedThanInstallView := currentView.View().LessUpdatedThan(installSeq.InstallView)
+	cv := currentView.View()
+	cvIsStrictlyLessUpdatedThanInstallView := cv.LessUpdatedThan(installSeq.InstallView) && !cv.Equal(installSeq.InstallView)
 
 	// don't matter if installView is old, send state if server was a member of the associated view
 	if installSeq.AssociatedView.HasMember(thisProcess) {
 		// if installView is not old, disable r/w
-		if cvIsLessUpdatedThanInstallView {
+		if cvIsStrictlyLessUpdatedThanInstallView {
 			// disable R/W operations if not already disabled
 			isMultipleViewReconfigurationMu.Lock()
 			if !isMultipleViewReconfiguration {
 				register.mu.Lock()
 				registerLockTime = time.Now()
 				log.Println("R/W operations disabled")
+			} else {
+				log.Println("R/W operations is already disabled")
 			}
 			isMultipleViewReconfigurationMu.Unlock()
 		}
@@ -215,7 +218,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 	}
 
 	// stop here if installView is old
-	if !cvIsLessUpdatedThanInstallView {
+	if !cvIsStrictlyLessUpdatedThanInstallView {
 		if installSeq.ViewSeq.HasViewMoreUpdatedThan(currentView.View()) {
 			installOthersViewsFromViewSeq(installSeq)
 		} else {
