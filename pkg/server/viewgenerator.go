@@ -34,7 +34,9 @@ func getOrCreateViewGenerator(associatedView *view.View, initialSeq ViewSeq) vie
 	}
 
 	//TODO this is temporary, remove this after getting the data
-	startReconfigurationTime = time.Now()
+	if startReconfigurationTime.Sub(time.Now()) > 20*time.Second {
+		startReconfigurationTime = time.Now()
+	}
 
 	// view generator does not exist. Create it.
 	vgi := viewGeneratorInstance{}
@@ -200,8 +202,10 @@ func generateViewSequenceWithConsensus(associatedView *view.View, seq ViewSeq) {
 	value := <-consensus.GetConsensusResultChan(associatedView)
 
 	//TODO this is temporary, remove this after getting the data
-	startReconfigurationTime = consensus.GetConsensusStartTime(associatedView)
-	log.Println("starttime :", startReconfigurationTime)
+	if startReconfigurationTime.Sub(time.Now()) > 20*time.Second {
+		startReconfigurationTime = consensus.GetConsensusStartTime(associatedView)
+		log.Println("starttime :", startReconfigurationTime)
+	}
 
 	result, ok := value.(*ViewSeq)
 	if !ok {
