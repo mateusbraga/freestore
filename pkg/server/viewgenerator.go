@@ -34,7 +34,7 @@ func getOrCreateViewGenerator(associatedView *view.View, initialSeq ViewSeq) vie
 	}
 
 	//TODO this is temporary, remove this after getting the data
-	if startReconfigurationTime.Sub(time.Now()) > 20*time.Second {
+	if startReconfigurationTime.IsZero() || startReconfigurationTime.Sub(time.Now()) > 20*time.Second {
 		startReconfigurationTime = time.Now()
 	}
 
@@ -202,7 +202,7 @@ func generateViewSequenceWithConsensus(associatedView *view.View, seq ViewSeq) {
 	value := <-consensus.GetConsensusResultChan(associatedView)
 
 	//TODO this is temporary, remove this after getting the data
-	if startReconfigurationTime.Sub(time.Now()) > 20*time.Second {
+	if startReconfigurationTime.IsZero() || startReconfigurationTime.Sub(time.Now()) > 20*time.Second {
 		startReconfigurationTime = consensus.GetConsensusStartTime(associatedView)
 		log.Println("starttime :", startReconfigurationTime)
 	}
