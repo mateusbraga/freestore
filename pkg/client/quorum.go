@@ -34,7 +34,7 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 		// count success or fail
 		if receivedValue.Err != nil {
 			if oldViewError, ok := receivedValue.Err.(*view.OldViewError); ok {
-				if destinationView.LessUpdatedThan(oldViewError.NewView) {
+				if oldViewError.NewView.MoreUpdatedThan(destinationView) {
 					log.Println("View updated during read quorum")
 					thisClient.updateCurrentView(oldViewError.NewView)
 					return thisClient.readQuorum()
@@ -101,7 +101,7 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 		// count success or fail
 		if receivedValue.Err != nil {
 			if oldViewError, ok := receivedValue.Err.(*view.OldViewError); ok {
-				if destinationView.LessUpdatedThan(oldViewError.NewView) {
+				if oldViewError.NewView.MoreUpdatedThan(destinationView) {
 					log.Println("View updated during write quorum")
 					thisClient.updateCurrentView(oldViewError.NewView)
 					return thisClient.writeQuorum(writeMsg)
@@ -144,8 +144,7 @@ func (thisClient *Client) couldGetNewView() bool {
 		return false
 	}
 
-	cv := thisClient.View()
-	if view.LessUpdatedThan(cv) || view.Equal(cv) {
+	if !view.MoreUpdatedThan(thisClient.View()) {
 		return false
 	}
 

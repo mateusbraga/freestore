@@ -287,7 +287,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 func installOthersViewsFromViewSeq(installSeq InstallSeq) {
 	var newSeq ViewSeq
 	for _, v := range installSeq.ViewSeq {
-		if currentView.View().LessUpdatedThan(v) {
+		if v.MoreUpdatedThan(currentView.View()) {
 			newSeq = append(newSeq, v)
 		}
 	}
@@ -353,7 +353,7 @@ func stateUpdateProcessingLoop() {
 	for {
 		select {
 		case stateUpdate := <-stateUpdateProcessingChan:
-			if stateUpdate.AssociatedView.LessUpdatedThan(currentView.View()) {
+			if currentView.View().MoreUpdatedThan(stateUpdate.AssociatedView) {
 				//log.Println("Old stateUpdate ignored")
 				continue
 			}

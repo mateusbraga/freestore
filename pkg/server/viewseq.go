@@ -49,7 +49,7 @@ func (viewSeq ViewSeq) GetMostUpdatedView() *view.View {
 
 	mostUpdatedViewIndex := 0
 	for loopIndex, loopView := range viewSeq {
-		if viewSeq[mostUpdatedViewIndex].LessUpdatedThan(loopView) {
+		if loopView.MoreUpdatedThan(viewSeq[mostUpdatedViewIndex]) {
 			mostUpdatedViewIndex = loopIndex
 		}
 	}
@@ -59,7 +59,7 @@ func (viewSeq ViewSeq) GetMostUpdatedView() *view.View {
 
 func (viewSeq ViewSeq) HasViewMoreUpdatedThan(otherView *view.View) bool {
 	for _, v := range viewSeq {
-		if otherView.LessUpdatedThan(v) && !otherView.Equal(v) {
+		if v.MoreUpdatedThan(otherView) {
 			return true
 		}
 	}
