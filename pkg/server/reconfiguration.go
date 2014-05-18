@@ -39,6 +39,7 @@ var (
 
 var (
 	startReconfigurationTime time.Time
+	registerLockTime         time.Time
 )
 
 // ---------- Bootstrapping ------------
@@ -180,8 +181,6 @@ func installSeqProcessingLoop() {
 func gotInstallSeqQuorum(installSeq InstallSeq) {
 	log.Println("Running gotInstallSeqQuorum", installSeq)
 
-	registerLockTime := time.Now()
-
 	cvIsLessUpdatedThanInstallView := currentView.View().LessUpdatedThan(installSeq.InstallView)
 
 	// don't matter if installView is old, send state if server was a member of the associated view
@@ -192,6 +191,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 			isMultipleViewReconfigurationMu.Lock()
 			if !isMultipleViewReconfiguration {
 				register.mu.Lock()
+				registerLockTime = time.Now()
 				log.Println("R/W operations disabled")
 			}
 			isMultipleViewReconfigurationMu.Unlock()
