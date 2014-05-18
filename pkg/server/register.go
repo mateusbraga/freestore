@@ -3,14 +3,9 @@
 package server
 
 import (
-	"bufio"
-	"fmt"
 	"log"
-	"math/rand"
 	"net/rpc"
-	"os"
 	"sync"
-	"time"
 
 	"github.com/mateusbraga/freestore/pkg/view"
 )
@@ -34,7 +29,7 @@ func (r *RegisterService) Read(clientViewRef view.ViewRef, reply *Value) error {
 	reply.Value = register.Value
 	reply.Timestamp = register.Timestamp
 
-	throughput++
+	//throughput++
 
 	return nil
 }
@@ -88,59 +83,59 @@ type Value struct {
 	mu sync.RWMutex
 }
 
-var throughput uint64
-var throughputBuffer = make(map[time.Time]uint64, 70)
-var shutdownChan = make(chan bool)
+//var throughput uint64
+//var throughputBuffer = make(map[time.Time]uint64, 70)
+//var shutdownChan = make(chan bool)
 
-func collectThroughputWorker() {
-	writeLength := rand.Intn(20)
-	var lastThroughput uint64
+//func collectThroughputWorker() {
+//writeLength := rand.Intn(20)
+//var lastThroughput uint64
 
-	ticker := time.Tick(time.Second)
-	for {
-		select {
-		case now := <-ticker:
-			aux := throughput
-			throughputBuffer[now] = aux - lastThroughput
-			lastThroughput = aux
+//ticker := time.Tick(time.Second)
+//for {
+//select {
+//case now := <-ticker:
+//aux := throughput
+//throughputBuffer[now] = aux - lastThroughput
+//lastThroughput = aux
 
-			if len(throughputBuffer) > writeLength {
-				writeLength = rand.Intn(20)
-				saveThroughput()
-			}
-		case _ = <-shutdownChan:
-			saveThroughput()
-			log.Fatalln("Terminated")
-		}
-	}
-	log.Println("STOPPED COLLECTING THROUGHPUT!")
-}
+//if len(throughputBuffer) > writeLength {
+//writeLength = rand.Intn(20)
+//saveThroughput()
+//}
+//case _ = <-shutdownChan:
+//saveThroughput()
+//log.Fatalln("Terminated")
+//}
+//}
+//log.Println("STOPPED COLLECTING THROUGHPUT!")
+//}
 
-func saveThroughput() {
-	filename := fmt.Sprintf("/proj/freestore/throughputs_%v.txt", currentView.View().GetProcessPosition(thisProcess))
-	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
-	if err != nil {
-		//log.Println(err)
-		for loopTime, loopThroughput := range throughputBuffer {
-			fmt.Printf("%v %v %v\n", thisProcess, loopThroughput, loopTime.Format(time.RFC3339))
-			delete(throughputBuffer, loopTime)
-		}
-		return
-	}
-	defer file.Close()
+//func saveThroughput() {
+//filename := fmt.Sprintf("/proj/freestore/throughputs_%v.txt", currentView.View().GetProcessPosition(thisProcess))
+//file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
+//if err != nil {
+////log.Println(err)
+//for loopTime, loopThroughput := range throughputBuffer {
+//fmt.Printf("%v %v %v\n", thisProcess, loopThroughput, loopTime.Format(time.RFC3339))
+//delete(throughputBuffer, loopTime)
+//}
+//return
+//}
+//defer file.Close()
 
-	w := bufio.NewWriter(file)
-	defer w.Flush()
+//w := bufio.NewWriter(file)
+//defer w.Flush()
 
-	for loopTime, loopThroughput := range throughputBuffer {
-		if _, err = w.Write([]byte(fmt.Sprintf("%v %v %v\n", thisProcess, loopThroughput, loopTime.Format(time.RFC3339)))); err != nil {
-			log.Fatalln(err)
-		}
-		delete(throughputBuffer, loopTime)
-	}
-}
+//for loopTime, loopThroughput := range throughputBuffer {
+//if _, err = w.Write([]byte(fmt.Sprintf("%v %v %v\n", thisProcess, loopThroughput, loopTime.Format(time.RFC3339)))); err != nil {
+//log.Fatalln(err)
+//}
+//delete(throughputBuffer, loopTime)
+//}
+//}
 
-func init() {
-	go collectThroughputWorker()
-	rand.Seed(int64(time.Now().Nanosecond()))
-}
+//func init() {
+//go collectThroughputWorker()
+//rand.Seed(int64(time.Now().Nanosecond()))
+//}

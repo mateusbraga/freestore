@@ -57,6 +57,27 @@ func (viewSeq ViewSeq) GetMostUpdatedView() *view.View {
 	return viewSeq[mostUpdatedViewIndex]
 }
 
+func (viewSeq ViewSeq) HasViewMoreUpdatedThan(otherView *view.View) bool {
+	for _, v := range viewSeq {
+		if otherView.LessUpdatedThan(v) && !otherView.Equal(v) {
+			return true
+		}
+	}
+	return false
+}
+
+func (viewSeq ViewSeq) Append(views ...*view.View) ViewSeq {
+	newViewSeq := viewSeq
+	for _, v := range views {
+		if viewSeq.HasView(v) {
+			continue
+		}
+		newViewSeq = append(newViewSeq, v)
+	}
+
+	return newViewSeq
+}
+
 func init() {
 	gob.Register(new(ViewSeq))
 }

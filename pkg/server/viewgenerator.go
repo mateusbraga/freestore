@@ -62,14 +62,32 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 	var viewSeqQuorumCounter viewSeqQuorumCounterType
 	var seqConvQuorumCounter seqConvQuorumCounterType
 
+	countViewSeq := func(viewSeqMsg ViewSeqMsg) {
+		if viewSeqQuorumCounter.count(&viewSeqMsg, associatedView.QuorumSize()) {
+			newConvergedSeq := viewSeqMsg.ProposedSeq
+
+			log.Printf("sending newConvergedSeq: %v\n", newConvergedSeq)
+			lastConvergedSeq = newConvergedSeq
+
+			seqConvMsg := SeqConvMsg{}
+			seqConvMsg.AssociatedView = associatedView
+			seqConvMsg.Seq = newConvergedSeq
+
+			// Send seq-conv to all
+			go broadcastViewSequenceConv(associatedView, seqConvMsg)
+		}
+	}
+
 	if len(initialSeq) != 0 {
 		// Send viewSeqMsg to all
 		viewSeqMsg := ViewSeqMsg{}
 		viewSeqMsg.ProposedSeq = initialSeq
 		viewSeqMsg.LastConvergedSeq = nil
 		viewSeqMsg.AssociatedView = associatedView
+		viewSeqMsg.Sender = thisProcess
 
 		go broadcastViewSequence(associatedView, viewSeqMsg)
+		countViewSeq(viewSeqMsg)
 
 		lastProposedSeq = initialSeq
 	}
@@ -79,7 +97,7 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 		switch jobPointer := job.(type) {
 		case ViewSeqMsg:
 			receivedViewSeqMsg := jobPointer
-			log.Println("new ViewSeqMsg:", receivedViewSeqMsg)
+			log.Println("received ViewSeqMsg:", receivedViewSeqMsg)
 
 			var newProposeSeq ViewSeq
 
@@ -92,7 +110,7 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 					continue
 				}
 
-				log.Printf("New view received: %v\n", v)
+				log.Printf("New view discovered: %v\n", v)
 				hasChanges = true
 
 				// check if v conflicts with any view from lastProposedSeq
@@ -120,40 +138,30 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 					updates := append(oldMostUpdated.GetUpdates(), receivedMostUpdated.GetUpdates()...)
 					auxView := view.NewWithUpdates(updates...)
 
-					newProposeSeq = append(lastConvergedSeq, auxView)
-					break
+					newProposeSeq = lastConvergedSeq.Append(auxView)
 				} else {
-					newProposeSeq = append(lastProposedSeq, receivedViewSeqMsg.ProposedSeq...)
+					newProposeSeq = lastProposedSeq.Append(receivedViewSeqMsg.ProposedSeq...)
 				}
+				log.Println("sending newProposeSeq:", newProposeSeq)
 
 				viewSeqMsg := ViewSeqMsg{}
+				viewSeqMsg.Sender = thisProcess
 				viewSeqMsg.AssociatedView = associatedView
 				viewSeqMsg.ProposedSeq = newProposeSeq
 				viewSeqMsg.LastConvergedSeq = lastConvergedSeq
 
 				go broadcastViewSequence(associatedView, viewSeqMsg)
+				countViewSeq(viewSeqMsg)
 
 				lastProposedSeq = newProposeSeq
 			}
 
 			// Quorum check
-			if viewSeqQuorumCounter.count(&receivedViewSeqMsg, associatedView.QuorumSize()) {
-				newConvergedSeq := receivedViewSeqMsg.ProposedSeq
-
-				log.Printf("New Converged Seq: %v\n", newConvergedSeq)
-				lastConvergedSeq = newConvergedSeq
-
-				seqConvMsg := SeqConvMsg{}
-				seqConvMsg.AssociatedView = associatedView
-				seqConvMsg.Seq = newConvergedSeq
-
-				// Send seq-conv to all
-				go broadcastViewSequenceConv(associatedView, seqConvMsg)
-			}
+			countViewSeq(receivedViewSeqMsg)
 
 		case *SeqConv:
 			receivedSeqConvMsg := jobPointer
-			log.Println("new SeqConvMsg:", receivedSeqConvMsg)
+			log.Println("received SeqConvMsg:", receivedSeqConvMsg)
 
 			// Quorum check
 			if seqConvQuorumCounter.count(receivedSeqConvMsg, associatedView.QuorumSize()) {
@@ -177,14 +185,12 @@ func assertOnlyUpdatedViews(baseView *view.View, seq ViewSeq) {
 
 // we can change seq
 func generateViewSequenceWithoutConsensus(associatedView *view.View, seq ViewSeq) {
-	log.Println("Running generateViewSequenceWithoutConsensus")
 	assertOnlyUpdatedViews(associatedView, seq)
 
 	_ = getOrCreateViewGenerator(associatedView, seq)
 }
 
 func generateViewSequenceWithConsensus(associatedView *view.View, seq ViewSeq) {
-	log.Println("start generateViewSequenceWithConsensus")
 	assertOnlyUpdatedViews(associatedView, seq)
 
 	if associatedView.GetProcessPosition(thisProcess) == LEADER_PROCESS_POSITION {
@@ -213,7 +219,7 @@ type viewSeqQuorumCounterType struct {
 
 func (quorumCounter *viewSeqQuorumCounterType) count(newViewSeqMsg *ViewSeqMsg, quorumSize int) bool {
 	for i, _ := range quorumCounter.list {
-		if quorumCounter.list[i].Equal(*newViewSeqMsg) {
+		if quorumCounter.list[i].SameButDifferentSender(*newViewSeqMsg) {
 			quorumCounter.counter[i]++
 
 			return quorumCounter.counter[i] == quorumSize
@@ -269,12 +275,17 @@ func (seqConv SeqConv) Equal(seqConv2 SeqConv) bool {
 }
 
 type ViewSeqMsg struct {
+	Sender           view.Process
 	AssociatedView   *view.View
 	ProposedSeq      ViewSeq
 	LastConvergedSeq ViewSeq
 }
 
-func (thisViewSeqMsg ViewSeqMsg) Equal(otherViewSeqMsg ViewSeqMsg) bool {
+func (thisViewSeqMsg ViewSeqMsg) SameButDifferentSender(otherViewSeqMsg ViewSeqMsg) bool {
+	if thisViewSeqMsg.Sender == otherViewSeqMsg.Sender {
+		return false
+	}
+
 	if !thisViewSeqMsg.AssociatedView.Equal(otherViewSeqMsg.AssociatedView) {
 		return false
 	}
@@ -312,7 +323,8 @@ func init() {
 
 // -------- Broadcast functions -----------
 func broadcastViewSequence(destinationView *view.View, viewSeqMsg ViewSeqMsg) {
-	comm.BroadcastRPCRequest(destinationView, "ViewGeneratorRequest.ProposeSeqView", viewSeqMsg)
+	destinationViewWithoutThisProcess := destinationView.NewCopyWithUpdates(view.Update{Type: view.Leave, Process: thisProcess})
+	comm.BroadcastRPCRequest(destinationViewWithoutThisProcess, "ViewGeneratorRequest.ProposeSeqView", viewSeqMsg)
 }
 
 func broadcastViewSequenceConv(destinationView *view.View, seqConvMsg SeqConvMsg) {
