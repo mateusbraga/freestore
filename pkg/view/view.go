@@ -7,7 +7,7 @@ import (
 	"fmt"
 )
 
-// View represents a server's view of the members of the distributed system. A View once created is immutable, for a mutable View, see CurrentView type.
+// View represents a server's view of the members of the distributed system. A View once created is immutable, for a mutable View, see type CurrentView.
 type View struct {
 	Entries map[Update]bool
 	Members map[Process]bool // Cache, can be rebuilt from Entries
