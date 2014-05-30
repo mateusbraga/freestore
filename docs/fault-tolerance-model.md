@@ -67,7 +67,7 @@ or response.
 
 ### End-to-end layer 
 
-Masks divergence in the responses.
+The end-to-end layer masks divergence in the responses from the servers.
 
     Read() (value, error)
     Write(value) error
@@ -90,7 +90,7 @@ and returned to the caller of Read an Write.
 
 ### Quorum layer
 
-Implements the N-modular redundancy and masks old view error.
+The quorum layer implements the N-modular redundancy and masks old view error.
 
     Quorum-Read(view) (value, error)
     Quorum-Write(view, value) error
