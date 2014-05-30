@@ -1,5 +1,4 @@
-Freestore's Fault Tolerance Model
-=================================
+# Fault Tolerance Model
 
 This document is a fault tolerance specification of the system. The
 intent is to get all of the assumptions out on the table. 
@@ -15,17 +14,16 @@ The classification of each error takes into account the system design,
 the estimated probability, the cost of turning them into detected or
 tolerated, and the potential consequences of its occurrence. It is
 recommended to contain detected errors in fail-fast modules (modules
-that reports at its interface that something has gone wrong).
+that reports at its interface that something has gone wrong as soon as posible).
 
--------------------------------------------------------------------------
+## Freestore
 
 The system comprises a higher-level application with a freestore client
 (the user) and the Freestore register subsystem, which itself comprises
 multiple platforms running the servers connected to a network.
 
 
-Overall system fault tolerance model
-------------------------------------
+## Overall system fault tolerance model
 
 error-free operation: All work goes according to expectations. The
 user's Reads and Writes are performed and the system confirms the
@@ -45,8 +43,7 @@ not have completed and that it should stop using the system.
 The tolerated error specification means that the entire system is
 fail-fast.
 
-Platform and network fault tolerance model
-------------------------------
+## Platform and network fault tolerance model
 
 error-free operation: The hardware and operating system all follow their
 specifications.
@@ -66,13 +63,14 @@ to malfunction silently, like an error that the TCP error detection
 mechanism does not detect and that also represents a valid RPC request
 or response.
 
--------------------------------------------------------------------------
+## FreeStore Client
 
-Freestore Client's end-to-end layer which masks divergence in the
-responses.
+### End-to-end layer 
 
-Read() (value, error)
-Write(value) error
+Masks divergence in the responses.
+
+    Read() (value, error)
+    Write(value) error
 
 error-free operation: Read returns the value of the last Write.
 
@@ -90,13 +88,12 @@ processes is a failure of the system assumption that a majority of
 processes is always working. This error is detected in the Quorum layer
 and returned to the caller of Read an Write.
 
-======================================
+### Quorum layer
 
-Freestore Client's quorum layer which implements the N-modular
-redundancy and masks old view error.
+Implements the N-modular redundancy and masks old view error.
 
-Quorum-Read(view) (value, error)
-Quorum-Write(view, value) error
+    Quorum-Read(view) (value, error)
+    Quorum-Write(view, value) error
 
 error-free operation: Quorum-Read returns the value with the highest
 associated timestamp of the distributed register. Quorum-Write writes
@@ -122,11 +119,9 @@ a majority of servers and returning the value with the highest
 associated timestamp along with an error. This error does not affect
 Quorum-Write. 
 
-======================================
+## Freestore Communication module: RPC library
 
-Freestore Communication module: RPC library
-
-SendRPCRequest(destination, serviceMethod, arg, *reply) error
+    SendRPCRequest(destination, serviceMethod, arg, *reply) error
 
 error-free operation: Call serviceMethod at destination with args and
 return the result in "reply". 
@@ -139,43 +134,19 @@ unreachable, serviceMethod signaled an error during its execution, and
 any detected but not masked error according to the TCP specification and
 Go's RPC implementation.
 
-======================================
+## Freestore Server's register
 
-Freestore Server's register
+    Read() (value, error)
+    Write(value) error
 
-Read() (value, error)
-Write(value) error
+detected error: Request to an old view. The server will compare its current view with the request associated view and return an error in the reply along with the newer view. Both in Read and in Write.
+
+tolerated error: Communication errors. The server will detect and report any invalid request and then discard it.
 
 
-Detected errors
----------------
+## Freestore Server's Reconfiguration module
 
-Request to an old view. The server will compare its current view with
-the request associated view and return an error in the reply along with
-the newer view. Both in Read and in Write.
+detected error: Request to an old view. The server will compare its current view with the request associated view and return an error in the reply along with the newer view. Both in Read and in Write.
 
-Tolerated errors
-----------------
-
-Communication errors. The server will detect and report any invalid
+tolerated error: Communication errors. The server will detect and report any invalid
 request and then discard it.
-
-======================================
-
-Freestore Server's Reconfiguration module
-
-
-Detected errors
----------------
-
-Request to an old view. The server will compare its current view with
-the request associated view and return an error in the reply along with
-the newer view. Both in Read and in Write.
-
-Tolerated errors
-----------------
-
-Communication errors. The server will detect and report any invalid
-request and then discard it.
-
------------------------------------------------------------------------
