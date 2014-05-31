@@ -167,7 +167,7 @@ func prepare(proposal Proposal) (interface{}, error) {
 			failedTotal++
 
 			if failedTotal > proposal.AssociatedView.NumberOfToleratedFaults() {
-				return nil, errors.New("Failed to get prepare quorun")
+				return nil, errors.New("Failed to get prepare quorum")
 			}
 		} else {
 			successTotal++
@@ -199,7 +199,7 @@ func accept(proposal Proposal) error {
 			failedTotal++
 
 			if failedTotal > proposal.AssociatedView.NumberOfToleratedFaults() {
-				return errors.New("Failed to get accept quorun")
+				return errors.New("Failed to get accept quorum")
 			}
 		} else {
 			successTotal++

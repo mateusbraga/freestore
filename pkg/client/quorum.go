@@ -63,7 +63,7 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 			if thisClient.couldGetNewView() {
 				return thisClient.readQuorum()
 			} else {
-				return RegisterMsg{}, errors.New("Failed to get read quorun")
+				return RegisterMsg{}, errors.New("Failed to get read quorum")
 			}
 		}
 
@@ -128,7 +128,7 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 			if thisClient.couldGetNewView() {
 				return thisClient.writeQuorum(writeMsg)
 			} else {
-				return errors.New("Failed to get write quorun")
+				return errors.New("Failed to get write quorum")
 			}
 		}
 

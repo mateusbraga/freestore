@@ -5,6 +5,7 @@ package client
 
 import (
 	"log"
+	"sync"
 
 	"github.com/mateusbraga/freestore/pkg/view"
 )
@@ -12,6 +13,8 @@ import (
 type Client struct {
 	view                view.CurrentView
 	getFurtherViewsFunc GetViewFunc
+	err                 error
+	mutex               sync.Mutex
 }
 
 type GetViewFunc func() (*view.View, error)
@@ -42,12 +45,21 @@ func (cl *Client) updateCurrentView(newView *view.View) { cl.view.Update(newView
 
 // Write v to the system's register. Can be run concurrently.
 func (cl *Client) Write(v interface{}) error {
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	// Stop using the system if it is known to be broken (fail-fast)
+	if cl.err != nil {
+		return cl.err
+	}
+
 	readValue, err := cl.readQuorum()
 	if err != nil {
 		// Special case: diffResultsErr
 		if err == diffResultsErr {
 			// Do nothing - we will write a new value anyway
 		} else {
+			cl.err = err
 			return err
 		}
 	}
@@ -60,6 +72,7 @@ func (cl *Client) Write(v interface{}) error {
 
 	err = cl.writeQuorum(writeMsg)
 	if err != nil {
+		cl.err = err
 		return err
 	}
 
@@ -68,6 +81,14 @@ func (cl *Client) Write(v interface{}) error {
 
 // Read executes the quorum read protocol.
 func (cl *Client) Read() (interface{}, error) {
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	// Stop using the system if it is known to be broken (fail-fast)
+	if cl.err != nil {
+		return nil, cl.err
+	}
+
 	readMsg, err := cl.readQuorum()
 	if err != nil {
 		// Special case: diffResultsErr
@@ -75,6 +96,7 @@ func (cl *Client) Read() (interface{}, error) {
 			log.Println("Found divergence: Going to 2nd phase of read protocol")
 			return cl.read2ndPhase(readMsg)
 		} else {
+			cl.err = err
 			return nil, err
 		}
 	}
@@ -85,6 +107,7 @@ func (cl *Client) Read() (interface{}, error) {
 func (cl *Client) read2ndPhase(readMsg RegisterMsg) (interface{}, error) {
 	err := cl.writeQuorum(readMsg)
 	if err != nil {
+		cl.err = err
 		return nil, err
 	}
 

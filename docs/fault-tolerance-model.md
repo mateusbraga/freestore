@@ -18,32 +18,21 @@ that reports at its interface that something has gone wrong as soon as posible).
 
 ## The System
 
-The system comprises a higher-level application with a freestore client
-(the user) and the Freestore register subsystem, which itself comprises
-multiple platforms running the servers connected to a network.
+The system comprises multiple Freestore clients (the users) and the Freestore register subsystem, which itself comprises multiple Freestore servers connected to a network.
 
+## Overall System Fault Tolerance Model
 
-## Overall system fault tolerance model
+* error-free operation: All work goes according to expectations. The user's reads and writes are performed and confirmed by the system.  Sequential consistency is garanteed.
 
-* error-free operation: All work goes according to expectations. The
-user's Reads and Writes are performed and the system confirms the
-operations by returning a status to the user.
+* tolerated errors: As long as a majority of the servers is running and reachable: servers' platforms and network untolerated errors, and servers software errors.
 
-* tolerated error: The user who has initiated an action notices that the
-system failed by checking the status returned by the action. This error
-indicate that the assumption that at least a majority of servers is
-running and reachable is flawed. In this case, the action may have been
-performed, but the user should stop using the distributed register at
-this point.
+* detected error: The assumption that at least a majority of the servers is running and reachable was flawed. This error indicates that the system has failed and must be repaired. The client will always return an error from this moment.
 
-* untolerated error: The system fails without the user checking the status
-returned of an action, so the user does not realize that its action may
-not have completed and that it should stop using the system.
+  In other words, the system is fail-fast. If it discovers that the assumption was flawed, it refuses to continue working.
 
-The tolerated error specification means that the entire system is
-fail-fast.
+* untolerated errors: byzantine errors, freestore clients' platform untolerated errors
 
-## Platform and network fault tolerance model
+## Platform and Network Fault Tolerance Model
 
 * error-free operation: The hardware and operating system all follow their
 specifications.
@@ -63,7 +52,7 @@ to malfunction silently, like an error that the TCP error detection
 mechanism does not detect and that also represents a valid RPC request
 or response.
 
-## FreeStore Client
+## Freestore Client Fault Tolerance Model
 
 ### End-to-end layer 
 
