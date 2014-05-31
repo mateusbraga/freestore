@@ -10,6 +10,7 @@ import (
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
+// Client represents a freestore client. Client may be used by multiple goroutines simultaneously.
 type Client struct {
 	view                view.CurrentView
 	getFurtherViewsFunc GetViewFunc
