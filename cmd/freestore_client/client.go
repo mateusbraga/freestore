@@ -16,16 +16,13 @@ import (
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-var (
-	nTotal         = flag.Uint64("n", math.MaxUint64, "number of times to perform a read and write operation")
-	initialProcess = flag.String("initial", "", "Process to ask for the initial view")
-	retryProcess   = flag.String("retry", "", "Process to ask for a newer view")
-)
-
 func main() {
+	nTotal := flag.Uint64("n", math.MaxUint64, "number of times to perform a read and write operation")
+	initialProcess := flag.String("initial", "", "Process to ask for the initial view")
+	retryProcess := flag.String("retry", "", "Process to ask for a newer view")
 	flag.Parse()
 
-	freestoreClient, err := client.New(getInitialView, getFurtherViews)
+	freestoreClient, err := client.New(getInitialViewFunc(*initialProcess), getFurtherViewsFunc(*retryProcess))
 	if err != nil {
 		log.Fatalln("FATAL:", err)
 	}
@@ -54,42 +51,46 @@ func main() {
 	}
 }
 
-func getInitialView() (*view.View, error) {
-	hostname, err := os.Hostname()
-	if err != nil {
-		log.Panicln(err)
-	}
-
-	if *initialProcess == "" {
-		switch {
-		case strings.Contains(hostname, "node-"): // emulab.net
-			updates := []view.Update{view.Update{Type: view.Join, Process: view.Process{"10.1.1.2:5000"}},
-				view.Update{Type: view.Join, Process: view.Process{"10.1.1.3:5000"}},
-				view.Update{Type: view.Join, Process: view.Process{"10.1.1.4:5000"}},
-			}
-			return view.NewWithUpdates(updates...), nil
-		default:
-			updates := []view.Update{view.Update{Type: view.Join, Process: view.Process{"[::]:5000"}},
-				view.Update{Type: view.Join, Process: view.Process{"[::]:5001"}},
-				view.Update{Type: view.Join, Process: view.Process{"[::]:5002"}},
-			}
-			return view.NewWithUpdates(updates...), nil
-		}
-	} else {
-		process := view.Process{*initialProcess}
-		initialView, err := client.GetCurrentView(process)
+func getInitialViewFunc(initialProc string) func() (*view.View, error) {
+	return func() (*view.View, error) {
+		hostname, err := os.Hostname()
 		if err != nil {
-			log.Fatalf("Failed to get current view from process %v: %v\n", process, err)
+			log.Panicln(err)
 		}
-		return initialView, nil
+
+		if initialProc == "" {
+			switch {
+			case strings.Contains(hostname, "node-"): // emulab.net
+				updates := []view.Update{view.Update{Type: view.Join, Process: view.Process{"10.1.1.2:5000"}},
+					view.Update{Type: view.Join, Process: view.Process{"10.1.1.3:5000"}},
+					view.Update{Type: view.Join, Process: view.Process{"10.1.1.4:5000"}},
+				}
+				return view.NewWithUpdates(updates...), nil
+			default:
+				updates := []view.Update{view.Update{Type: view.Join, Process: view.Process{"[::]:5000"}},
+					view.Update{Type: view.Join, Process: view.Process{"[::]:5001"}},
+					view.Update{Type: view.Join, Process: view.Process{"[::]:5002"}},
+				}
+				return view.NewWithUpdates(updates...), nil
+			}
+		} else {
+			process := view.Process{initialProc}
+			initialView, err := client.GetCurrentView(process)
+			if err != nil {
+				log.Fatalf("Failed to get current view from process %v: %v\n", process, err)
+			}
+			return initialView, nil
+		}
 	}
 }
 
-func getFurtherViews() (*view.View, error) {
-	view, err := client.GetCurrentView(view.Process{*retryProcess})
-	if err != nil {
-		return nil, err
-	}
+func getFurtherViewsFunc(retryProcess string) func() (*view.View, error) {
+	return func() (*view.View, error) {
+		view, err := client.GetCurrentView(view.Process{retryProcess})
+		if err != nil {
+			return nil, err
+		}
 
-	return view, nil
+		return view, nil
+	}
 }

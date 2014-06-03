@@ -20,11 +20,6 @@ import (
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-var (
-	leave          = flag.String("leave", "", "Process to leave the system")
-	initialProcess = flag.String("initial", "", "Process to ask for the initial view")
-)
-
 //var (
 //currentView  *view.View
 //systemStatus Status = Status{}
@@ -268,6 +263,8 @@ var (
 //}
 
 func main() {
+	leave := flag.String("leave", "", "Process to leave the system")
+	//initialProcess := flag.String("initial", "", "Process to ask for the initial view")
 	flag.Parse()
 
 	if *leave != "" {
@@ -289,13 +286,13 @@ func sendLeaveProcess(process view.Process) {
 	}
 }
 
-func getInitialView() *view.View {
+func getInitialView(initialProc string) *view.View {
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	if *initialProcess == "" {
+	if initialProc == "" {
 		switch {
 		case strings.Contains(hostname, "node-"): // emulab.net
 			updates := []view.Update{view.Update{Type: view.Join, Process: view.Process{"10.1.1.2:5000"}},
@@ -311,7 +308,7 @@ func getInitialView() *view.View {
 			return view.NewWithUpdates(updates...)
 		}
 	} else {
-		process := view.Process{*initialProcess}
+		process := view.Process{initialProc}
 		initialView, err := client.GetCurrentView(process)
 		if err != nil {
 			log.Fatalf("Failed to get current view from process %v: %v\n", process, err)

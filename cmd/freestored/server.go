@@ -18,23 +18,18 @@ import (
 	_ "net/http/pprof"
 )
 
-// Flags
-var (
-	useConsensus    = flag.Bool("consensus", false, "Set consensus to use consensus on reconfiguration")
-	numberOfServers = flag.Int("n", 3, "Number of servers in the initial view")
-	bindAddr        = flag.String("bind", "[::]:5000", "Set this process address")
-	initialProcess  = flag.String("initial", "", "Process to ask for the initial view")
-)
-
 func init() {
 	// Make it parallel
 	runtime.GOMAXPROCS(runtime.NumCPU())
 }
 
 func main() {
+	useConsensus := flag.Bool("consensus", false, "Set consensus to use consensus on reconfiguration")
+	bindAddr := flag.String("bind", "[::]:5000", "Set this process address")
+	initialProcess := flag.String("initial", "", "Process to ask for the initial view")
 	flag.Parse()
 
-	initialView := getInitialView()
+	initialView := getInitialView(*initialProcess)
 
 	go func() {
 		log.Println("Running pprof:", http.ListenAndServe("localhost:6060", nil))
@@ -43,13 +38,13 @@ func main() {
 	server.Run(*bindAddr, initialView, *useConsensus)
 }
 
-func getInitialView() *view.View {
+func getInitialView(initialProc string) *view.View {
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	if *initialProcess == "" {
+	if initialProc == "" {
 		switch {
 		case strings.Contains(hostname, "node-"): // emulab.net
 			updates := []view.Update{view.Update{Type: view.Join, Process: view.Process{"10.1.1.2:5000"}},
@@ -65,7 +60,7 @@ func getInitialView() *view.View {
 			return view.NewWithUpdates(updates...)
 		}
 	} else {
-		process := view.Process{*initialProcess}
+		process := view.Process{initialProc}
 		initialView, err := client.GetCurrentView(process)
 		if err != nil {
 			log.Fatalf("Failed to get current view from process %v: %v\n", process, err)
