@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/mateusbraga/freestore/pkg/comm"
 	"github.com/mateusbraga/freestore/pkg/view"
-	"log"
 )
 
 // GetCurrentView asks processes for the its current view and returns it.
@@ -14,7 +13,6 @@ func GetCurrentView(processes ...view.Process) (*view.View, error) {
 		var receivedView *view.View
 		err := comm.SendRPCRequest(loopProcess, "RegisterService.GetCurrentView", 0, &receivedView)
 		if err != nil {
-			log.Println(err)
 			continue
 		}
 

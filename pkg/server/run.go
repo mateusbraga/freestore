@@ -7,15 +7,13 @@ import (
 
 	"github.com/mateusbraga/freestore/pkg/comm"
 	"github.com/mateusbraga/freestore/pkg/view"
-	// TODO create stats module to count faults, faults masked, errors, failures, ...
+	//TODO count faults, faults masked, errors, failures and put in expvar
 )
 
 var (
 	listener     net.Listener
 	thisProcess  view.Process
 	useConsensus bool
-
-	// currentView of this server cluster.
 	currentView = view.NewCurrentView()
 )
 
@@ -23,9 +21,8 @@ func Run(bindAddr string, initialView *view.View, useConsensusArg bool) {
 	// init global variables
 	listener, err := net.Listen("tcp", bindAddr)
 	if err != nil {
-		log.Fatal(err)
+		log.Panicln(err)
 	}
-	log.Println("Listening on address:", listener.Addr())
 
 	thisProcess = view.Process{listener.Addr().String()}
 
@@ -49,6 +46,7 @@ func Run(bindAddr string, initialView *view.View, useConsensusArg bool) {
 	}
 
 	// Accept connections forever
+	log.Println("Listening on address:", listener.Addr())
 	rpc.Accept(listener)
 }
 
@@ -58,7 +56,6 @@ func getCurrentView(processes ...view.Process) {
 		var receivedView *view.View
 		err := comm.SendRPCRequest(loopProcess, "RegisterService.GetCurrentView", 0, &receivedView)
 		if err != nil {
-			log.Println(err)
 			continue
 		}
 
@@ -70,5 +67,5 @@ func getCurrentView(processes ...view.Process) {
 		return
 	}
 
-	log.Fatalln("Failed to get current view from processes")
+	log.Fatalln("Failed to get current view from processes", processes)
 }
