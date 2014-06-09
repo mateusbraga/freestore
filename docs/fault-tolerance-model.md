@@ -1,5 +1,7 @@
 # Fault Tolerance Model
 
+**UNDER CONSTRUCTION**
+
 This document is a fault tolerance specification of the system. The
 intent is to get all of the assumptions out on the table. 
 
@@ -18,40 +20,40 @@ that reports at its interface that something has gone wrong as soon as posible).
 
 ## The System
 
-The system comprises Freestore clients (the users) accessing the Freestore register subsystem (the servers) through a network.
+The system comprises Freestore clients (used by the users) accessing the Freestore register subsystem (the servers) through a network.
 
 ## Overall System Fault Tolerance Model
 
 * error-free operation: All work goes according to expectations. The user's reads and writes are performed and confirmed by the system.  Sequential consistency is garanteed.
 
-* tolerated errors as long as a majority of the servers is running and reachable: 
+* tolerated errors *as long as a majority of the servers is running and connected to the clients*: 
   * servers' platform untolerated error
   * network untolerated errors
   * servers software errors.
 
   To achieve high-availability, proper operation and maintenance should be in place to repair individual servers.
 
-* detected error: The assumption that at least a majority of the servers is running and reachable was flawed. This error indicates that the system no longer garantees its services and must be repaired. The client will always return an error from this moment.
+* detected error: A client can detect when the assumption that at least a majority of the servers is running and reachable was flawed. This indicates that the system no longer garantees its services and must be repaired. The client that detects this error will always return the error from this moment.
 
-  In other words, the system is fail-fast. If it discovers that the assumption was flawed, it refuses to continue working.
+  TODO: The client should have a way to tell the system about this, so no other client will use the system before it has been repaired.
 
 * untolerated errors: 
   * byzantine errors
   * clients' platform untolerated errors
-  * communication untolerated errors (see below)
+  * clients software errors
 
-## Platform and Network Fault Tolerance Model
+## Platform and Network Fault Tolerance Model (Assumption)
 
 * error-free operation: The hardware and operating system follow their specifications.
 
-* tolerated error: Soft hardware or operating system failures. The hardware or operating system detects the failure and restarts from a clean state before initiating any further actions. This error is then handled as a power failure.
+* tolerated error: hardware or operating system soft failures. The hardware or operating system detects the failure and restarts from a clean state before initiating any further actions. This error is then handled as a power failure.
 
 * detected error: Hard hardware failures. The platform is fail-fast and stop working. The platform should be repaired or replaced as soon as possible.
 
 * untolerated error: Something fails in the hardware or operating system.
 The processor muddles along and corrupted data is used before detecting
 the failure. This error is similar to a byzantine error, which the
-design does not try to detect and neither tolerate.
+design does not try to detect or tolerate.
 
 * untolerated error: Communication errors that cause the client or servers
 to malfunction silently, like an error that the TCP error detection
