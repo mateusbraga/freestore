@@ -27,9 +27,9 @@ The system comprises Freestore clients (used by the users) accessing the Freesto
 * error-free operation: All work goes according to expectations. The user's reads and writes are performed and confirmed by the system.  Sequential consistency is garanteed.
 
 * tolerated errors *as long as a majority of the servers is running and connected to the clients*: 
-  * servers' platform untolerated error
   * network untolerated errors
   * servers software errors.
+  * servers platform untolerated error
 
   To achieve high-availability, proper operation and maintenance should be in place to repair individual servers.
 
