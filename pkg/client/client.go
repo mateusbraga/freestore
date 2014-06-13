@@ -4,9 +4,7 @@ Package client implements a Freestore client
 package client
 
 import (
-	"log"
 	"sync"
-
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
@@ -14,8 +12,13 @@ import (
 type Client struct {
 	view                view.CurrentView
 	getFurtherViewsFunc GetViewFunc
-	err                 error
-	mutex               sync.Mutex
+
+    // mutex protects err and num2ndPhareReads
+	mutex sync.Mutex
+    // Count number of 2nd phase reads this client performed
+	num2ndPhaseReads int
+	// wheter this client noticed any errors
+	err   error
 }
 
 type GetViewFunc func() (*view.View, error)
@@ -37,14 +40,12 @@ func New(getInitialViewFunc GetViewFunc, getFurtherViewsFunc GetViewFunc) (*Clie
 	return newClient, nil
 }
 
-func (cl Client) View() *view.View      { return cl.view.View() }
-func (cl Client) ViewRef() view.ViewRef { return cl.view.ViewRef() }
-func (cl Client) ViewAndViewRef() (*view.View, view.ViewRef) {
-	return cl.view.ViewAndViewRef()
-}
-func (cl *Client) updateCurrentView(newView *view.View) { cl.view.Update(newView) }
+func (cl Client) View() *view.View                           { return cl.view.View() }
+func (cl Client) ViewRef() view.ViewRef                      { return cl.view.ViewRef() }
+func (cl Client) ViewAndViewRef() (*view.View, view.ViewRef) { return cl.view.ViewAndViewRef() }
+func (cl *Client) updateCurrentView(newView *view.View)      { cl.view.Update(newView) }
 
-// Write v to the system's register. Can be run concurrently.
+// Write v to the system's register.
 func (cl *Client) Write(v interface{}) error {
 	cl.mutex.Lock()
 	defer cl.mutex.Unlock()
@@ -94,7 +95,6 @@ func (cl *Client) Read() (interface{}, error) {
 	if err != nil {
 		// Special case: diffResultsErr
 		if err == diffResultsErr {
-			log.Println("Found divergence: Going to 2nd phase of read protocol")
 			return cl.read2ndPhase(readMsg)
 		} else {
 			cl.err = err
@@ -106,6 +106,7 @@ func (cl *Client) Read() (interface{}, error) {
 }
 
 func (cl *Client) read2ndPhase(readMsg RegisterMsg) (interface{}, error) {
+    cl.num2ndPhaseReads++
 	err := cl.writeQuorum(readMsg)
 	if err != nil {
 		cl.err = err
@@ -115,9 +116,12 @@ func (cl *Client) read2ndPhase(readMsg RegisterMsg) (interface{}, error) {
 	return readMsg.Value, nil
 }
 
+// Used in RPC Read and Write
 type RegisterMsg struct {
 	Value     interface{}  // Value of the register
 	Timestamp int          // Timestamp of the register
 	ViewRef   view.ViewRef // Current client's view
 	Err       error        // Any RPC or register service errors
+
+	process view.Process
 }

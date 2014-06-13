@@ -30,11 +30,12 @@ func (currentView *CurrentView) Update(newView *View) {
 	defer currentView.mu.Unlock()
 
 	if !newView.MoreUpdatedThan(currentView.view) {
-		if newView.LessUpdatedThan(currentView.view) {
-			log.Println("WARNING: Tried to Update current view with a less updated view")
-		} else {
-			log.Println("WARNING: Tried to Update current view with the same view")
-		}
+	    // comment these log messages; they are just for debugging
+        if newView.LessUpdatedThan(currentView.view) {
+            log.Println("WARNING: Tried to Update current view with a less updated view")
+        } else {
+            log.Println("WARNING: Tried to Update current view with the same view")
+        }
 		return
 	}
 

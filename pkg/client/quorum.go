@@ -35,12 +35,14 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 		if receivedValue.Err != nil {
 			if oldViewError, ok := receivedValue.Err.(*view.OldViewError); ok {
 				if oldViewError.NewView.MoreUpdatedThan(destinationView) {
-					log.Println("View updated during read quorum")
+					log.Println("View updated during read quorum by process", receivedValue.process)
 					thisClient.updateCurrentView(oldViewError.NewView)
 					return thisClient.readQuorum()
 				}
-				// oldViewError.NewView is actually not more updated than current view, count as failed
-				log.Println("+1 process has old view")
+				// oldViewError.NewView is actually not more updated than current view, try again
+				go sendRead(receivedValue.process, viewRef, resultChan)
+				log.Printf("Process %v has old view %v\n", receivedValue.process, oldViewError.NewView)
+				continue
 			}
 
 			//log.Println("+1 error to read:", err)
@@ -102,13 +104,13 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 		if receivedValue.Err != nil {
 			if oldViewError, ok := receivedValue.Err.(*view.OldViewError); ok {
 				if oldViewError.NewView.MoreUpdatedThan(destinationView) {
-					log.Println("View updated during write quorum")
+					log.Println("View updated during write quorum by process", receivedValue.process)
 					thisClient.updateCurrentView(oldViewError.NewView)
 					return thisClient.writeQuorum(writeMsg)
 				}
-				// oldViewError.NewView is actually not more updated than current view, count as failed
-				log.Println("+1 process has old view")
-				// TODO remove continue, and try resending request
+				// oldViewError.NewView is actually not more updated than current view, try again
+				go sendWrite(receivedValue.process, &writeMsg, resultChan)
+				log.Printf("Process %v has old view %v\n", receivedValue.process, oldViewError.NewView)
 				continue
 			}
 
@@ -159,7 +161,7 @@ func sendRead(process view.Process, viewRef view.ViewRef, resultChan chan Regist
 		resultChan <- RegisterMsg{Err: err}
 		return
 	}
-
+	result.process = process
 	resultChan <- result
 }
 
@@ -176,6 +178,7 @@ func sendWrite(process view.Process, writeMsg *RegisterMsg, resultChan chan Regi
 		resultChan <- RegisterMsg{Err: err}
 		return
 	}
+	result.process = process
 	resultChan <- result
 }
 

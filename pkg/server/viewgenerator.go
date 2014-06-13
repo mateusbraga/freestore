@@ -4,7 +4,6 @@ import (
 	"log"
 	"net/rpc"
 	"sync"
-	"time"
 
 	"github.com/mateusbraga/freestore/pkg/comm"
 	"github.com/mateusbraga/freestore/pkg/consensus"
@@ -33,10 +32,10 @@ func getOrCreateViewGenerator(associatedView *view.View, initialSeq ViewSeq) vie
 		}
 	}
 
-	//TODO this is temporary, remove this after getting the data
-	if startReconfigurationTime.IsZero() || startReconfigurationTime.Sub(time.Now()) > 20*time.Second {
-		startReconfigurationTime = time.Now()
-	}
+	// get startReconfigurationTime to compute reconfiguration duration
+	//if startReconfigurationTime.IsZero() || startReconfigurationTime.Sub(time.Now()) > 20*time.Second {
+		//startReconfigurationTime = time.Now()
+	//}
 
 	// view generator does not exist. Create it.
 	vgi := viewGeneratorInstance{}
@@ -201,11 +200,11 @@ func generateViewSequenceWithConsensus(associatedView *view.View, seq ViewSeq) {
 	log.Println("Waiting for consensus resolution")
 	value := <-consensus.GetConsensusResultChan(associatedView)
 
-	//TODO this is temporary, remove this after getting the data
-	if startReconfigurationTime.IsZero() || startReconfigurationTime.Sub(time.Now()) > 20*time.Second {
-		startReconfigurationTime = consensus.GetConsensusStartTime(associatedView)
-		log.Println("starttime :", startReconfigurationTime)
-	}
+	// get startReconfigurationTime to compute reconfiguration duration
+	//if startReconfigurationTime.IsZero() || startReconfigurationTime.Sub(time.Now()) > 20*time.Second {
+		//startReconfigurationTime = consensus.GetConsensusStartTime(associatedView)
+		//log.Println("starttime :", startReconfigurationTime)
+	//}
 
 	result, ok := value.(*ViewSeq)
 	if !ok {
