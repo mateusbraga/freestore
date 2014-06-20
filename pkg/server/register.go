@@ -10,11 +10,29 @@ import (
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
+func init() {
+	register.mu.Lock() // The register starts locked
+	register.Value = nil
+	register.Timestamp = 0
+}
+
+type Value struct {
+	Value     interface{}
+	Timestamp int
+
+	ViewRef view.ViewRef
+	Err     error
+
+	mu sync.RWMutex
+}
+
 var register Value
 
 //  ---------- RPC Requests -------------
 
 type RegisterService int
+
+func init() { rpc.Register(new(RegisterService)) }
 
 func (r *RegisterService) Read(clientViewRef view.ViewRef, reply *Value) error {
 	if clientViewRef != currentView.ViewRef() {
@@ -59,83 +77,60 @@ func (r *RegisterService) GetCurrentView(value int, reply *view.View) error {
 	return nil
 }
 
-// --------- Init ---------
-
-func init() {
-	register.mu.Lock() // The register starts locked
-	register.Value = nil
-	register.Timestamp = 0
-}
-
-func init() {
-	rpc.Register(new(RegisterService))
-}
-
-// --------- Types ---------
-
-type Value struct {
+type RegisterValue struct {
 	Value     interface{}
-	Timestamp int
-
-	ViewRef view.ViewRef
-	Err     error
-
-	mu sync.RWMutex
+	Timestamp uint64
 }
 
-//var throughput uint64
-//var throughputBuffer = make(map[time.Time]uint64, 70)
-//var shutdownChan = make(chan bool)
+type Storage interface {
+	Read(name string) (RegisterValue, error)
+	Write(name string, value RegisterValue) error
+	LockAll()
+	UnlockAll()
+}
 
-//func collectThroughputWorker() {
-//writeLength := rand.Intn(20)
-//var lastThroughput uint64
+type memoryStorage struct {
+	keyvalues map[string]RegisterValue
+	kvMu      sync.RWMutex
+	storageMu sync.RWMutex
+}
 
-//ticker := time.Tick(time.Second)
-//for {
-//select {
-//case now := <-ticker:
-//aux := throughput
-//throughputBuffer[now] = aux - lastThroughput
-//lastThroughput = aux
+func newMemoryStorage() *memoryStorage {
+	return &memoryStorage{
+		keyvalues: make(map[string]RegisterValue),
+	}
+}
 
-//if len(throughputBuffer) > writeLength {
-//writeLength = rand.Intn(20)
-//saveThroughput()
-//}
-//case _ = <-shutdownChan:
-//saveThroughput()
-//log.Fatalln("Terminated")
-//}
-//}
-//log.Println("STOPPED COLLECTING THROUGHPUT!")
-//}
+func (s *memoryStorage) Read(name string) (RegisterValue, error) {
+	s.storageMu.RLock()
+	defer s.storageMu.RUnlock()
 
-//func saveThroughput() {
-//filename := fmt.Sprintf("/proj/freestore/throughputs_%v.txt", currentView.View().GetProcessPosition(thisProcess))
-//file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
-//if err != nil {
-////log.Println(err)
-//for loopTime, loopThroughput := range throughputBuffer {
-//fmt.Printf("%v %v %v\n", thisProcess, loopThroughput, loopTime.Format(time.RFC3339))
-//delete(throughputBuffer, loopTime)
-//}
-//return
-//}
-//defer file.Close()
+	s.kvMu.RLock()
+	defer s.kvMu.RUnlock()
 
-//w := bufio.NewWriter(file)
-//defer w.Flush()
+	v, ok := s.keyvalues[name]
+	if !ok {
+		return RegisterValue{}, nil
+	}
 
-//for loopTime, loopThroughput := range throughputBuffer {
-//if _, err = w.Write([]byte(fmt.Sprintf("%v %v %v\n", thisProcess, loopThroughput, loopTime.Format(time.RFC3339)))); err != nil {
-//log.Fatalln(err)
-//}
-//delete(throughputBuffer, loopTime)
-//}
-//}
+	return v, nil
+}
 
-//func init() {
-//go collectThroughputWorker()
-//rand.Seed(int64(time.Now().Nanosecond()))
-//}
+func (s *memoryStorage) Write(name string, newValue RegisterValue) error {
+	s.storageMu.RLock()
+	defer s.storageMu.RUnlock()
+
+	s.kvMu.Lock()
+	defer s.kvMu.Unlock()
+
+	currentValue := s.keyvalues[name]
+
+	if currentValue.Timestamp < newValue.Timestamp {
+		s.keyvalues[name] = newValue
+	}
+
+	return nil
+}
+
+func (s *memoryStorage) LockAll()   { s.storageMu.Lock() }
+func (s *memoryStorage) UnlockAll() { s.storageMu.Unlock() }
