@@ -2,7 +2,7 @@
 
 Freestore is a library that implements a consistent and reconfigurable distributed memory. 
 
-Freestore implements a storage abstraction with READ/WRITE operations. It replicates the data over all servers and uses the idea that two majorities always intersect to provide fault-tolerance and strong consistency (strict quorum). Freestore also implements a fault-tolerant reconfiguration mechanism (other than consensus protocol) that allows the cluster to continue operating normally during configuration changes.
+Freestore implements a storage abstraction with READ/WRITE operations. It replicates the data over all servers and uses the idea that two majorities always intersect to provide fault-tolerance and strong consistency (strict quorum). Freestore also implements a fault-tolerant reconfiguration mechanism (other than consensus protocol - no agreement is required) that allows the cluster to continue operating normally during configuration changes.
 
 This Freestore implementation is the result of Mateus Braga's [Bachelor's thesis (Portuguese)][thesis] at University of Brasilia, Brazil. Eduardo Alchieri's Freestore original paper in Portuguese is here: [http://sbrc2014.ufsc.br/anais/files/trilha/ST07-2.pdf][freestore-article].
 
