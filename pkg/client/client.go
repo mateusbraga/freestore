@@ -10,7 +10,7 @@ import (
 
 // Client represents a freestore client. Client may be used by multiple goroutines simultaneously.
 type Client struct {
-	view                view.CurrentView
+	view                *view.View
 	getFurtherViewsFunc GetViewFunc
 
     // mutex protects err and num2ndPhareReads
@@ -26,24 +26,17 @@ type GetViewFunc func() (*view.View, error)
 // New returns a new Client with initialView.
 func New(getInitialViewFunc GetViewFunc, getFurtherViewsFunc GetViewFunc) (*Client, error) {
 	newClient := &Client{}
-	newClient.view = view.NewCurrentView()
 
 	initialView, err := getInitialViewFunc()
 	if err != nil {
 		return nil, err
 	}
-
-	newClient.view.Update(initialView)
+	newClient.view = initialView
 
 	newClient.getFurtherViewsFunc = getFurtherViewsFunc
 
 	return newClient, nil
 }
-
-func (cl Client) View() *view.View                           { return cl.view.View() }
-func (cl Client) ViewRef() view.ViewRef                      { return cl.view.ViewRef() }
-func (cl Client) ViewAndViewRef() (*view.View, view.ViewRef) { return cl.view.ViewAndViewRef() }
-func (cl *Client) updateCurrentView(newView *view.View)      { cl.view.Update(newView) }
 
 // Write v to the system's register.
 func (cl *Client) Write(v interface{}) error {
@@ -70,7 +63,7 @@ func (cl *Client) Write(v interface{}) error {
 	writeMsg.Value = v
 	//TODO append writer id to timestamp
 	writeMsg.Timestamp = readValue.Timestamp + 1
-	writeMsg.ViewRef = cl.ViewRef()
+	writeMsg.ViewRef = cl.view.ViewRef
 
 	err = cl.writeQuorum(writeMsg)
 	if err != nil {

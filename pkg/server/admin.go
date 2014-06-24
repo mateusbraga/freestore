@@ -22,6 +22,6 @@ func (r *AdminService) Ping(anything bool, reply *bool) error {
 
 func (r *AdminService) Leave(anything bool, reply *bool) error {
 	log.Println("AdminService request to leave view")
-	Leave()
+	leave()
 	return nil
 }

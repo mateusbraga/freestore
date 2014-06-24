@@ -11,6 +11,7 @@ import (
 type View struct {
 	Entries map[Update]bool
 	Members map[Process]bool // Cache, can be rebuilt from Entries
+	ViewRef
 }
 
 func newView() *View {
@@ -35,18 +36,14 @@ func NewWithProcesses(processes ...Process) *View {
 }
 
 func (v *View) NewCopyWithUpdates(updates ...Update) *View {
-	newCopy := newView()
+	newViewUpdates := []Update{}
 
 	for update, _ := range v.Entries {
-		newCopy.Entries[update] = true
+		newViewUpdates = append(newViewUpdates, update)
 	}
-	for process, _ := range v.Members {
-		newCopy.Members[process] = true
-	}
+    newViewUpdates = append(newViewUpdates, updates...)
 
-	newCopy.addUpdate(updates...)
-
-	return newCopy
+	return NewWithUpdates(newViewUpdates...)
 }
 
 func (v *View) addUpdate(updates ...Update) {
@@ -62,6 +59,7 @@ func (v *View) addUpdate(updates ...Update) {
 			delete(v.Members, newUpdate.Process)
 		}
 	}
+	v.ViewRef = ViewToViewRef(v)
 }
 
 func (v *View) String() string {

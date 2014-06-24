@@ -18,11 +18,11 @@ var diffResultsErr = errors.New("Read Divergence")
 // If the client's view needs to be updated, it will update it and retry.  If
 // values returned by the processes differ, it will return diffResultsErr.
 func (thisClient *Client) readQuorum() (RegisterMsg, error) {
-	destinationView, viewRef := thisClient.ViewAndViewRef()
+	destinationView:= thisClient.view
 
 	// Send write request to all
 	resultChan := make(chan RegisterMsg, destinationView.NumberOfMembers())
-	go broadcastRead(destinationView, viewRef, resultChan)
+	go broadcastRead(destinationView, destinationView.ViewRef, resultChan)
 
 	// Wait for quorum
 	var failedTotal int
@@ -36,11 +36,11 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 			if oldViewError, ok := receivedValue.Err.(*view.OldViewError); ok {
 				if oldViewError.NewView.MoreUpdatedThan(destinationView) {
 					log.Println("View updated during read quorum by process", receivedValue.process)
-					thisClient.updateCurrentView(oldViewError.NewView)
+					thisClient.view = oldViewError.NewView
 					return thisClient.readQuorum()
 				}
 				// oldViewError.NewView is actually not more updated than current view, try again
-				go sendRead(receivedValue.process, viewRef, resultChan)
+				go sendRead(receivedValue.process, destinationView.ViewRef, resultChan)
 				log.Printf("Process %v has old view %v\n", receivedValue.process, oldViewError.NewView)
 				continue
 			}
@@ -86,9 +86,9 @@ func (thisClient *Client) readQuorum() (RegisterMsg, error) {
 // from a majority.  If the client's view needs to be updated, it will update
 // it and retry.
 func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
-	destinationView, viewRef := thisClient.ViewAndViewRef()
+	destinationView:= thisClient.view
 
-	writeMsg.ViewRef = viewRef
+	writeMsg.ViewRef = destinationView.ViewRef
 
 	// Send write request to all
 	resultChan := make(chan RegisterMsg, destinationView.NumberOfMembers())
@@ -105,7 +105,7 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 			if oldViewError, ok := receivedValue.Err.(*view.OldViewError); ok {
 				if oldViewError.NewView.MoreUpdatedThan(destinationView) {
 					log.Println("View updated during write quorum by process", receivedValue.process)
-					thisClient.updateCurrentView(oldViewError.NewView)
+					thisClient.view = oldViewError.NewView
 					return thisClient.writeQuorum(writeMsg)
 				}
 				// oldViewError.NewView is actually not more updated than current view, try again
@@ -141,16 +141,16 @@ func (thisClient *Client) writeQuorum(writeMsg RegisterMsg) error {
 }
 
 func (thisClient *Client) couldGetNewView() bool {
-	view, err := thisClient.getFurtherViewsFunc()
+	v, err := thisClient.getFurtherViewsFunc()
 	if err != nil {
 		return false
 	}
 
-	if !view.MoreUpdatedThan(thisClient.View()) {
+	if !v.MoreUpdatedThan(thisClient.view) {
 		return false
 	}
 
-	thisClient.updateCurrentView(view)
+	thisClient.view = v
 	return true
 }
 

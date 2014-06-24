@@ -67,14 +67,17 @@ func startReconfiguration() {
 		return
 	}
 
+    currentViewMu.RLock()
+    defer currentViewMu.RUnlock()
+
 	log.Println("Starting reconfiguration of currentView:", currentView)
 
-	initialViewSeq := getInitialViewSeq()
+	initialViewSeq := getInitialViewSeqLocked()
 
 	if useConsensus {
-		go generateViewSequenceWithConsensus(currentView.View(), initialViewSeq)
+		go generateViewSequenceWithConsensus(currentView, initialViewSeq)
 	} else {
-		go generateViewSequenceWithoutConsensus(currentView.View(), initialViewSeq)
+		go generateViewSequenceWithoutConsensus(currentView, initialViewSeq)
 	}
 }
 
@@ -86,8 +89,13 @@ func shouldDoReconfiguration() bool {
 
 	return len(recv) != 0
 }
-
 func getInitialViewSeq() ViewSeq {
+    currentViewMu.RLock()
+    defer currentViewMu.RUnlock()
+    return getInitialViewSeqLocked()
+}
+
+func getInitialViewSeqLocked() ViewSeq {
 	recvMutex.Lock()
 	defer recvMutex.Unlock()
 
@@ -99,7 +107,7 @@ func getInitialViewSeq() ViewSeq {
 	for update, _ := range recv {
 		updates = append(updates, update)
 	}
-	newView := currentView.View().NewCopyWithUpdates(updates...)
+	newView := currentView.NewCopyWithUpdates(updates...)
 	return ViewSeq{newView}
 }
 
@@ -181,7 +189,10 @@ func installSeqProcessingLoop() {
 func gotInstallSeqQuorum(installSeq InstallSeq) {
 	log.Println("Running gotInstallSeqQuorum", installSeq)
 
-	installViewIsMoreUpdatedThanCv := installSeq.InstallView.MoreUpdatedThan(currentView.View())
+    currentViewMu.Lock()
+    defer currentViewMu.Unlock()
+
+	installViewIsMoreUpdatedThanCv := installSeq.InstallView.MoreUpdatedThan(currentView)
 
 	// don't matter if installView is old, send state if server was a member of the associated view
 	if installSeq.AssociatedView.HasMember(thisProcess) {
@@ -192,9 +203,9 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 			if !isMultipleViewReconfiguration {
 				register.mu.Lock()
 				registerLockTime = time.Now()
-				log.Println("R/W operations disabled")
+				log.Println("R/W operations disabled for reconfiguration")
 			} else {
-				log.Println("R/W operations is already disabled")
+				log.Println("R/W operations is already disabled for reconfiguration")
 			}
 			isMultipleViewReconfigurationMu.Unlock()
 		}
@@ -218,8 +229,8 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 
 	// stop here if installView is old
 	if !installViewIsMoreUpdatedThanCv {
-		if installSeq.ViewSeq.HasViewMoreUpdatedThan(currentView.View()) {
-			installOthersViewsFromViewSeq(installSeq)
+		if installSeq.ViewSeq.HasViewMoreUpdatedThan(currentView) {
+			installOthersViewsFromViewSeqLocked(installSeq)
 			return
 		} else {
 			log.Println("installSeq does not lead to a more updated view than current view. Skipping...")
@@ -231,21 +242,21 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 		// Process is on the new view
 		syncState(installSeq)
 
-		currentView.Update(installSeq.InstallView)
+		updateCurrentViewLocked(installSeq.InstallView)
 
 		viewInstalledMsg := ViewInstalledMsg{}
-		viewInstalledMsg.InstalledView = currentView.View()
+		viewInstalledMsg.InstalledView = currentView
 
 		// Send view-installed to all
 		processes := installSeq.AssociatedView.GetMembersNotIn(installSeq.InstallView)
 		viewOfLeavingProcesses := view.NewWithProcesses(processes...)
 		go broadcastViewInstalled(viewOfLeavingProcesses, viewInstalledMsg)
 
-		if installSeq.ViewSeq.HasViewMoreUpdatedThan(currentView.View()) {
+		if installSeq.ViewSeq.HasViewMoreUpdatedThan(currentView) {
 			isMultipleViewReconfigurationMu.Lock()
 			isMultipleViewReconfiguration = true
 			isMultipleViewReconfigurationMu.Unlock()
-			installOthersViewsFromViewSeq(installSeq)
+			installOthersViewsFromViewSeqLocked(installSeq)
 		} else {
 			isMultipleViewReconfigurationMu.Lock()
 			isMultipleViewReconfiguration = false
@@ -284,19 +295,19 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 	}
 }
 
-func installOthersViewsFromViewSeq(installSeq InstallSeq) {
+func installOthersViewsFromViewSeqLocked(installSeq InstallSeq) {
 	var newSeq ViewSeq
 	for _, v := range installSeq.ViewSeq {
-		if v.MoreUpdatedThan(currentView.View()) {
+		if v.MoreUpdatedThan(currentView) {
 			newSeq = append(newSeq, v)
 		}
 	}
 
 	log.Println("Generate next view sequence with:", newSeq)
 	if useConsensus {
-		go generateViewSequenceWithConsensus(currentView.View(), newSeq)
+		go generateViewSequenceWithConsensus(currentView, newSeq)
 	} else {
-		go generateViewSequenceWithoutConsensus(currentView.View(), newSeq)
+		go generateViewSequenceWithoutConsensus(currentView, newSeq)
 	}
 }
 
@@ -353,11 +364,6 @@ func stateUpdateProcessingLoop() {
 	for {
 		select {
 		case stateUpdate := <-stateUpdateProcessingChan:
-			if currentView.View().MoreUpdatedThan(stateUpdate.AssociatedView) {
-				//log.Println("Old stateUpdate ignored")
-				continue
-			}
-
 			//log.Println("processing stateUpdate:", stateUpdate)
 
 			stateUpdateQuorum, ok := getStateUpdateQuorumCounter(stateUpdateQuorumCounterList, stateUpdate.AssociatedView)
@@ -428,20 +434,23 @@ func syncState(installSeq InstallSeq) {
 
 // ------------- Join and Leave ---------------------
 
-func Join() {
-	log.Println("Asked to Join current view:", currentView.View())
-	reconfig := ReconfigMsg{AssociatedView: currentView.View(), Update: view.Update{view.Join, thisProcess}}
+func joinLocked() {
+	log.Println("Asked to Join current view:", currentView)
+	reconfig := ReconfigMsg{AssociatedView: currentView, Update: view.Update{view.Join, thisProcess}}
 
 	// Send reconfig request to currentView
-	go broadcastReconfigRequest(currentView.View(), reconfig)
+	go broadcastReconfigRequest(currentView, reconfig)
 }
 
-func Leave() {
-	log.Println("Asked to Leave current view:", currentView.View())
-	reconfig := ReconfigMsg{AssociatedView: currentView.View(), Update: view.Update{view.Leave, thisProcess}}
+func leave() {
+    currentViewMu.RLock()
+    defer currentViewMu.RUnlock()
+
+	log.Println("Asked to Leave current view:", currentView)
+	reconfig := ReconfigMsg{AssociatedView: currentView, Update: view.Update{view.Leave, thisProcess}}
 
 	// Send reconfig request to all
-	go broadcastReconfigRequest(currentView.View(), reconfig)
+	go broadcastReconfigRequest(currentView, reconfig)
 }
 
 // -------- REQUESTS -----------
@@ -507,20 +516,16 @@ type ViewInstalledMsg struct {
 }
 
 func (r *ReconfigurationRequest) Reconfig(arg ReconfigMsg, reply *struct{}) error {
-	if !arg.AssociatedView.Equal(currentView.View()) {
-		//log.Printf("Reconfig request with old view: %v\n", arg.AssociatedView)
-		//*reply = view.OldViewError{NewView: currentView.View()}
-		return nil
+    currentViewMu.RLock()
+    defer currentViewMu.RUnlock()
+
+	if !arg.AssociatedView.Equal(currentView) {
+        return fmt.Errorf("Reconfig request with old view")
 	}
 
-	if currentView.View().HasUpdate(arg.Update) {
+	if currentView.HasUpdate(arg.Update) {
 		log.Printf("Reconfig request's Update %v already in currentView\n", arg.Update)
 		return nil
-	}
-
-	i := rand.Float32()
-	if i < 0.4 {
-		return fmt.Errorf("Reconfig request ignored")
 	}
 
 	recvMutex.Lock()
