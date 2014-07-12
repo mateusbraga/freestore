@@ -15,3 +15,24 @@ This Freestore implementation is the result of Mateus Braga's [Bachelor's thesis
 # Fault Tolerance Model
 
 [Freestore's Fault Tolerance Model](https://github.com/mateusbraga/freestore/blob/master/docs/fault-tolerance-model.md)
+
+# Development
+
+Freestore is written in [Go](http://golang.org). You'll need a recent version of Go installed on your computer to build Freestore.
+
+## Build
+
+go build ./...
+
+## Test
+
+go test ./...
+
+# Running
+
+    freestore_server -bind :5000
+    freestore_server -bind :5001
+    freestore_server -bind :5002
+
+    freestore_client
+
