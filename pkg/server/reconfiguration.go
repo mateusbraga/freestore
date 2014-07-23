@@ -26,11 +26,11 @@ var (
 
 	generatedViewSeqChan       = make(chan generatedViewSeq)
 	installSeqProcessingChan   = make(chan InstallSeqMsg, CHANNEL_DEFAULT_SIZE)
-	stateUpdateProcessingChan  = make(chan StateUpdateMsg, CHANNEL_DEFAULT_SIZE)
+	stateUpdateMsgChan  = make(chan StateUpdateMsg, CHANNEL_DEFAULT_SIZE)
 	stateUpdateChanRequestChan = make(chan stateUpdateChanRequest, CHANNEL_DEFAULT_SIZE)
 	newViewInstalledChan       = make(chan ViewInstalledMsg, CHANNEL_DEFAULT_SIZE)
 
-	resetReconfigurationTimer = make(chan bool, 5)
+	resetReconfigurationTimerChan = make(chan bool, CHANNEL_DEFAULT_SIZE)
 
 	// Required to not lock register mutex twice when installing a sequence with more than one view
 	isMultipleViewReconfiguration   bool
@@ -47,15 +47,15 @@ func init() {
 	go generatedViewSeqProcessingLoop()
 	go installSeqProcessingLoop()
 	go stateUpdateProcessingLoop()
-	go resetTimerLoop()
+	go resetReconfigurationTimerLoop()
 
 	rand.Seed(time.Now().UnixNano())
 }
 
-func resetTimerLoop() {
+func resetReconfigurationTimerLoop() {
 	timer := time.AfterFunc(firstReconfigurationTimerDuration, startReconfiguration)
 	for {
-		<-resetReconfigurationTimer
+		<-resetReconfigurationTimerChan
 		timer.Reset(reconfigurationPeriod)
 	}
 }
@@ -63,7 +63,7 @@ func resetTimerLoop() {
 func startReconfiguration() {
 	if !shouldDoReconfiguration() {
 		// restart reconfiguration timer
-		resetReconfigurationTimer <- true
+		resetReconfigurationTimerChan <- true
 		return
 	}
 
@@ -80,8 +80,6 @@ func startReconfiguration() {
 		go generateViewSequenceWithoutConsensus(currentView, initialViewSeq)
 	}
 }
-
-// ---------- Others ------------
 
 func shouldDoReconfiguration() bool {
 	recvMutex.Lock()
@@ -120,7 +118,6 @@ func generatedViewSeqProcessingLoop() {
 	for {
 		newGeneratedViewSeq := <-generatedViewSeqChan
 		log.Println("New generated view sequence:", newGeneratedViewSeq)
-		time.Sleep(2 * time.Second)
 
 		leastUpdatedView := newGeneratedViewSeq.ViewSeq.GetLeastUpdatedView()
 
@@ -271,7 +268,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 				log.Println("Reconfiguration completed, this process is now part of the system.")
 			}
 
-			resetReconfigurationTimer <- true
+			resetReconfigurationTimerChan <- true
 		}
 	} else {
 		// thisProcess is NOT on the new view
@@ -363,7 +360,7 @@ func stateUpdateProcessingLoop() {
 
 	for {
 		select {
-		case stateUpdate := <-stateUpdateProcessingChan:
+		case stateUpdate := <-stateUpdateMsgChan:
 			//log.Println("processing stateUpdate:", stateUpdate)
 
 			stateUpdateQuorum, ok := getStateUpdateQuorumCounter(stateUpdateQuorumCounterList, stateUpdate.AssociatedView)
@@ -543,7 +540,7 @@ func (r *ReconfigurationRequest) InstallSeq(arg InstallSeqMsg, reply *struct{}) 
 }
 
 func (r *ReconfigurationRequest) StateUpdate(arg StateUpdateMsg, reply *struct{}) error {
-	stateUpdateProcessingChan <- arg
+	stateUpdateMsgChan <- arg
 	return nil
 }
 
