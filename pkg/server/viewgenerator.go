@@ -3,56 +3,46 @@ package server
 import (
 	"log"
 	"net/rpc"
-	"sync"
 
 	"github.com/mateusbraga/freestore/pkg/comm"
 	"github.com/mateusbraga/freestore/pkg/consensus"
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-const LEADER_PROCESS_POSITION int = 0
-
-var (
-	viewGenerators   []viewGeneratorInstance
-	viewGeneratorsMu sync.Mutex
-)
+const CONSENSUS_LEADER_PROCESS_POSITION int = 0
 
 type viewGeneratorInstance struct {
 	AssociatedView *view.View //Id
 	jobChan        chan interface{}
 }
 
-func getOrCreateViewGenerator(associatedView *view.View, initialSeq ViewSeq) viewGeneratorInstance {
-	viewGeneratorsMu.Lock()
-	defer viewGeneratorsMu.Unlock()
+func (s *Server) getOrCreateViewGenerator(associatedView *view.View, initialSeq ViewSeq) viewGeneratorInstance {
+	s.viewGeneratorsMu.Lock()
+	defer s.viewGeneratorsMu.Unlock()
 
-	for _, vgi := range viewGenerators {
+	for _, vgi := range s.viewGenerators {
 		if vgi.AssociatedView.Equal(associatedView) {
 			return vgi
 		}
 	}
 
-	// get startReconfigurationTime to compute reconfiguration duration
-	//if startReconfigurationTime.IsZero() || startReconfigurationTime.Sub(time.Now()) > 20*time.Second {
-		//startReconfigurationTime = time.Now()
-	//}
-
 	// view generator does not exist. Create it.
-	vgi := viewGeneratorInstance{}
-	vgi.AssociatedView = associatedView
-	vgi.jobChan = make(chan interface{}, CHANNEL_DEFAULT_SIZE)
-	viewGenerators = append(viewGenerators, vgi)
+	vgi := viewGeneratorInstance{
+		AssociatedView: associatedView,
+		jobChan:        make(chan interface{}, CHANNEL_DEFAULT_SIZE),
+	}
+	s.viewGenerators = append(s.viewGenerators, vgi)
 
 	workerSeq := initialSeq
 	if workerSeq == nil {
-		workerSeq = getInitialViewSeq()
+		workerSeq = s.getInitialViewSeq()
 	}
-	go viewGeneratorWorker(vgi, workerSeq)
+	go s.viewGeneratorWorker(vgi, workerSeq)
 
 	return vgi
 }
 
-func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
+func (s *Server) viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 	log.Printf("Starting new viewGeneratorWorker with initialSeq: %v\n", initialSeq)
 
 	associatedView := vgi.AssociatedView
@@ -85,7 +75,7 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 		viewSeqMsg.ProposedSeq = initialSeq
 		viewSeqMsg.LastConvergedSeq = nil
 		viewSeqMsg.AssociatedView = associatedView
-		viewSeqMsg.Sender = thisProcess
+		viewSeqMsg.Sender = s.thisProcess
 
 		go broadcastViewSequence(associatedView, viewSeqMsg)
 		countViewSeq(viewSeqMsg)
@@ -146,7 +136,7 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 				log.Println("sending newProposeSeq:", newProposeSeq)
 
 				viewSeqMsg := ViewSeqMsg{}
-				viewSeqMsg.Sender = thisProcess
+				viewSeqMsg.Sender = s.thisProcess
 				viewSeqMsg.AssociatedView = associatedView
 				viewSeqMsg.ProposedSeq = newProposeSeq
 				viewSeqMsg.LastConvergedSeq = lastConvergedSeq
@@ -166,7 +156,7 @@ func viewGeneratorWorker(vgi viewGeneratorInstance, initialSeq ViewSeq) {
 
 			// Quorum check
 			if seqConvQuorumCounter.count(receivedSeqConvMsg, associatedView.QuorumSize()) {
-				generatedViewSeqChan <- generatedViewSeq{ViewSeq: receivedSeqConvMsg.Seq, AssociatedView: associatedView}
+				s.generatedViewSeqChan <- generatedViewSeq{ViewSeq: receivedSeqConvMsg.Seq, AssociatedView: associatedView}
 			}
 		default:
 			log.Fatalln("Something is wrong with the switch statement")
@@ -185,25 +175,25 @@ func assertOnlyUpdatedViews(baseView *view.View, seq ViewSeq) {
 }
 
 // we can change seq
-func generateViewSequenceWithoutConsensus(associatedView *view.View, seq ViewSeq) {
+func (s *Server) generateViewSequenceWithoutConsensus(associatedView *view.View, seq ViewSeq) {
 	assertOnlyUpdatedViews(associatedView, seq)
 
-	_ = getOrCreateViewGenerator(associatedView, seq)
+	_ = s.getOrCreateViewGenerator(associatedView, seq)
 }
 
-func generateViewSequenceWithConsensus(associatedView *view.View, seq ViewSeq) {
+func (s *Server) generateViewSequenceWithConsensus(associatedView *view.View, seq ViewSeq) {
 	assertOnlyUpdatedViews(associatedView, seq)
 
-	if associatedView.GetProcessPosition(thisProcess) == LEADER_PROCESS_POSITION {
-		consensus.Propose(associatedView, thisProcess, &seq)
+	if associatedView.GetProcessPosition(s.thisProcess) == CONSENSUS_LEADER_PROCESS_POSITION {
+		consensus.Propose(associatedView, s.thisProcess, &seq)
 	}
 	log.Println("Waiting for consensus resolution")
 	value := <-consensus.GetConsensusResultChan(associatedView)
 
 	// get startReconfigurationTime to compute reconfiguration duration
 	//if startReconfigurationTime.IsZero() || startReconfigurationTime.Sub(time.Now()) > 20*time.Second {
-		//startReconfigurationTime = consensus.GetConsensusStartTime(associatedView)
-		//log.Println("starttime :", startReconfigurationTime)
+	//startReconfigurationTime = consensus.GetConsensusStartTime(associatedView)
+	//log.Println("starttime :", startReconfigurationTime)
 	//}
 
 	result, ok := value.(*ViewSeq)
@@ -212,7 +202,7 @@ func generateViewSequenceWithConsensus(associatedView *view.View, seq ViewSeq) {
 	}
 	log.Println("Consensus result received")
 
-	generatedViewSeqChan <- generatedViewSeq{*result, associatedView}
+	s.generatedViewSeqChan <- generatedViewSeq{*result, associatedView}
 }
 
 type viewSeqQuorumCounterType struct {
@@ -307,26 +297,24 @@ func (thisViewSeqMsg ViewSeqMsg) SameButDifferentSender(otherViewSeqMsg ViewSeqM
 type ViewGeneratorRequest int
 
 func (r *ViewGeneratorRequest) ProposeSeqView(arg ViewSeqMsg, reply *struct{}) error {
-	vgi := getOrCreateViewGenerator(arg.AssociatedView, nil)
+	vgi := globalServer.getOrCreateViewGenerator(arg.AssociatedView, nil)
 	vgi.jobChan <- arg
 
 	return nil
 }
 
 func (r *ViewGeneratorRequest) SeqConv(arg SeqConvMsg, reply *struct{}) error {
-	vgi := getOrCreateViewGenerator(arg.AssociatedView, nil)
+	vgi := globalServer.getOrCreateViewGenerator(arg.AssociatedView, nil)
 	vgi.jobChan <- &arg.SeqConv
 
 	return nil
 }
 
-func init() {
-	rpc.Register(new(ViewGeneratorRequest))
-}
+func init() { rpc.Register(new(ViewGeneratorRequest)) }
 
 // -------- Broadcast functions -----------
 func broadcastViewSequence(destinationView *view.View, viewSeqMsg ViewSeqMsg) {
-	destinationViewWithoutThisProcess := destinationView.NewCopyWithUpdates(view.Update{Type: view.Leave, Process: thisProcess})
+	destinationViewWithoutThisProcess := destinationView.NewCopyWithUpdates(view.Update{Type: view.Leave, Process: globalServer.thisProcess})
 	comm.BroadcastRPCRequest(destinationViewWithoutThisProcess, "ViewGeneratorRequest.ProposeSeqView", viewSeqMsg)
 }
 

@@ -29,13 +29,18 @@ func main() {
 	initialProcess := flag.String("initial", "", "Process to ask for the initial view")
 	flag.Parse()
 
+
 	initialView := getInitialView(*initialProcess)
 
 	go func() {
 		log.Println("Running pprof:", http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	server.Run(*bindAddr, initialView, *useConsensus)
+    freestoreServer, err := server.New(*bindAddr, initialView, *useConsensus)
+    if err != nil {
+        log.Fatalln(err)
+    }
+    freestoreServer.Run()
 }
 
 func getInitialView(initialProc string) *view.View {

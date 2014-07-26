@@ -7,7 +7,6 @@ import (
 	"math/rand"
 	"net/rpc"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/mateusbraga/freestore/pkg/comm"
@@ -15,97 +14,67 @@ import (
 )
 
 const (
-	CHANNEL_DEFAULT_SIZE              = 20
 	reconfigurationPeriod             = 1 * time.Minute
 	firstReconfigurationTimerDuration = 10 * time.Second
 )
 
-var (
-	recv      = make(map[view.Update]bool)
-	recvMutex sync.RWMutex
+func init() { rand.Seed(time.Now().UnixNano()) }
 
-	generatedViewSeqChan       = make(chan generatedViewSeq)
-	installSeqProcessingChan   = make(chan InstallSeqMsg, CHANNEL_DEFAULT_SIZE)
-	stateUpdateMsgChan  = make(chan StateUpdateMsg, CHANNEL_DEFAULT_SIZE)
-	stateUpdateChanRequestChan = make(chan stateUpdateChanRequest, CHANNEL_DEFAULT_SIZE)
-	newViewInstalledChan       = make(chan ViewInstalledMsg, CHANNEL_DEFAULT_SIZE)
-
-	resetReconfigurationTimerChan = make(chan bool, CHANNEL_DEFAULT_SIZE)
-
-	// Required to not lock register mutex twice when installing a sequence with more than one view
-	isMultipleViewReconfiguration   bool
-	isMultipleViewReconfigurationMu sync.Mutex
-)
-
-var (
-	startReconfigurationTime time.Time
-	registerLockTime         time.Time
-)
-
-// ---------- Bootstrapping ------------
-func init() {
-	go generatedViewSeqProcessingLoop()
-	go installSeqProcessingLoop()
-	go stateUpdateProcessingLoop()
-	go resetReconfigurationTimerLoop()
-
-	rand.Seed(time.Now().UnixNano())
-}
-
-func resetReconfigurationTimerLoop() {
-	timer := time.AfterFunc(firstReconfigurationTimerDuration, startReconfiguration)
+func (s *Server) resetReconfigurationTimerLoop() {
+	timer := time.AfterFunc(firstReconfigurationTimerDuration, s.startReconfiguration)
 	for {
-		<-resetReconfigurationTimerChan
+		<-s.resetReconfigurationTimerChan
 		timer.Reset(reconfigurationPeriod)
 	}
 }
 
-func startReconfiguration() {
-	if !shouldDoReconfiguration() {
+func (s *Server) startReconfiguration() {
+	if !s.shouldDoReconfiguration() {
 		// restart reconfiguration timer
-		resetReconfigurationTimerChan <- true
+		s.resetReconfigurationTimerChan <- true
 		return
 	}
 
-    currentViewMu.RLock()
-    defer currentViewMu.RUnlock()
+	s.currentViewMu.RLock()
+	defer s.currentViewMu.RUnlock()
 
-	log.Println("Starting reconfiguration of currentView:", currentView)
+	log.Println("Starting reconfiguration of currentView:", s.currentView)
 
-	initialViewSeq := getInitialViewSeqLocked()
+	initialViewSeq := s.getInitialViewSeqLocked()
 
-	if useConsensus {
-		go generateViewSequenceWithConsensus(currentView, initialViewSeq)
+	if s.useConsensus {
+		go s.generateViewSequenceWithConsensus(s.currentView, initialViewSeq)
 	} else {
-		go generateViewSequenceWithoutConsensus(currentView, initialViewSeq)
+		go s.generateViewSequenceWithoutConsensus(s.currentView, initialViewSeq)
 	}
 }
 
-func shouldDoReconfiguration() bool {
-	recvMutex.Lock()
-	defer recvMutex.Unlock()
+func (s *Server) shouldDoReconfiguration() bool {
+	s.recvMutex.Lock()
+	defer s.recvMutex.Unlock()
 
-	return len(recv) != 0
-}
-func getInitialViewSeq() ViewSeq {
-    currentViewMu.RLock()
-    defer currentViewMu.RUnlock()
-    return getInitialViewSeqLocked()
+	return len(s.recv) != 0
 }
 
-func getInitialViewSeqLocked() ViewSeq {
-	recvMutex.Lock()
-	defer recvMutex.Unlock()
+func (s *Server) getInitialViewSeq() ViewSeq {
+	s.currentViewMu.RLock()
+	defer s.currentViewMu.RUnlock()
+	return s.getInitialViewSeqLocked()
+}
 
-	if len(recv) == 0 {
+func (s *Server) getInitialViewSeqLocked() ViewSeq {
+	s.recvMutex.Lock()
+	defer s.recvMutex.Unlock()
+
+	if len(s.recv) == 0 {
 		return ViewSeq{}
 	}
 
 	updates := []view.Update{}
-	for update, _ := range recv {
+	for update, _ := range s.recv {
 		updates = append(updates, update)
 	}
-	newView := currentView.NewCopyWithUpdates(updates...)
+	newView := s.currentView.NewCopyWithUpdates(updates...)
 	return ViewSeq{newView}
 }
 
@@ -114,9 +83,9 @@ type generatedViewSeq struct {
 	AssociatedView *view.View
 }
 
-func generatedViewSeqProcessingLoop() {
+func (s *Server) generatedViewSeqProcessingLoop() {
 	for {
-		newGeneratedViewSeq := <-generatedViewSeqChan
+		newGeneratedViewSeq := <-s.generatedViewSeqChan
 		log.Println("New generated view sequence:", newGeneratedViewSeq)
 
 		leastUpdatedView := newGeneratedViewSeq.ViewSeq.GetLeastUpdatedView()
@@ -125,7 +94,7 @@ func generatedViewSeqProcessingLoop() {
 		installSeqMsg.AssociatedView = newGeneratedViewSeq.AssociatedView
 		installSeqMsg.InstallView = leastUpdatedView
 		installSeqMsg.ViewSeq = newGeneratedViewSeq.ViewSeq
-		installSeqMsg.Sender = thisProcess
+		installSeqMsg.Sender = s.thisProcess
 
 		// Send install-seq to all from old and new view
 		processes := append(newGeneratedViewSeq.AssociatedView.GetMembers(), leastUpdatedView.GetMembers()...)
@@ -155,13 +124,13 @@ func (quorumCounter *installSeqQuorumCounterType) count(newInstallSeq *InstallSe
 	return (1 == quorumSize)
 }
 
-func installSeqProcessingLoop() {
+func (s *Server) installSeqProcessingLoop() {
 	processToInstallSeqMsgMap := make(map[view.Process]*InstallSeqMsg)
 	// ENHANCEMENT: clean up quorum counter old views
 	var installSeqQuorumCounter installSeqQuorumCounterType
 
 	for {
-		installSeqMsg := <-installSeqProcessingChan
+		installSeqMsg := <-s.installSeqProcessingChan
 
 		// Check for duplicate
 		previousInstallSeq, ok := processToInstallSeqMsgMap[installSeqMsg.Sender]
@@ -178,44 +147,44 @@ func installSeqProcessingLoop() {
 
 		// Quorum check
 		if installSeqQuorumCounter.count(&installSeqMsg.InstallSeq, installSeqMsg.AssociatedView.QuorumSize()) {
-			gotInstallSeqQuorum(installSeqMsg.InstallSeq)
+			s.gotInstallSeqQuorum(installSeqMsg.InstallSeq)
 		}
 	}
 }
 
-func gotInstallSeqQuorum(installSeq InstallSeq) {
+func (s *Server) gotInstallSeqQuorum(installSeq InstallSeq) {
 	log.Println("Running gotInstallSeqQuorum", installSeq)
 
-    currentViewMu.Lock()
-    defer currentViewMu.Unlock()
+	s.currentViewMu.Lock()
+	defer s.currentViewMu.Unlock()
 
-	installViewIsMoreUpdatedThanCv := installSeq.InstallView.MoreUpdatedThan(currentView)
+	installViewIsMoreUpdatedThanCv := installSeq.InstallView.MoreUpdatedThan(s.currentView)
 
 	// don't matter if installView is old, send state if server was a member of the associated view
-	if installSeq.AssociatedView.HasMember(thisProcess) {
+	if installSeq.AssociatedView.HasMember(s.thisProcess) {
 		// if installView is not old, disable r/w
 		if installViewIsMoreUpdatedThanCv {
 			// disable R/W operations if not already disabled
-			isMultipleViewReconfigurationMu.Lock()
-			if !isMultipleViewReconfiguration {
-				register.mu.Lock()
-				registerLockTime = time.Now()
+			s.isMultipleViewReconfigurationMu.Lock()
+			if !s.isMultipleViewReconfiguration {
+				s.register.mu.Lock()
+				s.registerLockTime = time.Now()
 				log.Println("R/W operations disabled for reconfiguration")
 			} else {
 				log.Println("R/W operations is already disabled for reconfiguration")
 			}
-			isMultipleViewReconfigurationMu.Unlock()
+			s.isMultipleViewReconfigurationMu.Unlock()
 		}
 
 		stateMsg := StateUpdateMsg{}
-		stateMsg.Value = register.Value
-		stateMsg.Timestamp = register.Timestamp
-		recvMutex.RLock()
+		stateMsg.Value = s.register.Value
+		stateMsg.Timestamp = s.register.Timestamp
+		s.recvMutex.RLock()
 		stateMsg.Recv = make(map[view.Update]bool)
-		for update, _ := range recv {
+		for update, _ := range s.recv {
 			stateMsg.Recv[update] = true
 		}
-		recvMutex.RUnlock()
+		s.recvMutex.RUnlock()
 		stateMsg.AssociatedView = installSeq.AssociatedView
 
 		// Send state-update request to all
@@ -226,8 +195,8 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 
 	// stop here if installView is old
 	if !installViewIsMoreUpdatedThanCv {
-		if installSeq.ViewSeq.HasViewMoreUpdatedThan(currentView) {
-			installOthersViewsFromViewSeqLocked(installSeq)
+		if installSeq.ViewSeq.HasViewMoreUpdatedThan(s.currentView) {
+			s.installOthersViewsFromViewSeqLocked(installSeq)
 			return
 		} else {
 			log.Println("installSeq does not lead to a more updated view than current view. Skipping...")
@@ -235,40 +204,40 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 		}
 	}
 
-	if installSeq.InstallView.HasMember(thisProcess) {
+	if installSeq.InstallView.HasMember(s.thisProcess) {
 		// Process is on the new view
-		syncState(installSeq)
+		s.syncState(installSeq)
 
-		updateCurrentViewLocked(installSeq.InstallView)
+		s.updateCurrentViewLocked(installSeq.InstallView)
 
 		viewInstalledMsg := ViewInstalledMsg{}
-		viewInstalledMsg.InstalledView = currentView
+		viewInstalledMsg.InstalledView = s.currentView
 
 		// Send view-installed to all
 		processes := installSeq.AssociatedView.GetMembersNotIn(installSeq.InstallView)
 		viewOfLeavingProcesses := view.NewWithProcesses(processes...)
 		go broadcastViewInstalled(viewOfLeavingProcesses, viewInstalledMsg)
 
-		if installSeq.ViewSeq.HasViewMoreUpdatedThan(currentView) {
-			isMultipleViewReconfigurationMu.Lock()
-			isMultipleViewReconfiguration = true
-			isMultipleViewReconfigurationMu.Unlock()
-			installOthersViewsFromViewSeqLocked(installSeq)
+		if installSeq.ViewSeq.HasViewMoreUpdatedThan(s.currentView) {
+			s.isMultipleViewReconfigurationMu.Lock()
+			s.isMultipleViewReconfiguration = true
+			s.isMultipleViewReconfigurationMu.Unlock()
+			s.installOthersViewsFromViewSeqLocked(installSeq)
 		} else {
-			isMultipleViewReconfigurationMu.Lock()
-			isMultipleViewReconfiguration = false
-			isMultipleViewReconfigurationMu.Unlock()
-			register.mu.Unlock()
+			s.isMultipleViewReconfigurationMu.Lock()
+			s.isMultipleViewReconfiguration = false
+			s.isMultipleViewReconfigurationMu.Unlock()
+			s.register.mu.Unlock()
 			log.Println("R/W operations enabled")
 
 			endTime := time.Now()
-			if installSeq.AssociatedView.HasMember(thisProcess) {
-				log.Printf("Reconfiguration completed in %v, the system was unavailable for %v.\n", endTime.Sub(startReconfigurationTime), endTime.Sub(registerLockTime))
+			if installSeq.AssociatedView.HasMember(s.thisProcess) {
+				log.Printf("Reconfiguration completed in %v, the system was unavailable for %v.\n", endTime.Sub(s.startReconfigurationTime), endTime.Sub(s.registerLockTime))
 			} else {
 				log.Println("Reconfiguration completed, this process is now part of the system.")
 			}
 
-			resetReconfigurationTimerChan <- true
+			s.resetReconfigurationTimerChan <- true
 		}
 	} else {
 		// thisProcess is NOT on the new view
@@ -276,7 +245,7 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 
 		log.Println("Waiting for view-installed quorum to leave")
 		for {
-			viewInstalled := <-newViewInstalledChan
+			viewInstalled := <-s.newViewInstalledChan
 
 			if installSeq.InstallView.Equal(viewInstalled.InstalledView) {
 				counter++
@@ -292,19 +261,19 @@ func gotInstallSeqQuorum(installSeq InstallSeq) {
 	}
 }
 
-func installOthersViewsFromViewSeqLocked(installSeq InstallSeq) {
+func (s *Server) installOthersViewsFromViewSeqLocked(installSeq InstallSeq) {
 	var newSeq ViewSeq
 	for _, v := range installSeq.ViewSeq {
-		if v.MoreUpdatedThan(currentView) {
+		if v.MoreUpdatedThan(s.currentView) {
 			newSeq = append(newSeq, v)
 		}
 	}
 
 	log.Println("Generate next view sequence with:", newSeq)
-	if useConsensus {
-		go generateViewSequenceWithConsensus(currentView, newSeq)
+	if s.useConsensus {
+		go s.generateViewSequenceWithConsensus(s.currentView, newSeq)
 	} else {
-		go generateViewSequenceWithoutConsensus(currentView, newSeq)
+		go s.generateViewSequenceWithoutConsensus(s.currentView, newSeq)
 	}
 }
 
@@ -354,13 +323,13 @@ func getStateUpdateQuorumCounter(stateUpdateQuorumCounterList *list.List, associ
 	return nil, false
 }
 
-func stateUpdateProcessingLoop() {
+func (s *Server) stateUpdateProcessingLoop() {
 	// ENHANCEMENT: clean up quorum counter old views
 	stateUpdateQuorumCounterList := list.New()
 
 	for {
 		select {
-		case stateUpdate := <-stateUpdateMsgChan:
+		case stateUpdate := <-s.stateUpdateMsgChan:
 			//log.Println("processing stateUpdate:", stateUpdate)
 
 			stateUpdateQuorum, ok := getStateUpdateQuorumCounter(stateUpdateQuorumCounterList, stateUpdate.AssociatedView)
@@ -386,7 +355,7 @@ func stateUpdateProcessingLoop() {
 				// TODO Maybe making State immutable we don't need to worry about copying
 				stateUpdateQuorum.resultChan <- stateUpdateQuorum.State.NewCopy()
 			}
-		case chanRequest := <-stateUpdateChanRequestChan:
+		case chanRequest := <-s.stateUpdateChanRequestChan:
 			stateUpdateQuorum, ok := getStateUpdateQuorumCounter(stateUpdateQuorumCounterList, chanRequest.associatedView)
 			if !ok {
 				stateUpdateQuorum = &stateUpdateQuorumType{associatedView: chanRequest.associatedView, State: State{&Value{Timestamp: -1}, make(map[view.Update]bool)}, counter: 0, resultChan: make(chan State, 1)}
@@ -398,13 +367,13 @@ func stateUpdateProcessingLoop() {
 	}
 }
 
-func syncState(installSeq InstallSeq) {
+func (s *Server) syncState(installSeq InstallSeq) {
 	log.Println("Running syncState")
 
 	chanRequest := stateUpdateChanRequest{associatedView: installSeq.AssociatedView, returnChan: make(chan chan State)}
 
 	// Request the chan in which the state will be sent
-	stateUpdateChanRequestChan <- chanRequest
+	s.stateUpdateChanRequestChan <- chanRequest
 	// Receive the chan in which the state will be sent
 	stateChan := <-chanRequest.returnChan
 
@@ -412,18 +381,18 @@ func syncState(installSeq InstallSeq) {
 	state := <-stateChan
 	defer func() { stateChan <- state }()
 
-	recvMutex.Lock()
-	defer recvMutex.Unlock()
+	s.recvMutex.Lock()
+	defer s.recvMutex.Unlock()
 
 	for update, _ := range state.recv {
-		recv[update] = true
+		s.recv[update] = true
 	}
 
-	register.Value = state.finalValue.Value
-	register.Timestamp = state.finalValue.Timestamp
+	s.register.Value = state.finalValue.Value
+	s.register.Timestamp = state.finalValue.Timestamp
 
 	for _, update := range installSeq.InstallView.GetUpdates() {
-		delete(recv, update)
+		delete(s.recv, update)
 	}
 
 	log.Println("State synced")
@@ -431,23 +400,23 @@ func syncState(installSeq InstallSeq) {
 
 // ------------- Join and Leave ---------------------
 
-func joinLocked() {
-	log.Println("Asked to Join current view:", currentView)
-	reconfig := ReconfigMsg{AssociatedView: currentView, Update: view.Update{view.Join, thisProcess}}
+func (s *Server) joinLocked() {
+	log.Println("Asked to Join current view:", s.currentView)
+	reconfig := ReconfigMsg{AssociatedView: s.currentView, Update: view.Update{view.Join, s.thisProcess}}
 
 	// Send reconfig request to currentView
-	go broadcastReconfigRequest(currentView, reconfig)
+	go broadcastReconfigRequest(s.currentView, reconfig)
 }
 
-func leave() {
-    currentViewMu.RLock()
-    defer currentViewMu.RUnlock()
+func (s *Server) leave() {
+	s.currentViewMu.RLock()
+	defer s.currentViewMu.RUnlock()
 
-	log.Println("Asked to Leave current view:", currentView)
-	reconfig := ReconfigMsg{AssociatedView: currentView, Update: view.Update{view.Leave, thisProcess}}
+	log.Println("Asked to Leave current view:", s.currentView)
+	reconfig := ReconfigMsg{AssociatedView: s.currentView, Update: view.Update{view.Leave, s.thisProcess}}
 
 	// Send reconfig request to all
-	go broadcastReconfigRequest(currentView, reconfig)
+	go broadcastReconfigRequest(s.currentView, reconfig)
 }
 
 // -------- REQUESTS -----------
@@ -513,21 +482,21 @@ type ViewInstalledMsg struct {
 }
 
 func (r *ReconfigurationRequest) Reconfig(arg ReconfigMsg, reply *struct{}) error {
-    currentViewMu.RLock()
-    defer currentViewMu.RUnlock()
+	globalServer.currentViewMu.RLock()
+	defer globalServer.currentViewMu.RUnlock()
 
-	if !arg.AssociatedView.Equal(currentView) {
-        return fmt.Errorf("Reconfig request with old view")
+	if !arg.AssociatedView.Equal(globalServer.currentView) {
+		return fmt.Errorf("Reconfig request with old view")
 	}
 
-	if currentView.HasUpdate(arg.Update) {
+	if globalServer.currentView.HasUpdate(arg.Update) {
 		log.Printf("Reconfig request's Update %v already in currentView\n", arg.Update)
 		return nil
 	}
 
-	recvMutex.Lock()
-	defer recvMutex.Unlock()
-	recv[arg.Update] = true
+	globalServer.recvMutex.Lock()
+	defer globalServer.recvMutex.Unlock()
+	globalServer.recv[arg.Update] = true
 
 	log.Printf("%v added to next reconfiguration\n", arg.Update)
 
@@ -535,23 +504,21 @@ func (r *ReconfigurationRequest) Reconfig(arg ReconfigMsg, reply *struct{}) erro
 }
 
 func (r *ReconfigurationRequest) InstallSeq(arg InstallSeqMsg, reply *struct{}) error {
-	installSeqProcessingChan <- arg
+	globalServer.installSeqProcessingChan <- arg
 	return nil
 }
 
 func (r *ReconfigurationRequest) StateUpdate(arg StateUpdateMsg, reply *struct{}) error {
-	stateUpdateMsgChan <- arg
+	globalServer.stateUpdateMsgChan <- arg
 	return nil
 }
 
 func (r *ReconfigurationRequest) ViewInstalled(arg ViewInstalledMsg, reply *struct{}) error {
-	newViewInstalledChan <- arg
+	globalServer.newViewInstalledChan <- arg
 	return nil
 }
 
-func init() {
-	rpc.Register(new(ReconfigurationRequest))
-}
+func init() { rpc.Register(new(ReconfigurationRequest)) }
 
 // -------- Send functions -----------
 

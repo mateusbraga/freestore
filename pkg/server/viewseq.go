@@ -8,6 +8,8 @@ import (
 
 type ViewSeq []*view.View
 
+func init() { gob.Register(new(ViewSeq)) }
+
 func (viewSeq ViewSeq) Equal(otherViewSeq ViewSeq) bool {
 	if len(otherViewSeq) != len(viewSeq) {
 		return false
@@ -76,8 +78,4 @@ func (viewSeq ViewSeq) Append(views ...*view.View) ViewSeq {
 	}
 
 	return newViewSeq
-}
-
-func init() {
-	gob.Register(new(ViewSeq))
 }

@@ -321,9 +321,7 @@ func (r *ConsensusRequest) Learn(arg Proposal, reply *struct{}) error {
 	return nil
 }
 
-func init() {
-	rpc.Register(new(ConsensusRequest))
-}
+func init() { rpc.Register(new(ConsensusRequest)) }
 
 // ------- ERRORS -----------
 type OldProposalNumberError struct{}

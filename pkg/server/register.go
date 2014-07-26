@@ -10,12 +10,6 @@ import (
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
-func init() {
-	register.mu.Lock() // The register starts locked
-	register.Value = nil
-	register.Timestamp = 0
-}
-
 type Value struct {
 	Value     interface{}
 	Timestamp int
@@ -26,62 +20,56 @@ type Value struct {
 	mu sync.RWMutex
 }
 
-var register Value
-
-//  ---------- RPC Requests -------------
-
-type RegisterService int
+type RegisterService struct{}
 
 func init() { rpc.Register(new(RegisterService)) }
 
 func (r *RegisterService) Read(clientViewRef view.ViewRef, reply *Value) error {
-    currentViewMu.RLock()
-    defer currentViewMu.RUnlock()
+    globalServer.currentViewMu.RLock()
+    defer globalServer.currentViewMu.RUnlock()
 
-	if clientViewRef != currentView.ViewRef {
-		log.Printf("Got old view with ViewRef: %v, sending new View %v with ViewRef: %v\n", clientViewRef, currentView, currentView.ViewRef)
-		reply.Err = view.OldViewError{NewView: currentView}
+	if clientViewRef != globalServer.currentView.ViewRef {
+		log.Printf("Got old view with ViewRef: %v, sending new View %v with ViewRef: %v\n", clientViewRef, globalServer.currentView, globalServer.currentView.ViewRef)
+		reply.Err = view.OldViewError{NewView: globalServer.currentView}
 		return nil
 	}
 
-	register.mu.RLock()
-	defer register.mu.RUnlock()
+	globalServer.register.mu.RLock()
+	defer globalServer.register.mu.RUnlock()
 
-	reply.Value = register.Value
-	reply.Timestamp = register.Timestamp
-
-	//throughput++
+	reply.Value = globalServer.register.Value
+	reply.Timestamp = globalServer.register.Timestamp
 
 	return nil
 }
 
 func (r *RegisterService) Write(value Value, reply *Value) error {
-    currentViewMu.RLock()
-    defer currentViewMu.RUnlock()
+    globalServer.currentViewMu.RLock()
+    defer globalServer.currentViewMu.RUnlock()
 
-	if value.ViewRef != currentView.ViewRef {
-		log.Printf("Got old view with ViewRef: %v, sending new View %v with ViewRef: %v\n", value.ViewRef, currentView, currentView.ViewRef)
-		reply.Err = view.OldViewError{NewView: currentView}
+	if value.ViewRef != globalServer.currentView.ViewRef {
+		log.Printf("Got old view with ViewRef: %v, sending new View %v with ViewRef: %v\n", value.ViewRef, globalServer.currentView, globalServer.currentView.ViewRef)
+		reply.Err = view.OldViewError{NewView: globalServer.currentView}
 		return nil
 	}
 
-	register.mu.Lock()
-	defer register.mu.Unlock()
+	globalServer.register.mu.Lock()
+	defer globalServer.register.mu.Unlock()
 
 	// Two writes with the same timestamp -> give preference to first one. This makes the Write operation idempotent and still read/write coherent.
-	if value.Timestamp > register.Timestamp {
-		register.Value = value.Value
-		register.Timestamp = value.Timestamp
+	if value.Timestamp > globalServer.register.Timestamp {
+		globalServer.register.Value = value.Value
+		globalServer.register.Timestamp = value.Timestamp
 	}
 
 	return nil
 }
 
-func (r *RegisterService) GetCurrentView(value int, reply *view.View) error {
-    currentViewMu.RLock()
-    defer currentViewMu.RUnlock()
+func (r *RegisterService) GetCurrentView(anything struct{}, reply *view.View) error {
+    globalServer.currentViewMu.RLock()
+    defer globalServer.currentViewMu.RUnlock()
 
-	reply = currentView
+	reply = globalServer.currentView
 	log.Println("Done GetCurrentView request")
 	return nil
 }
@@ -103,6 +91,8 @@ type memoryStorage struct {
 	kvMu      sync.RWMutex
 	storageMu sync.RWMutex
 }
+
+var _ Storage = new(memoryStorage)
 
 func newMemoryStorage() *memoryStorage {
 	return &memoryStorage{
