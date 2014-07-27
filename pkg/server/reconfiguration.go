@@ -29,7 +29,7 @@ func (s *Server) resetReconfigurationTimerLoop() {
 }
 
 func (s *Server) startReconfiguration() {
-	if !s.shouldDoReconfiguration() {
+	if !s.hasUpdatesToCurrentView() {
 		// restart reconfiguration timer
 		s.resetReconfigurationTimerChan <- true
 		return
@@ -49,7 +49,7 @@ func (s *Server) startReconfiguration() {
 	}
 }
 
-func (s *Server) shouldDoReconfiguration() bool {
+func (s *Server) hasUpdatesToCurrentView() bool {
 	s.recvMutex.Lock()
 	defer s.recvMutex.Unlock()
 
