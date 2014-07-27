@@ -202,7 +202,10 @@ func (s *Server) generateViewSequenceWithConsensus(associatedView *view.View, se
 	}
 	log.Println("Consensus result received")
 
-	s.generatedViewSeqChan <- generatedViewSeq{*result, associatedView}
+	s.generatedViewSeqChan <- generatedViewSeq{
+		AssociatedView: associatedView,
+		ViewSeq:        *result,
+	}
 }
 
 type viewSeqQuorumCounterType struct {

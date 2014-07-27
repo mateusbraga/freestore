@@ -38,13 +38,12 @@ type Server struct {
 	viewGenerators   []viewGeneratorInstance
 	viewGeneratorsMu sync.Mutex
 
-	// Required to not lock register mutex twice when installing a sequence with more than one view
-	isMultipleViewReconfiguration   bool
-	isMultipleViewReconfigurationMu sync.Mutex
+	// registerLockOnce is used to do not lock the register mutex twice when installing a sequence with more than one view
+	registerLockOnce sync.Once
 
 	generatedViewSeqChan          chan generatedViewSeq
 	installSeqProcessingChan      chan InstallSeqMsg
-	stateUpdateMsgChan            chan StateUpdateMsg
+	syncStateMsgChan            chan SyncStateMsg
 	stateUpdateChanRequestChan    chan stateUpdateChanRequest
 	newViewInstalledChan          chan ViewInstalledMsg
 	resetReconfigurationTimerChan chan bool
@@ -66,7 +65,7 @@ func New(bindAddr string, initialView *view.View, useConsensusArg bool) (*Server
 		recv:                          make(map[view.Update]bool),
 		generatedViewSeqChan:          make(chan generatedViewSeq),
 		installSeqProcessingChan:      make(chan InstallSeqMsg, CHANNEL_DEFAULT_SIZE),
-		stateUpdateMsgChan:            make(chan StateUpdateMsg, CHANNEL_DEFAULT_SIZE),
+		syncStateMsgChan:            make(chan SyncStateMsg, CHANNEL_DEFAULT_SIZE),
 		stateUpdateChanRequestChan:    make(chan stateUpdateChanRequest, CHANNEL_DEFAULT_SIZE),
 		newViewInstalledChan:          make(chan ViewInstalledMsg, CHANNEL_DEFAULT_SIZE),
 		resetReconfigurationTimerChan: make(chan bool, CHANNEL_DEFAULT_SIZE),
@@ -98,19 +97,4 @@ func (s *Server) Run() {
 	// Accept connections forever
 	log.Println("Listening on address:", s.listener.Addr())
 	rpc.Accept(s.listener)
-}
-
-func (s *Server) updateCurrentViewLocked(newView *view.View) {
-	if !newView.MoreUpdatedThan(s.currentView) {
-		// comment these log messages; they are just for debugging
-		if newView.LessUpdatedThan(s.currentView) {
-			log.Println("WARNING: Tried to Update current view with a less updated view")
-		} else {
-			log.Println("WARNING: Tried to Update current view with the same view")
-		}
-		return
-	}
-
-	s.currentView = newView
-	log.Printf("CurrentView updated to: %v, ref: %v\n", s.currentView, s.currentView.ViewRef)
 }

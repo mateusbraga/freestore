@@ -7,18 +7,19 @@ import (
 	"math/rand"
 	"net/rpc"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/mateusbraga/freestore/pkg/comm"
 	"github.com/mateusbraga/freestore/pkg/view"
 )
 
+func init() { rand.Seed(time.Now().UnixNano()) }
+
 const (
 	reconfigurationPeriod             = 1 * time.Minute
 	firstReconfigurationTimerDuration = 10 * time.Second
 )
-
-func init() { rand.Seed(time.Now().UnixNano()) }
 
 func (s *Server) resetReconfigurationTimerLoop() {
 	timer := time.AfterFunc(firstReconfigurationTimerDuration, s.startReconfiguration)
@@ -50,8 +51,8 @@ func (s *Server) startReconfiguration() {
 }
 
 func (s *Server) hasUpdatesToCurrentView() bool {
-	s.recvMutex.Lock()
-	defer s.recvMutex.Unlock()
+	s.recvMutex.RLock()
+	defer s.recvMutex.RUnlock()
 
 	return len(s.recv) != 0
 }
@@ -63,14 +64,10 @@ func (s *Server) getInitialViewSeq() ViewSeq {
 }
 
 func (s *Server) getInitialViewSeqLocked() ViewSeq {
-	s.recvMutex.Lock()
-	defer s.recvMutex.Unlock()
+	s.recvMutex.RLock()
+	defer s.recvMutex.RUnlock()
 
-	if len(s.recv) == 0 {
-		return ViewSeq{}
-	}
-
-	updates := []view.Update{}
+	var updates []view.Update
 	for update, _ := range s.recv {
 		updates = append(updates, update)
 	}
@@ -79,8 +76,8 @@ func (s *Server) getInitialViewSeqLocked() ViewSeq {
 }
 
 type generatedViewSeq struct {
-	ViewSeq        ViewSeq
 	AssociatedView *view.View
+	ViewSeq        ViewSeq
 }
 
 func (s *Server) generatedViewSeqProcessingLoop() {
@@ -90,11 +87,14 @@ func (s *Server) generatedViewSeqProcessingLoop() {
 
 		leastUpdatedView := newGeneratedViewSeq.ViewSeq.GetLeastUpdatedView()
 
-		installSeqMsg := InstallSeqMsg{}
-		installSeqMsg.AssociatedView = newGeneratedViewSeq.AssociatedView
-		installSeqMsg.InstallView = leastUpdatedView
-		installSeqMsg.ViewSeq = newGeneratedViewSeq.ViewSeq
-		installSeqMsg.Sender = s.thisProcess
+		installSeqMsg := InstallSeqMsg{
+			Sender: s.thisProcess,
+			InstallSeq: InstallSeq{
+				AssociatedView: newGeneratedViewSeq.AssociatedView,
+				InstallView:    leastUpdatedView,
+				ViewSeq:        newGeneratedViewSeq.ViewSeq,
+			},
+		}
 
 		// Send install-seq to all from old and new view
 		processes := append(newGeneratedViewSeq.AssociatedView.GetMembers(), leastUpdatedView.GetMembers()...)
@@ -153,10 +153,10 @@ func (s *Server) installSeqProcessingLoop() {
 }
 
 func (s *Server) gotInstallSeqQuorum(installSeq InstallSeq) {
-	log.Println("Running gotInstallSeqQuorum", installSeq)
-
 	s.currentViewMu.Lock()
 	defer s.currentViewMu.Unlock()
+
+	log.Println("Running gotInstallSeqQuorum", installSeq)
 
 	installViewIsMoreUpdatedThanCv := installSeq.InstallView.MoreUpdatedThan(s.currentView)
 
@@ -165,30 +165,26 @@ func (s *Server) gotInstallSeqQuorum(installSeq InstallSeq) {
 		// if installView is not old, disable r/w
 		if installViewIsMoreUpdatedThanCv {
 			// disable R/W operations if not already disabled
-			s.isMultipleViewReconfigurationMu.Lock()
-			if !s.isMultipleViewReconfiguration {
+			s.registerLockOnce.Do(func() {
 				s.register.mu.Lock()
 				s.registerLockTime = time.Now()
 				log.Println("R/W operations disabled for reconfiguration")
-			} else {
-				log.Println("R/W operations is already disabled for reconfiguration")
-			}
-			s.isMultipleViewReconfigurationMu.Unlock()
+			})
 		}
 
-		stateMsg := StateUpdateMsg{}
-		stateMsg.Value = s.register.Value
-		stateMsg.Timestamp = s.register.Timestamp
+		syncStateMsg := SyncStateMsg{}
+		syncStateMsg.Value = s.register.Value
+		syncStateMsg.Timestamp = s.register.Timestamp
 		s.recvMutex.RLock()
-		stateMsg.Recv = make(map[view.Update]bool)
+		syncStateMsg.Recv = make(map[view.Update]bool, len(s.recv))
 		for update, _ := range s.recv {
-			stateMsg.Recv[update] = true
+			syncStateMsg.Recv[update] = true
 		}
 		s.recvMutex.RUnlock()
-		stateMsg.AssociatedView = installSeq.AssociatedView
+		syncStateMsg.AssociatedView = installSeq.AssociatedView
 
-		// Send state-update request to all
-		go broadcastStateUpdate(installSeq.InstallView, stateMsg)
+		// Send state to all
+		go broadcastStateUpdate(installSeq.InstallView, syncStateMsg)
 
 		log.Println("State sent!")
 	}
@@ -219,20 +215,15 @@ func (s *Server) gotInstallSeqQuorum(installSeq InstallSeq) {
 		go broadcastViewInstalled(viewOfLeavingProcesses, viewInstalledMsg)
 
 		if installSeq.ViewSeq.HasViewMoreUpdatedThan(s.currentView) {
-			s.isMultipleViewReconfigurationMu.Lock()
-			s.isMultipleViewReconfiguration = true
-			s.isMultipleViewReconfigurationMu.Unlock()
 			s.installOthersViewsFromViewSeqLocked(installSeq)
 		} else {
-			s.isMultipleViewReconfigurationMu.Lock()
-			s.isMultipleViewReconfiguration = false
-			s.isMultipleViewReconfigurationMu.Unlock()
 			s.register.mu.Unlock()
 			log.Println("R/W operations enabled")
 
 			endTime := time.Now()
 			if installSeq.AssociatedView.HasMember(s.thisProcess) {
 				log.Printf("Reconfiguration completed in %v, the system was unavailable for %v.\n", endTime.Sub(s.startReconfigurationTime), endTime.Sub(s.registerLockTime))
+				s.registerLockOnce = sync.Once{}
 			} else {
 				log.Println("Reconfiguration completed, this process is now part of the system.")
 			}
@@ -259,6 +250,21 @@ func (s *Server) gotInstallSeqQuorum(installSeq InstallSeq) {
 		//shutdownChan <- true
 		os.Exit(0)
 	}
+}
+
+func (s *Server) updateCurrentViewLocked(newView *view.View) {
+	if !newView.MoreUpdatedThan(s.currentView) {
+		// comment these log messages; they are just for debugging
+		if newView.LessUpdatedThan(s.currentView) {
+			log.Println("WARNING: Tried to Update current view with a less updated view")
+		} else {
+			log.Println("WARNING: Tried to Update current view with the same view")
+		}
+		return
+	}
+
+	s.currentView = newView
+	log.Printf("CurrentView updated to: %v, ref: %v\n", s.currentView, s.currentView.ViewRef)
 }
 
 func (s *Server) installOthersViewsFromViewSeqLocked(installSeq InstallSeq) {
@@ -329,7 +335,7 @@ func (s *Server) stateUpdateProcessingLoop() {
 
 	for {
 		select {
-		case stateUpdate := <-s.stateUpdateMsgChan:
+		case stateUpdate := <-s.syncStateMsgChan:
 			//log.Println("processing stateUpdate:", stateUpdate)
 
 			stateUpdateQuorum, ok := getStateUpdateQuorumCounter(stateUpdateQuorumCounterList, stateUpdate.AssociatedView)
@@ -420,7 +426,6 @@ func (s *Server) leave() {
 }
 
 // -------- REQUESTS -----------
-type ReconfigurationRequest int
 
 type ReconfigMsg struct {
 	Update         view.Update
@@ -470,7 +475,7 @@ func (installSeqMsg InstallSeqMsg) Equal(installSeqMsg2 InstallSeqMsg) bool {
 	return false
 }
 
-type StateUpdateMsg struct {
+type SyncStateMsg struct {
 	Value          interface{}
 	Timestamp      int
 	Recv           map[view.Update]bool
@@ -480,6 +485,10 @@ type StateUpdateMsg struct {
 type ViewInstalledMsg struct {
 	InstalledView *view.View
 }
+
+type ReconfigurationRequest int
+
+func init() { rpc.Register(new(ReconfigurationRequest)) }
 
 func (r *ReconfigurationRequest) Reconfig(arg ReconfigMsg, reply *struct{}) error {
 	globalServer.currentViewMu.RLock()
@@ -508,8 +517,8 @@ func (r *ReconfigurationRequest) InstallSeq(arg InstallSeqMsg, reply *struct{}) 
 	return nil
 }
 
-func (r *ReconfigurationRequest) StateUpdate(arg StateUpdateMsg, reply *struct{}) error {
-	globalServer.stateUpdateMsgChan <- arg
+func (r *ReconfigurationRequest) StateUpdate(arg SyncStateMsg, reply *struct{}) error {
+	globalServer.syncStateMsgChan <- arg
 	return nil
 }
 
@@ -518,16 +527,14 @@ func (r *ReconfigurationRequest) ViewInstalled(arg ViewInstalledMsg, reply *stru
 	return nil
 }
 
-func init() { rpc.Register(new(ReconfigurationRequest)) }
-
 // -------- Send functions -----------
 
 func broadcastViewInstalled(destinationView *view.View, viewInstalledMsg ViewInstalledMsg) {
 	comm.BroadcastRPCRequest(destinationView, "ReconfigurationRequest.ViewInstalled", viewInstalledMsg)
 }
 
-func broadcastStateUpdate(destinationView *view.View, stateUpdateMsg StateUpdateMsg) {
-	comm.BroadcastRPCRequest(destinationView, "ReconfigurationRequest.StateUpdate", stateUpdateMsg)
+func broadcastStateUpdate(destinationView *view.View, syncStateMsg SyncStateMsg) {
+	comm.BroadcastRPCRequest(destinationView, "ReconfigurationRequest.StateUpdate", syncStateMsg)
 }
 
 func broadcastInstallSeq(destinationView *view.View, installSeqMsg InstallSeqMsg) {
