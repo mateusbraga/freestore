@@ -25,8 +25,8 @@ type RegisterService struct{}
 func init() { rpc.Register(new(RegisterService)) }
 
 func (r *RegisterService) Read(clientViewRef view.ViewRef, reply *Value) error {
-    globalServer.currentViewMu.RLock()
-    defer globalServer.currentViewMu.RUnlock()
+	globalServer.currentViewMu.RLock()
+	defer globalServer.currentViewMu.RUnlock()
 
 	if clientViewRef != globalServer.currentView.ViewRef {
 		log.Printf("Got old view with ViewRef: %v, sending new View %v with ViewRef: %v\n", clientViewRef, globalServer.currentView, globalServer.currentView.ViewRef)
@@ -44,8 +44,8 @@ func (r *RegisterService) Read(clientViewRef view.ViewRef, reply *Value) error {
 }
 
 func (r *RegisterService) Write(value Value, reply *Value) error {
-    globalServer.currentViewMu.RLock()
-    defer globalServer.currentViewMu.RUnlock()
+	globalServer.currentViewMu.RLock()
+	defer globalServer.currentViewMu.RUnlock()
 
 	if value.ViewRef != globalServer.currentView.ViewRef {
 		log.Printf("Got old view with ViewRef: %v, sending new View %v with ViewRef: %v\n", value.ViewRef, globalServer.currentView, globalServer.currentView.ViewRef)
@@ -65,11 +65,11 @@ func (r *RegisterService) Write(value Value, reply *Value) error {
 	return nil
 }
 
-func (r *RegisterService) GetCurrentView(anything struct{}, reply *view.View) error {
-    globalServer.currentViewMu.RLock()
-    defer globalServer.currentViewMu.RUnlock()
+func (r *RegisterService) GetCurrentView(anything struct{}, reply **view.View) error {
+	globalServer.currentViewMu.RLock()
+	defer globalServer.currentViewMu.RUnlock()
 
-	reply = globalServer.currentView
+	*reply = globalServer.currentView
 	log.Println("Done GetCurrentView request")
 	return nil
 }
@@ -79,6 +79,7 @@ type RegisterValue struct {
 	Timestamp uint64
 }
 
+// TODO Add state synchronization logic to Storage
 type Storage interface {
 	Read(name string) (RegisterValue, error)
 	Write(name string, value RegisterValue) error

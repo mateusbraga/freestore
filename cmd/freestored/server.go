@@ -29,41 +29,63 @@ func main() {
 	initialProcess := flag.String("initial", "", "Process to ask for the initial view")
 	flag.Parse()
 
-
-	initialView := getInitialView(*initialProcess)
+	initialView := getInitialView(*bindAddr, *initialProcess)
 
 	go func() {
 		log.Println("Running pprof:", http.ListenAndServe("localhost:6060", nil))
 	}()
 
-    freestoreServer, err := server.New(*bindAddr, initialView, *useConsensus)
-    if err != nil {
-        log.Fatalln(err)
-    }
-    freestoreServer.Run()
+	freestoreServer, err := server.New(*bindAddr, initialView, *useConsensus)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	freestoreServer.Run()
 }
 
-func getInitialView(initialProc string) *view.View {
+func getInitialView(bindAddr string, initialProc string) *view.View {
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
 	if initialProc == "" {
+		var updates []view.Update
 		switch {
 		case strings.Contains(hostname, "node-"): // emulab.net
-			updates := []view.Update{view.Update{Type: view.Join, Process: view.Process{"10.1.1.2:5000"}},
+			updates = []view.Update{
+				view.Update{Type: view.Join, Process: view.Process{"10.1.1.2:5000"}},
 				view.Update{Type: view.Join, Process: view.Process{"10.1.1.3:5000"}},
 				view.Update{Type: view.Join, Process: view.Process{"10.1.1.4:5000"}},
 			}
-			return view.NewWithUpdates(updates...)
 		default:
-			updates := []view.Update{view.Update{Type: view.Join, Process: view.Process{"[::]:5000"}},
+			updates = []view.Update{
+				view.Update{Type: view.Join, Process: view.Process{"[::]:5000"}},
 				view.Update{Type: view.Join, Process: view.Process{"[::]:5001"}},
 				view.Update{Type: view.Join, Process: view.Process{"[::]:5002"}},
 			}
-			return view.NewWithUpdates(updates...)
 		}
+		hardCodedView := view.NewWithUpdates(updates...)
+
+		// don't ask for current view if the process is in the hardCodedView
+		if hardCodedView.HasMember(view.Process{bindAddr}) {
+			return hardCodedView
+		}
+
+		for _, u := range updates {
+			v, err := client.GetCurrentView(u.Process)
+			if err != nil {
+				log.Println("Failed to get current view from process %v: %v\n", u.Process, err)
+				continue
+			}
+
+			if v.Equal(hardCodedView) {
+				return hardCodedView
+			} else {
+				return v
+			}
+		}
+		log.Fatalln("Fatal: None of the hard coded initial processes are responsive.")
+		return nil
 	} else {
 		process := view.Process{initialProc}
 		initialView, err := client.GetCurrentView(process)
