@@ -358,7 +358,6 @@ func (s *Server) stateUpdateProcessingLoop() {
 			}
 
 			if stateUpdateQuorum.counter == stateUpdate.AssociatedView.QuorumSize() {
-				// TODO Maybe making State immutable we don't need to worry about copying
 				stateUpdateQuorum.resultChan <- stateUpdateQuorum.State.NewCopy()
 			}
 		case chanRequest := <-s.stateUpdateChanRequestChan:
