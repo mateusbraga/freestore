@@ -12,6 +12,7 @@ MAINTAINER Mateus Braga <mateus.a.braga@gmail.com>
 ADD . /go/src/github.com/mateusbraga/freestore
 
 # Build freestore inside the container.
+RUN go get -u github.com/mateusbraga/freestore/...
 RUN go install github.com/mateusbraga/freestore/...
 
 # By default, launch freestore server on port 5000
