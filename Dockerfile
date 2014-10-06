@@ -9,7 +9,7 @@ FROM golang
 MAINTAINER Mateus Braga <mateus.a.braga@gmail.com>
 
 # Copy the local package files to the container's workspace.
-ADD . /go/src/github.com/mateusbraga/freestore
+#ADD . /go/src/github.com/mateusbraga/freestore
 
 # Build freestore inside the container.
 RUN go get -u github.com/mateusbraga/freestore/...
