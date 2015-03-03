@@ -9,10 +9,12 @@ An evaluation of this Freestore implementation is documented in Portuguese [here
 [![GoDoc](https://godoc.org/github.com/mateusbraga/freestore?status.png)](https://godoc.org/github.com/mateusbraga/freestore)
 [![Build Status](https://travis-ci.org/mateusbraga/freestore.png?branch=master)](https://travis-ci.org/mateusbraga/freestore)
 
+* [Freestore's Fault Tolerance Model](https://github.com/mateusbraga/freestore/blob/master/docs/fault-tolerance-model.md)
+* [Mateus Braga's Bachelor's thesis (Portuguese)][thesis]
+* [Eduardo Alchieri's original Freestore paper (Portuguese)][freestore-article]
+
 [thesis]: http://www.mateusbraga.com.br/files/Monografia%20Mateus%20Antunes%20Braga.pdf
 [freestore-article]: http://sbrc2014.ufsc.br/anais/files/trilha/ST07-2.pdf
-
-[Freestore's Fault Tolerance Model](https://github.com/mateusbraga/freestore/blob/master/docs/fault-tolerance-model.md)
 
 ## Development
 
