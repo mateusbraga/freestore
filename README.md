@@ -12,6 +12,8 @@ An evaluation of this Freestore implementation is documented in Portuguese [here
 * [Freestore's Fault Tolerance Model](https://github.com/mateusbraga/freestore/blob/master/docs/fault-tolerance-model.md)
 * [Mateus Braga's Bachelor's thesis (Portuguese)][thesis]
 * [Eduardo Alchieri's original Freestore paper (Portuguese)][freestore-article]
+* [Static Quorum System implementation for comparison with Freestore](https://github.com/mateusbraga/static-quorum-system)
+* [Dynastore implementation for comparison with Freestore](https://github.com/mateusbraga/dynastore)
 
 [thesis]: http://www.mateusbraga.com.br/files/Monografia%20Mateus%20Antunes%20Braga.pdf
 [freestore-article]: http://sbrc2014.ufsc.br/anais/files/trilha/ST07-2.pdf
