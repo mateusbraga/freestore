@@ -1,6 +1,6 @@
 # Fault Tolerance Model
 
-**UNDER CONSTRUCTION**
+**Rough Draft**
 
 This document is a fault tolerance specification of the system. The
 intent is to get all of the assumptions out on the table. 
