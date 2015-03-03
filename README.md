@@ -1,6 +1,6 @@
 # Freestore
 
-Freestore is a research project developed as part of Mateus Braga's [Bachelor's thesis (Portuguese)][thesis] at University of Brasilia, Brazil. It is a library that implements a consistent and reconfigurable distributed memory. 
+Freestore is a research project developed as part of Mateus Braga's [Bachelor's thesis (Portuguese)][thesis] at University of Brasilia, Brazil. It is a library that implements a fault-tolerant, consistent, and reconfigurable distributed memory. 
 
 Freestore implements a storage abstraction with READ/WRITE operations. It replicates the data over all servers and uses the idea that two majorities always intersect to provide fault-tolerance and strong consistency (strict quorum - read most recently written value). Freestore also implements a fault-tolerant reconfiguration mechanism (other than consensus protocol - no agreement is required) that allows the cluster to continue operating normally during configuration changes.
 
