@@ -17,6 +17,7 @@ var (
 // ------- Init storage -----------
 func initStorage() {
 	var err error
+	//TODO consensus requires persistent storage. Here we are using an in memory only. Fix it for real fault tolerance.
 	storage, err = kv.CreateMem(new(kv.Options))
 	if err != nil {
 		log.Fatalln("initStorage error:", err)
