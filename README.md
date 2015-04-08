@@ -24,7 +24,7 @@ An evaluation of this Freestore implementation is documented in Portuguese [here
 
 Freestore is written in [Go](http://golang.org). You'll need a recent version of Go (at least go1.2) installed on your computer to build Freestore.
 
-### Build
+### Build/Install
 
 go install ./...
 
