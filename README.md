@@ -26,7 +26,7 @@ Freestore is written in [Go](http://golang.org). You'll need a recent version of
 
 ### Build
 
-go build ./...
+go install ./...
 
 ### Test
 
@@ -34,9 +34,9 @@ go test ./...
 
 ## Running
 
-    freestore_server -bind :5000
-    freestore_server -bind :5001
-    freestore_server -bind :5002
+    $GOPATH/bin/freestore_server -bind :5000
+    $GOPATH/bin/freestore_server -bind :5001
+    $GOPATH/bin/freestore_server -bind :5002
 
-    freestore_client
+    $GOPATH/bin/freestore_client
 
