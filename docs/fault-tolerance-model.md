@@ -24,7 +24,7 @@ The system comprises Freestore clients (used by the users) accessing the Freesto
 
 ## Overall System Fault Tolerance Model
 
-* error-free operation: All work goes according to expectations. The user's reads and writes are performed and confirmed by the system.  Sequential consistency is garanteed.
+* error-free operation: All work goes according to expectations. The user's reads and writes are performed and confirmed by the system.  Linearizability is garanteed.
 
 * tolerated errors *as long as a majority of the servers is running and connected to the clients*: 
   * network untolerated errors
