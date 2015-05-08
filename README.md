@@ -1,5 +1,8 @@
 # Freestore
 
+[![GoDoc](https://godoc.org/github.com/mateusbraga/freestore?status.png)](https://godoc.org/github.com/mateusbraga/freestore)
+[![Build Status](https://travis-ci.org/mateusbraga/freestore.png?branch=master)](https://travis-ci.org/mateusbraga/freestore)
+
 Freestore is a research project developed as part of Mateus Braga's [Bachelor's thesis (Portuguese)][thesis] at University of Brasilia, Brazil. It is a library that implements a fault-tolerant, consistent, and reconfigurable distributed memory. 
 
 Freestore implements a storage abstraction with READ/WRITE operations. It replicates the data over all servers and uses the idea that two majorities always intersect to provide fault-tolerance and per-key strong consistency (linearizability - read most recently written value). Freestore also implements a fault-tolerant reconfiguration mechanism (other than consensus protocol - no agreement is required. Something like CRDTs) that allows the cluster to continue operating correctly during configuration changes.
@@ -7,9 +10,6 @@ Freestore implements a storage abstraction with READ/WRITE operations. It replic
 Freestore is by design a quorum system without a consensus protocol and as such cannot support conditional write operations like compare-and-set. This limits the kind of applications that should use something like Freestore to the ones that don't need to atomically perform conditional writes.
 
 An evaluation of this Freestore implementation is documented in Portuguese [here][thesis]. Eduardo Alchieri's original Freestore paper in Portuguese is here: [http://sbrc2014.ufsc.br/anais/files/trilha/ST07-2.pdf][freestore-article].
-
-[![GoDoc](https://godoc.org/github.com/mateusbraga/freestore?status.png)](https://godoc.org/github.com/mateusbraga/freestore)
-[![Build Status](https://travis-ci.org/mateusbraga/freestore.png?branch=master)](https://travis-ci.org/mateusbraga/freestore)
 
 * [Freestore's Fault Tolerance Model](https://github.com/mateusbraga/freestore/blob/master/docs/fault-tolerance-model.md)
 * [Mateus Braga's Bachelor's thesis (Portuguese)][thesis]
